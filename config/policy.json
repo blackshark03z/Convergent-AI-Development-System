@@ -1,0 +1,21 @@
+{
+  "schema": "buildos.policy.v1.22",
+  "context_governor": {
+    "compact_prompt_tokens": 40000,
+    "rollover_prompt_tokens": 64000,
+    "requests_per_epoch": 5,
+    "absolute_prompt_cap": 128000,
+    "enforcement": "SUPERVISORY"
+  },
+  "risk": {
+    "authorization_required": ["R3"],
+    "r3_independent_review_required": true,
+    "r3_rollback_check_required": true,
+    "skills_may_override": false
+  },
+  "retention": {
+    "work_packet_contains_history": false,
+    "evidence_is_immutable": true,
+    "generation_records_are_immutable": true
+  }
+}

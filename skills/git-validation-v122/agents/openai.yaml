@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Validation v1.22"
+  short_description: "Commit and ancestry validation workflow"
+  default_prompt: "Validate a clean Git product commit, ancestry, and evidence before closeout."

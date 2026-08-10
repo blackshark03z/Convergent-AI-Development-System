@@ -1,0 +1,4 @@
+interface:
+  display_name: "Python Change v1.22"
+  short_description: "Focused Python change workflow"
+  default_prompt: "Apply a focused Python code change with affected tests and inspect the diff."
