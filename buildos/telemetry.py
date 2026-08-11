@@ -21,6 +21,8 @@ from .store import RecoveryRequired, atomic_json, atomic_write, publish_immutabl
 SCHEMA = "buildos.telemetry.v1"
 BINDING_SCHEMA = "buildos.telemetry_binding.v1"
 DESKTOP_SOURCE = "CODEX_DESKTOP_JSONL"
+ROOT_USER_ASSOCIATION = "ROOT_USER"
+ROLLOVER_HANDOFF_ASSOCIATION = "ROLLOVER_HANDOFF"
 DESKTOP_SESSION_FILE_ENV = "BUILDOS_CODEX_DESKTOP_SESSION_FILE"
 DESKTOP_SESSIONS_DIR_ENV = "BUILDOS_CODEX_SESSIONS_DIR"
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
@@ -268,8 +270,12 @@ def inspect_desktop_session(
     # is diagnostic only and must never be used to merge counters.
     session_id = _safe_session_id(metadata.get("id"))
     logical_session_id = _safe_session_id(metadata.get("session_id"))
+    raw_forked_from_id = metadata.get("forked_from_id")
+    forked_from_id = _safe_session_id(raw_forked_from_id)
     if session_id is None or logical_session_id is None:
         raise TelemetryError("Desktop session_meta requires valid id and session_id identities")
+    if raw_forked_from_id is not None and forked_from_id is None:
+        raise TelemetryError("Desktop session_meta forked_from_id is invalid")
     if expected and session_id != expected:
         raise TelemetryError("Desktop session identity does not match the requested session")
     if not source_path.stem.endswith(f"-{session_id}"):
@@ -295,7 +301,9 @@ def inspect_desktop_session(
         "path": str(source_path),
         "session_id": session_id,
         "logical_session_id": logical_session_id,
+        "forked_from_id": forked_from_id,
         "thread_source": metadata.get("thread_source"),
+        "self_owned_stream": logical_session_id == session_id,
         "eligible_user_stream": (
             str(metadata.get("thread_source") or "").casefold() == "user"
             and logical_session_id == session_id
@@ -328,15 +336,24 @@ def _binding_identity(state: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _desktop_header_fingerprint(inspected: Mapping[str, Any]) -> str:
-    return hashlib.sha256(canonical_bytes({
+def _desktop_header_fingerprint(
+    inspected: Mapping[str, Any],
+    *,
+    include_fork_parent: bool = True,
+) -> str:
+    identity = {
         "session_id": inspected.get("session_id"),
         "logical_session_id": inspected.get("logical_session_id"),
         "session_started_at": inspected.get("session_started_at"),
         "session_cwd": inspected.get("session_cwd"),
         "originator": inspected.get("originator"),
         "thread_source": inspected.get("thread_source"),
-    })).hexdigest()
+    }
+    # Preserve fingerprints written by the first v1.22 corrective while
+    # covering the parent identity when Desktop declares a fork relationship.
+    if include_fork_parent and inspected.get("forked_from_id"):
+        identity["forked_from_id"] = inspected.get("forked_from_id")
+    return hashlib.sha256(canonical_bytes(identity)).hexdigest()
 
 
 def _binding_file(root: Path | str, state: Mapping[str, Any]) -> Path:
@@ -360,6 +377,24 @@ def _read_binding(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any] 
         raise TelemetryError("persisted Desktop telemetry binding identity mismatch")
     if value.get("source") != DESKTOP_SOURCE or not _safe_session_id(value.get("session_id")):
         raise TelemetryError("persisted Desktop telemetry binding source is invalid")
+    association = value.get("association", ROOT_USER_ASSOCIATION)
+    if association not in {ROOT_USER_ASSOCIATION, ROLLOVER_HANDOFF_ASSOCIATION}:
+        raise TelemetryError("persisted Desktop telemetry binding association is invalid")
+    expected_rollover_thread = _safe_session_id((state.get("context") or {}).get("thread_id"))
+    if (
+        "association" in value
+        and identity["epoch"] > 1
+        and (not expected_rollover_thread or value.get("session_id") != expected_rollover_thread)
+    ):
+        raise TelemetryError("persisted Desktop telemetry binding is not the expected rollover continuation")
+    parent_session_id = value.get("parent_session_id")
+    if association == ROLLOVER_HANDOFF_ASSOCIATION:
+        if int(value.get("epoch", 0)) <= 1 or not _safe_session_id(parent_session_id):
+            raise TelemetryError("persisted Desktop rollover handoff is invalid")
+        if parent_session_id == value.get("session_id"):
+            raise TelemetryError("persisted Desktop rollover handoff reuses its parent session")
+    elif parent_session_id not in {None, ""}:
+        raise TelemetryError("persisted root-user Desktop binding has unexpected rollover ancestry")
     if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("header_fingerprint") or "")):
         raise TelemetryError("persisted Desktop telemetry binding header fingerprint is invalid")
     if not value.get("path") or not value.get("repository_root"):
@@ -378,18 +413,31 @@ def _read_binding(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any] 
     return value
 
 
-def _persist_binding(root: Path | str, state: Mapping[str, Any], inspected: Mapping[str, Any]) -> dict[str, Any]:
+def _persist_binding(
+    root: Path | str,
+    state: Mapping[str, Any],
+    inspected: Mapping[str, Any],
+    *,
+    association: str = ROOT_USER_ASSOCIATION,
+) -> dict[str, Any]:
     root_path = Path(root).resolve()
     final = _binding_file(root_path, state)
     existing = _read_binding(root_path, state)
     if existing is not None:
         return existing
+    if association not in {ROOT_USER_ASSOCIATION, ROLLOVER_HANDOFF_ASSOCIATION}:
+        raise TelemetryError("Desktop telemetry binding association is invalid")
+    parent_session_id = inspected.get("forked_from_id") if association == ROLLOVER_HANDOFF_ASSOCIATION else None
+    if association == ROLLOVER_HANDOFF_ASSOCIATION and not _safe_session_id(parent_session_id):
+        raise TelemetryError("Desktop rollover handoff requires a valid parent session")
     usage = inspected.get("usage") or {}
     value = {
         "schema": BINDING_SCHEMA,
         **_binding_identity(state),
         "source": DESKTOP_SOURCE,
+        "association": association,
         "session_id": inspected["session_id"],
+        "parent_session_id": parent_session_id,
         "path": str(Path(str(inspected["path"])).resolve()),
         "repository_root": str(root_path),
         "session_started_at": inspected.get("session_started_at"),
@@ -433,13 +481,93 @@ def _sessions_root() -> Path:
     return (Path.home() / ".codex" / "sessions").resolve()
 
 
-def _associated(inspected: Mapping[str, Any]) -> bool:
+def _task_repository_associated(inspected: Mapping[str, Any]) -> bool:
     return bool(
-        inspected.get("eligible_user_stream")
-        and inspected.get("repository_match")
+        inspected.get("repository_match")
         and inspected.get("task_match")
         and inspected.get("current_turn_task_match")
         and (inspected.get("cwd_match") or inspected.get("current_turn_repository_match"))
+    )
+
+
+def _associated(inspected: Mapping[str, Any]) -> bool:
+    return bool(inspected.get("eligible_user_stream") and _task_repository_associated(inspected))
+
+
+def _rollover_handoff_associated(
+    inspected: Mapping[str, Any],
+    state: Mapping[str, Any],
+    *,
+    previous_epoch_session: str | None,
+) -> bool:
+    """Accept only the exact self-owned Desktop fork named by rollover.
+
+    Ordinary subagent streams remain ineligible.  This exception joins the
+    current disposable context to the immediately previous immutable Desktop
+    binding; it does not create a session registry or lifecycle authority.
+    """
+    context = state.get("context") or {}
+    expected_session = _safe_session_id(context.get("thread_id"))
+    return bool(
+        int(context.get("epoch", 1)) > 1
+        and expected_session
+        and inspected.get("session_id") == expected_session
+        and inspected.get("self_owned_stream")
+        and str(inspected.get("thread_source") or "").casefold() == "subagent"
+        and previous_epoch_session
+        and inspected.get("forked_from_id") == previous_epoch_session
+        and _task_repository_associated(inspected)
+    )
+
+
+def _association_kind(
+    inspected: Mapping[str, Any],
+    state: Mapping[str, Any],
+    *,
+    previous_epoch_session: str | None,
+) -> str | None:
+    if _associated(inspected):
+        return ROOT_USER_ASSOCIATION
+    if _rollover_handoff_associated(
+        inspected,
+        state,
+        previous_epoch_session=previous_epoch_session,
+    ):
+        return ROLLOVER_HANDOFF_ASSOCIATION
+    return None
+
+
+def _bound_stream_matches_association(
+    root: Path | str,
+    inspected: Mapping[str, Any],
+    binding: Mapping[str, Any],
+    state: Mapping[str, Any],
+) -> bool:
+    association = binding.get("association", ROOT_USER_ASSOCIATION)
+    if association == ROOT_USER_ASSOCIATION:
+        context = state.get("context") or {}
+        expected = _safe_session_id(context.get("thread_id"))
+        return bool(
+            inspected.get("eligible_user_stream")
+            and (
+                "association" not in binding
+                or int(context.get("epoch", 1)) <= 1
+                or expected == binding.get("session_id")
+            )
+        )
+    if association != ROLLOVER_HANDOFF_ASSOCIATION:
+        return False
+    context = state.get("context") or {}
+    previous = _previous_epoch_bindings(root, state).get(int(context.get("epoch", 1)) - 1)
+    return bool(
+        int(context.get("epoch", 1)) > 1
+        and _safe_session_id(context.get("thread_id")) == binding.get("session_id")
+        and inspected.get("session_id") == binding.get("session_id")
+        and inspected.get("self_owned_stream")
+        and str(inspected.get("thread_source") or "").casefold() == "subagent"
+        and previous
+        and previous == binding.get("parent_session_id")
+        and inspected.get("forked_from_id") == previous
     )
 
 
@@ -452,13 +580,14 @@ def _unbound(reason: str, *, candidates: Iterable[str] = ()) -> dict[str, Any]:
     }
 
 
-def _previous_epoch_sessions(root: Path | str, state: Mapping[str, Any]) -> set[str]:
+def _previous_epoch_bindings(root: Path | str, state: Mapping[str, Any]) -> dict[int, str]:
     identity = _binding_identity(state)
     root_path = Path(root).resolve()
     directory = root_path / ".buildos" / "runtime" / "telemetry_bindings"
     if not directory.is_dir():
-        return set()
-    result: set[str] = set()
+        return {}
+    result: dict[int, str] = {}
+    relevant: dict[int, dict[str, Any]] = {}
     for path in directory.glob("*.json"):
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
@@ -473,6 +602,7 @@ def _previous_epoch_sessions(root: Path | str, state: Mapping[str, Any]) -> set[
                 "context": {
                     "epoch": int(value["epoch"]),
                     "epoch_id": str(value["epoch_id"]),
+                    "thread_id": str(value["session_id"]),
                 },
             }
         except (KeyError, TypeError, ValueError) as exc:
@@ -488,7 +618,17 @@ def _previous_epoch_sessions(root: Path | str, state: Mapping[str, Any]) -> set[
             and int(validated.get("revision", 0)) == identity["revision"]
             and int(validated.get("epoch", 0)) < identity["epoch"]
         ):
-            result.add(str(validated["session_id"]))
+            epoch = int(validated["epoch"])
+            session_id = str(validated["session_id"])
+            if epoch in result:
+                raise TelemetryError("multiple Desktop telemetry bindings claim one previous epoch")
+            result[epoch] = session_id
+            relevant[epoch] = validated
+    for epoch, binding in relevant.items():
+        if binding.get("association", ROOT_USER_ASSOCIATION) != ROLLOVER_HANDOFF_ASSOCIATION:
+            continue
+        if result.get(epoch - 1) != binding.get("parent_session_id"):
+            raise TelemetryError("persisted Desktop rollover handoff ancestry is inconsistent")
     return result
 
 
@@ -535,11 +675,40 @@ def _desktop_bound_usage(
     return payload
 
 
-def discover_desktop_session(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
+def discover_desktop_session(
+    root: Path | str,
+    state: Mapping[str, Any],
+    *,
+    rollover_thread_id: str | None = None,
+) -> dict[str, Any]:
     """Resolve exactly one Desktop session or fail observability closed."""
     root_path = Path(root).resolve()
+    identity = _binding_identity(state)
+    raw_context_thread = (state.get("context") or {}).get("thread_id")
+    context_thread = _safe_session_id(raw_context_thread)
+    if identity["epoch"] > 1 and raw_context_thread and context_thread is None:
+        return _unbound("INVALID_EXPECTED_CONTINUATION")
+    environment_thread = desktop_session_id_from_environment()
+    rollover_caller = _safe_session_id(rollover_thread_id)
+    if rollover_thread_id is not None and rollover_caller is None:
+        return _unbound("INVALID_EXPECTED_CONTINUATION")
     persisted = _read_binding(root_path, state)
     if persisted is not None:
+        if rollover_caller and rollover_caller == persisted.get("session_id"):
+            return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[rollover_caller])
+        if identity["epoch"] > 1:
+            prior_sessions: set[str] | None = None
+            if rollover_caller and rollover_caller != persisted.get("session_id"):
+                prior_sessions = set(_previous_epoch_bindings(root_path, state).values())
+                if rollover_caller in prior_sessions:
+                    return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[rollover_caller])
+            if environment_thread and environment_thread != persisted.get("session_id"):
+                if prior_sessions is None:
+                    prior_sessions = set(_previous_epoch_bindings(root_path, state).values())
+                if environment_thread in prior_sessions:
+                    return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[environment_thread])
+                if environment_thread != rollover_caller:
+                    return _unbound("NOT_EXPECTED_CONTINUATION", candidates=[environment_thread])
         return {
             "status": "BOUND",
             "reason": "PERSISTED",
@@ -548,9 +717,19 @@ def discover_desktop_session(root: Path | str, state: Mapping[str, Any]) -> dict
             "available": Path(str(persisted["path"])).is_file(),
         }
 
-    context_thread = _safe_session_id((state.get("context") or {}).get("thread_id"))
-    environment_thread = desktop_session_id_from_environment()
-    prior_sessions = _previous_epoch_sessions(root_path, state)
+    prior_bindings = _previous_epoch_bindings(root_path, state)
+    prior_sessions = set(prior_bindings.values())
+    previous_epoch_session = prior_bindings.get(identity["epoch"] - 1)
+    expected_rollover_thread = context_thread if identity["epoch"] > 1 else None
+
+    # A rollover already selected one disposable physical continuation.  The
+    # current caller may be that stream (or have no inherited Desktop ID), but
+    # an unrelated caller must not replace the canonical expectation merely by
+    # being newer or by mentioning the same task and repository.
+    if expected_rollover_thread and environment_thread and environment_thread != expected_rollover_thread:
+        if environment_thread in prior_sessions:
+            return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[environment_thread])
+        return _unbound("NOT_EXPECTED_CONTINUATION", candidates=[environment_thread])
 
     override = os.environ.get(DESKTOP_SESSION_FILE_ENV)
     if override:
@@ -563,22 +742,36 @@ def discover_desktop_session(root: Path | str, state: Mapping[str, Any]) -> dict
             )
         except TelemetryError as exc:
             raise TelemetryError(f"explicit Desktop telemetry override is invalid: {exc}") from exc
-        if not _associated(inspected):
+        association = _association_kind(
+            inspected,
+            state,
+            previous_epoch_session=previous_epoch_session,
+        )
+        if expected_rollover_thread and inspected["session_id"] != expected_rollover_thread:
+            raise TelemetryError("explicit Desktop telemetry override is not the expected rollover continuation")
+        if association is None:
             raise TelemetryError("explicit Desktop telemetry override is not associated with the active repository and task")
         if inspected["session_id"] in prior_sessions:
             raise TelemetryError("explicit Desktop telemetry override reuses a prior epoch session")
-        binding = _persist_binding(root_path, state, inspected)
+        binding = _persist_binding(root_path, state, inspected, association=association)
         return {"status": "BOUND", "reason": "EXPLICIT_OVERRIDE", "source": DESKTOP_SOURCE, "binding": binding, "available": True}
 
     sessions = _sessions_root()
     if not sessions.is_dir():
         return _unbound("UNAVAILABLE")
 
-    exact_thread = environment_thread or context_thread
+    exact_thread = expected_rollover_thread or environment_thread or context_thread
     if exact_thread:
-        matches: list[dict[str, Any]] = []
+        matches: list[tuple[dict[str, Any], str]] = []
         exact_errors: list[str] = []
-        for candidate in sorted(sessions.rglob(f"*{exact_thread}*.jsonl"), key=lambda item: str(item).casefold()):
+        exact_candidates = [
+            candidate
+            for candidate in sorted(sessions.rglob(f"*{exact_thread}*.jsonl"), key=lambda item: str(item).casefold())
+            if candidate.stem.endswith(f"-{exact_thread}")
+        ]
+        if len(exact_candidates) > 1:
+            return _unbound("AMBIGUOUS", candidates=[exact_thread])
+        for candidate in exact_candidates:
             try:
                 inspected = inspect_desktop_session(
                     candidate,
@@ -589,20 +782,27 @@ def discover_desktop_session(root: Path | str, state: Mapping[str, Any]) -> dict
             except TelemetryError as exc:
                 exact_errors.append(str(exc))
                 continue
-            if _associated(inspected):
-                matches.append(inspected)
+            association = _association_kind(
+                inspected,
+                state,
+                previous_epoch_session=previous_epoch_session,
+            )
+            if association is not None:
+                matches.append((inspected, association))
         if not matches:
             if exact_errors:
                 raise TelemetryError(f"exact Desktop session is unreadable: {exact_errors[0]}")
-            if environment_thread:
+            if environment_thread or expected_rollover_thread:
                 return _unbound("NOT_ASSOCIATED", candidates=[exact_thread])
-        elif any(item["session_id"] in prior_sessions for item in matches):
-            return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[item["session_id"] for item in matches])
+        elif any(item[0]["session_id"] in prior_sessions for item in matches):
+            return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[item[0]["session_id"] for item in matches])
         elif len(matches) > 1:
-            return _unbound("AMBIGUOUS", candidates=[item["session_id"] for item in matches])
+            return _unbound("AMBIGUOUS", candidates=[item[0]["session_id"] for item in matches])
         elif len(matches) == 1:
-            binding = _persist_binding(root_path, state, matches[0])
-            return {"status": "BOUND", "reason": "EXACT_SESSION_ID", "source": DESKTOP_SOURCE, "binding": binding, "available": True}
+            inspected, association = matches[0]
+            binding = _persist_binding(root_path, state, inspected, association=association)
+            reason = "ROLLOVER_HANDOFF" if association == ROLLOVER_HANDOFF_ASSOCIATION else "EXACT_SESSION_ID"
+            return {"status": "BOUND", "reason": reason, "source": DESKTOP_SOURCE, "binding": binding, "available": True}
 
     created = _timestamp(state.get("created_at")) or datetime.now(timezone.utc)
     freshness_floor = created - timedelta(minutes=5)
@@ -626,7 +826,7 @@ def discover_desktop_session(root: Path | str, state: Mapping[str, Any]) -> dict
         return _unbound("UNAVAILABLE")
     if len(plausible) > 1:
         return _unbound("AMBIGUOUS", candidates=[item["session_id"] for item in plausible])
-    binding = _persist_binding(root_path, state, plausible[0])
+    binding = _persist_binding(root_path, state, plausible[0], association=ROOT_USER_ASSOCIATION)
     return {"status": "BOUND", "reason": "UNIQUE_REPOSITORY_ACTIVITY", "source": DESKTOP_SOURCE, "binding": binding, "available": True}
 
 
@@ -873,7 +1073,25 @@ def ingest(root: Path | str, state: Mapping[str, Any], payloads: Iterable[Mappin
     return len(fresh)
 
 
-def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
+def _without_current_epoch_coverage(
+    result: dict[str, Any],
+    state: Mapping[str, Any],
+    *,
+    rollover_requested: bool = False,
+) -> dict[str, Any]:
+    """Retain ledger facts but never claim live coverage for a blocked rollover."""
+    if rollover_requested or int((state.get("context") or {}).get("epoch", 1)) > 1:
+        result["current_epoch_measurement"] = "UNMEASURED"
+        result["current_epoch_requests_measurement"] = "UNMEASURED"
+    return result
+
+
+def auto_refresh(
+    root: Path | str,
+    state: Mapping[str, Any],
+    *,
+    rollover_thread_id: str | None = None,
+) -> dict[str, Any]:
     failures: list[str] = []
     selected: str | None = None
     for variable, source in ENV_SOURCES:
@@ -925,10 +1143,17 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
                 "session_id": None,
             },
         })
-        return result
+        return _without_current_epoch_coverage(
+            result,
+            state,
+        )
 
     try:
-        discovery = discover_desktop_session(root, state)
+        discovery = discover_desktop_session(
+            root,
+            state,
+            rollover_thread_id=rollover_thread_id,
+        )
     except Exception as exc:
         result = summarize(root, state)
         if result["status"] == "UNMEASURED":
@@ -946,7 +1171,10 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
                 "session_id": None,
             },
         })
-        return result
+        return _without_current_epoch_coverage(
+            result,
+            state,
+        )
 
     if discovery["status"] != "BOUND":
         result = summarize(root, state)
@@ -966,7 +1194,14 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
                 "candidates": discovery.get("candidates") or [],
             },
         })
-        return result
+        return _without_current_epoch_coverage(
+            result,
+            state,
+            rollover_requested=(
+                rollover_thread_id is not None
+                and discovery.get("reason") in {"PREVIOUS_EPOCH_SESSION", "INVALID_EXPECTED_CONTINUATION"}
+            ),
+        )
 
     binding = discovery["binding"]
     binding_view = {
@@ -979,6 +1214,8 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
         "revision": binding.get("revision"),
         "epoch": binding.get("epoch"),
         "epoch_id": binding.get("epoch_id"),
+        "association": binding.get("association", ROOT_USER_ASSOCIATION),
+        "parent_session_id": binding.get("parent_session_id"),
     }
     if not discovery.get("available"):
         result = summarize(root, state)
@@ -991,12 +1228,18 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             "binding_reason": "SOURCE_UNAVAILABLE",
             "telemetry_binding": binding_view,
         })
-        return result
+        return _without_current_epoch_coverage(
+            result,
+            state,
+        )
     try:
         inspected = inspect_desktop_session(binding["path"], expected_session_id=binding["session_id"])
-        if not inspected.get("eligible_user_stream"):
-            raise TelemetryError("bound Desktop source is no longer a root-user stream")
-        if _desktop_header_fingerprint(inspected) != binding.get("header_fingerprint"):
+        if not _bound_stream_matches_association(root, inspected, binding, state):
+            raise TelemetryError("bound Desktop source no longer satisfies its association proof")
+        if _desktop_header_fingerprint(
+            inspected,
+            include_fork_parent="association" in binding,
+        ) != binding.get("header_fingerprint"):
             raise TelemetryError("bound Desktop source header identity changed")
         payload = _desktop_bound_usage(inspected, binding, state)
         payloads = [payload] if payload else []
@@ -1025,7 +1268,10 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             "binding_reason": "ADAPTER_BLOCKED",
             "telemetry_binding": {**binding_view, "reason": "ADAPTER_BLOCKED"},
         })
-        return result
+        return _without_current_epoch_coverage(
+            result,
+            state,
+        )
 
 
 def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:

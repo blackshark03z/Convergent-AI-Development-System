@@ -54,20 +54,20 @@ persistent_runtime_artifacts=.buildos/control/CURRENT; .buildos/control/LOCK.gua
 
 context_governor=40k PREPARE_COMPACT, 64k ROLLOVER_REQUIRED, 5 productive model requests/epoch, 128k HARD_STOP. Repository policy may tighten but never raise these maxima. Desktop enforcement is truthfully SUPERVISORY/BOUNDARY, not fictional hard interception; packet/status make the required action explicit.
 
-telemetry=Facade gives configured source adapters precedence, otherwise safely auto-binds the exact root-user Codex Desktop rollout to task/revision/epoch. Cumulative totals are baselined and distinct advances counted; source absence is UNMEASURED, ambiguity/failure is explicit, and control actions are separately tagged CONTROL. Telemetry is a projection and cannot block/alter canonical lifecycle.
+telemetry=Facade gives configured source adapters precedence, otherwise safely auto-binds the initial exact root-user Codex Desktop rollout or the exact validated rollover handoff to task/revision/epoch. Cumulative totals are baselined and distinct advances counted; source absence is UNMEASURED, ambiguity/failure is explicit, and control actions are separately tagged CONTROL. Telemetry is a projection and cannot block/alter canonical lifecycle.
 
 minimal_usage_scorecard=productive model requests; productive raw input tokens; productive noncached input tokens; productive output/reasoning tokens; control model requests/tool actions and control token totals; maximum productive projected prompt; epoch/rollover count; measurement coverage/status
 
 risk_authorization=Pure side-effect floor: READ_ONLY=R0, write/create=R1, mutate/type change=R2, delete=R3. Explicit lower risk escalates rather than downgrades. R3 start/revision requires owner APPROVED + nonempty reference and rejects Worker self-approval; validation additionally requires independent reviewer/reference and a distinct rollback/recovery check. Missing/invalid Git, scope, or authorization fails closed.
 
-proof_model=61 deterministic unittest cases: the original 45 cases preserve shared store failure injection at every low-level boundary; every lifecycle mutation at six meaningful boundaries plus bootstrap Git-exclude boundaries and retry; evidence publication failures; hard process-death lock recovery; stale/missing/corrupt CURRENT and receipt-frontier recovery; competing/forked receipts; global operation-key binding; monotonic status/packet projection; Git HEAD/root/scope/deletion/type/race/closed-retry cases; R0/R3 authorization; thread rollover and retry under fresher telemetry; telemetry available/unavailable/baseline/thread-binding/dedup; and direct/compact-facade unrelated-repository adoption. Sixteen corrective cases add Desktop binding identity, ambiguity, immutable publication race/history corruption, current-turn association, live-tail/replay, threshold, field-trace, rollover, failure isolation, productive/control, and legacy-source coverage.
+proof_model=72 deterministic unittest cases: the original 45 cases preserve shared store failure injection at every low-level boundary; every lifecycle mutation at six meaningful boundaries plus bootstrap Git-exclude boundaries and retry; evidence publication failures; hard process-death lock recovery; stale/missing/corrupt CURRENT and receipt-frontier recovery; competing/forked receipts; global operation-key binding; monotonic status/packet projection; Git HEAD/root/scope/deletion/type/race/closed-retry cases; R0/R3 authorization; thread rollover and retry under fresher telemetry; telemetry available/unavailable/baseline/thread-binding/dedup; and direct/compact-facade unrelated-repository adoption. Twenty-seven corrective cases add Desktop binding identity, ambiguity, immutable publication race/history/ancestry corruption, current-turn association, live-tail/replay, threshold, two real field traces, explicit forked-rollover handoff, exact root-user continuation, legacy-binding compatibility, parallel repo/worktree rejection, stale/duplicate/missing continuation safety, safe-stop guidance, rollover idempotence, failure isolation, productive/control, and legacy-source coverage.
 
 removed_or_demoted_from_v121=destructive reopen; prose/task/state/runtime files as authorities; multi-file sequential lifecycle writes; advisory-only transaction markers; durable Attempt/Epoch hierarchy; goal/economics/health/Guardian/browser/media-specific machinery; dynamic Skills/plugin framework; automatic Git rollback/rebase; replay/history in WORK_PACKET
 
 project_specific_assumptions_removed=YouTube Auto names, renderer/browser/media harnesses, fixed branches/remotes, service/port assumptions, package-overlay nested directories, project health/economics gates, and copied product-local docs/config/scripts. Adoption uses an external package, reserved `.buildos/`, explicit Git observation, and optional namespaced `.buildos-policy.json` only.
 
 stable_core_module_count=6
-stable_core_loc=3240 (15 total Python files/5224 nonblank LOC including CLI, scripts, and proof suite; LOC is descriptive, not the selection objective)
+stable_core_loc=3508 (15 total Python files/5984 nonblank LOC including CLI, scripts, and proof suite; LOC is descriptive, not the selection objective)
 lifecycle_command_count=8
 mutable_runtime_file_count=4 (CURRENT, LOCK.guard, WORK_PACKET.json, normal-facade telemetry.jsonl; baseline and crash LOCK/quarantine are optional/exception artifacts; Desktop binding files are immutable)
 canonical_state_authority_count=1
@@ -83,7 +83,7 @@ authorization_tests=PASS
 rollover_tests=PASS
 telemetry_tests=PASS
 generic_repo_adoption_test=PASS
-full_candidate_self_test=PASS (61/61; 328.034 seconds on Windows)
+full_candidate_self_test=PASS (72/72; 316.931 seconds on Windows)
 diff_check=PASS (staged content/whitespace/manifest audit; exact clean-tree result is recorded in the final handoff after the single commit)
 
 youtube_auto_modified=NO
@@ -114,3 +114,17 @@ The final self-test passed all 61 cases (45 preserved plus 16 corrective) in
 328.034 seconds on Windows, including the recovered read-only field trace.
 This is a corrective candidate commit only; it does not promote or freeze the
 release.
+
+## Rollover session binding corrective
+
+The next field proof exposed one remaining association defect: the legitimate
+self-owned Desktop fork selected for the new epoch was globally rejected only
+because its first header declared `thread_source=subagent`. The bounded fix
+accepts only the exact canonical continuation whose immutable fork parent is
+the immediately prior validated binding, while retaining task, worktree,
+current-turn, ancestry, ambiguity, and stale-session checks. Failed or missing
+coverage now yields an explicit current-epoch safe-stop without changing
+canonical lifecycle state. The current self-test passed all 72 cases (45
+preserved plus 27 corrective) in 316.931 seconds on Windows, including the
+read-only failed rollover trace and a normal second no-force rollover. This is
+a corrective candidate commit only; it does not promote or freeze the release.

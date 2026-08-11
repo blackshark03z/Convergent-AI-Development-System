@@ -17,9 +17,15 @@ if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
 from buildos.facade import BuildOS
+from buildos.model import KernelError
 from buildos.store import read_current
-from buildos.telemetry import _persist_binding, inspect_desktop_session
-from tests.test_candidate import generic_repo, request
+from buildos.telemetry import (
+    _desktop_header_fingerprint,
+    _persist_binding,
+    discover_desktop_session,
+    inspect_desktop_session,
+)
+from tests.test_candidate import generic_repo, request, run_git
 
 
 FIELD_TRACE = Path(
@@ -27,6 +33,14 @@ FIELD_TRACE = Path(
 )
 FIELD_ROOT = Path(r"D:\Youtube\Youtube Studio\_worktrees\advanced-still-camera-motion-v1")
 FIELD_TASK = "ADVANCED-STILL-CAMERA-MOTION-V1"
+ROLLOVER_FIELD_TRACE = Path(
+    r"C:\Users\ADMIN\.codex\sessions\2026\08\11\rollout-2026-08-11T08-02-09-019fee57-56d3-7f50-a14a-b026a8da8500.jsonl"
+)
+ROLLOVER_FIELD_SESSIONS = Path(r"C:\Users\ADMIN\.codex\sessions")
+ROLLOVER_FIELD_ROOT = Path(r"D:\Youtube\Youtube Studio\_worktrees\editorial-punch-zoom-v1")
+ROLLOVER_FIELD_TASK = "EDITORIAL-PUNCH-ZOOM-V1"
+ROLLOVER_FIELD_PARENT = "019fee55-2373-7402-a2ab-1690908c2fed"
+ROLLOVER_FIELD_SESSION = "019fee57-56d3-7f50-a14a-b026a8da8500"
 FIELD_BASELINE = {
     "raw_input_tokens": 260_312,
     "cached_input_tokens": 228_864,
@@ -86,22 +100,28 @@ def _session_file(
     rows: list[dict[str, int]] | None = None,
     logical_session_id: str | None = None,
     thread_source: str = "user",
+    forked_from_id: str | None = None,
+    session_day: str = "11",
+    started_at: datetime | None = None,
 ) -> Path:
-    started = datetime.now(timezone.utc) - timedelta(seconds=1)
-    path = sessions / "2026" / "08" / "11" / f"rollout-2026-08-11T00-00-00-{session_id}.jsonl"
+    started = started_at or datetime.now(timezone.utc) - timedelta(seconds=1)
+    path = sessions / "2026" / "08" / session_day / f"rollout-2026-08-{session_day}T00-00-00-{session_id}.jsonl"
+    metadata = {
+        "id": session_id,
+        "session_id": logical_session_id or session_id,
+        "timestamp": _stamp(started),
+        "cwd": str(cwd or root),
+        "originator": "Codex Desktop",
+        "thread_source": thread_source,
+        "source": "vscode",
+    }
+    if forked_from_id is not None:
+        metadata["forked_from_id"] = forked_from_id
     records = [
         {
             "timestamp": _stamp(started),
             "type": "session_meta",
-            "payload": {
-                "id": session_id,
-                "session_id": logical_session_id or session_id,
-                "timestamp": _stamp(started),
-                "cwd": str(cwd or root),
-                "originator": "Codex Desktop",
-                "thread_source": thread_source,
-                "source": "vscode",
-            },
+            "payload": metadata,
         },
         {
             "timestamp": _stamp(started + timedelta(milliseconds=100)),
@@ -192,6 +212,24 @@ def desktop_environment(sessions: Path, *, thread_id: str = "", override: Path |
     }
     with patch.dict(os.environ, values, clear=False):
         yield
+
+
+@contextmanager
+def generic_worktree_pair(name: str):
+    with tempfile.TemporaryDirectory(prefix=f"buildos-{name}-") as td:
+        container = Path(td)
+        root = container / "primary"
+        other = container / "other-worktree"
+        root.mkdir()
+        run_git(root, "init", "-q")
+        run_git(root, "config", "user.email", "generic@example.invalid")
+        run_git(root, "config", "user.name", "Generic Fixture")
+        (root / "app.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+        (root / "README.md").write_text("# Unrelated calculator fixture\n", encoding="utf-8")
+        run_git(root, "add", "app.py", "README.md")
+        run_git(root, "commit", "-qm", "generic baseline")
+        run_git(root, "worktree", "add", "-q", "-b", f"fixture-{name}", str(other))
+        yield root, other
 
 
 class DesktopBindingTests(unittest.TestCase):
@@ -370,8 +408,8 @@ class DesktopBindingTests(unittest.TestCase):
                 stream_id,
                 root,
                 "GENERIC-LOW",
-                logical_session_id="00000000-0000-0000-0000-000000000099",
                 thread_source="subagent",
+                forked_from_id="00000000-0000-0000-0000-000000000099",
             )
             with desktop_environment(sessions, thread_id=stream_id):
                 osys = BuildOS(root, package_root=PACKAGE)
@@ -380,6 +418,13 @@ class DesktopBindingTests(unittest.TestCase):
                 self.assertEqual(status["telemetry"]["status"], "UNMEASURED")
                 self.assertEqual(status["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
                 self.assertEqual(status["telemetry"]["binding_reason"], "NOT_ASSOCIATED")
+                inspected = inspect_desktop_session(
+                    next(sessions.rglob(f"*{stream_id}*.jsonl")),
+                    root=root,
+                    task_id="GENERIC-LOW",
+                )
+                self.assertTrue(inspected["self_owned_stream"])
+                self.assertFalse(inspected["eligible_user_stream"])
 
         with generic_repo("desktop-partial-tail") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
             sessions = Path(td)
@@ -527,7 +572,22 @@ class DesktopBindingTests(unittest.TestCase):
         with generic_repo("desktop-rollover") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
             sessions = Path(td)
             first_id = "00000000-0000-0000-0000-000000000051"
+            second_id = "00000000-0000-0000-0000-000000000052"
+            unrelated_id = "00000000-0000-0000-0000-000000000053"
             first_source = _session_file(sessions, first_id, root, "GENERIC-LOW")
+            # Desktop forks the continuation before that continuation invokes
+            # the lifecycle rollover. Its header cwd is the shared workspace,
+            # while its current turn names the exact task worktree.
+            second_source = _session_file(
+                sessions,
+                second_id,
+                root,
+                "GENERIC-LOW",
+                cwd=root.parent,
+                thread_source="subagent",
+                forked_from_id=first_id,
+            )
+            _session_file(sessions, unrelated_id, root, "GENERIC-LOW")
             with desktop_environment(sessions, thread_id=first_id):
                 osys = BuildOS(root, package_root=PACKAGE)
                 first = osys.bootstrap(request()).snapshot
@@ -535,33 +595,427 @@ class DesktopBindingTests(unittest.TestCase):
                 for _ in range(5):
                     first_usage.add(1_000)
                 self.assertEqual(osys.status()["governor"]["action"], "ROLLOVER_REQUIRED")
+                with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                    osys.rollover(thread_id=first_id)
+                self.assertEqual(read_current(root).state["context"]["epoch"], 1)
 
-                rolled = osys.rollover(thread_id="epoch-two-label").snapshot
+            with desktop_environment(sessions, thread_id=second_id):
+                rolled = osys.rollover(thread_id=second_id).snapshot
                 self.assertEqual((rolled.state["task_id"], rolled.state["revision"]), (first.state["task_id"], first.state["revision"]))
                 self.assertEqual(rolled.state["context"]["epoch"], 2)
-                self.assertEqual(rolled.state["context"]["thread_id"], "epoch-two-label")
-                blocked = osys.status()
-                # The prior epoch's measured facts remain visible, while the
-                # new epoch is explicitly unbound and cannot reuse its stream.
-                self.assertEqual(blocked["telemetry"]["status"], "MEASURED")
-                self.assertEqual(blocked["telemetry"]["binding_reason"], "PREVIOUS_EPOCH_SESSION")
-                self.assertEqual(blocked["telemetry"]["current_epoch_measurement"], "UNMEASURED")
-                self.assertEqual(blocked["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
-                self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 1)
+                self.assertNotEqual(rolled.state["context"]["epoch_id"], first.state["context"]["epoch_id"])
+                self.assertEqual(rolled.state["context"]["thread_id"], second_id)
+                projected = json.loads((root / ".buildos/runtime/WORK_PACKET.json").read_text(encoding="utf-8"))
+                self.assertEqual(projected["thread_id"], second_id)
+                self.assertEqual(projected["telemetry_binding_status"], "BOUND")
+                self.assertEqual(projected["telemetry_binding_reason"], "ROLLOVER_HANDOFF")
+                rebound = osys.status()
+                self.assertEqual(rebound["telemetry"]["binding_status"], "BOUND")
+                self.assertEqual(rebound["telemetry"]["binding_reason"], "PERSISTED")
+                self.assertEqual(rebound["telemetry"]["telemetry_binding"]["session_id"], second_id)
+                self.assertEqual(rebound["telemetry"]["telemetry_binding"]["association"], "ROLLOVER_HANDOFF")
+                self.assertEqual(rebound["telemetry"]["telemetry_binding"]["parent_session_id"], first_id)
+                self.assertEqual(rebound["telemetry"]["current_epoch_model_requests"], 0)
+                with desktop_environment(sessions, thread_id=unrelated_id):
+                    unrelated_after_binding = osys.status()
+                    self.assertEqual(unrelated_after_binding["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                    self.assertEqual(unrelated_after_binding["telemetry"]["binding_reason"], "NOT_EXPECTED_CONTINUATION")
+                    self.assertEqual(unrelated_after_binding["governor"]["measurement"], "UNMEASURED")
+                    self.assertEqual(unrelated_after_binding["next_action"], "stop model work; restore the expected rollover telemetry binding")
+                with desktop_environment(sessions, thread_id=first_id):
+                    stale_after_binding = osys.status()
+                    self.assertEqual(stale_after_binding["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                    self.assertEqual(stale_after_binding["telemetry"]["binding_reason"], "PREVIOUS_EPOCH_SESSION")
+                    self.assertEqual(stale_after_binding["governor"]["measurement"], "UNMEASURED")
+                    self.assertEqual(stale_after_binding["next_action"], "stop model work; restore the expected rollover telemetry binding")
+                second_usage = UsageAppender(second_source)
+                second_usage.add(2_000)
+                status = osys.status()
+                self.assertEqual(status["telemetry"]["telemetry_binding"]["session_id"], second_id)
+                self.assertEqual(status["telemetry"]["current_epoch_model_requests"], 1)
+                self.assertEqual(status["telemetry"]["productive_model_requests"], 6)
+                self.assertEqual(status["governor"]["action"], "CONTINUE")
+                bindings = list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))
+                self.assertEqual(len(bindings), 2)
+                epoch_two = next(
+                    path for path in bindings
+                    if json.loads(path.read_text(encoding="utf-8"))["epoch"] == 2
+                )
+                before_retry = epoch_two.read_bytes()
+                retried = osys.status()
+                self.assertEqual(retried["telemetry"]["binding_reason"], "PERSISTED")
+                self.assertEqual(retried["telemetry"]["current_epoch_model_requests"], 1)
+                self.assertEqual(epoch_two.read_bytes(), before_retry)
+                for _ in range(3):
+                    second_usage.add(2_000)
+                self.assertEqual(osys.status()["governor"]["action"], "CONTINUE")
+                second_usage.add(2_000)
+                epoch_limit = osys.status()
+                self.assertEqual(epoch_limit["telemetry"]["current_epoch_model_requests"], 5)
+                self.assertEqual(epoch_limit["governor"]["action"], "ROLLOVER_REQUIRED")
+                self.assertEqual(epoch_limit["governor"]["reason"], "REQUESTS_PER_EPOCH_LIMIT")
+                second_source.unlink()
+                source_missing = osys.status()
+                self.assertEqual(source_missing["telemetry"]["binding_status"], "BOUND")
+                self.assertEqual(source_missing["telemetry"]["binding_reason"], "SOURCE_UNAVAILABLE")
+                self.assertEqual(source_missing["telemetry"]["current_epoch_measurement"], "UNMEASURED")
+                self.assertEqual(source_missing["telemetry"]["current_epoch_requests_measurement"], "UNMEASURED")
+                self.assertEqual(source_missing["governor"]["measurement"], "UNMEASURED")
+                self.assertEqual(source_missing["governor"]["action"], "CONTINUE_UNMEASURED")
+                self.assertEqual(source_missing["next_action"], "stop model work; restore the expected rollover telemetry binding")
+                self.assertEqual(source_missing["work_packet"]["telemetry_availability"], "UNMEASURED")
 
-                second_id = "00000000-0000-0000-0000-000000000052"
-                second_source = _session_file(sessions, second_id, root, "GENERIC-LOW")
-                with desktop_environment(sessions, thread_id=second_id):
-                    rebound = osys.status()
-                    self.assertEqual(rebound["telemetry"]["telemetry_binding"]["session_id"], second_id)
-                    self.assertEqual(rebound["telemetry"]["current_epoch_model_requests"], 0)
-                    UsageAppender(second_source).add(2_000)
-                    status = osys.status()
-                    self.assertEqual(status["telemetry"]["telemetry_binding"]["session_id"], second_id)
-                    self.assertEqual(status["telemetry"]["current_epoch_model_requests"], 1)
-                    self.assertEqual(status["telemetry"]["productive_model_requests"], 6)
-                    self.assertEqual(status["governor"]["action"], "CONTINUE")
-                    self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 2)
+    def test_rollover_rejects_unrelated_caller_and_different_repository(self):
+        with generic_repo("desktop-rollover-unrelated") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            unrelated = sessions / "unrelated-repository"
+            first_id = "00000000-0000-0000-0000-000000000081"
+            expected_id = "00000000-0000-0000-0000-000000000082"
+            unrelated_id = "00000000-0000-0000-0000-000000000083"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            # Even possession of the expected physical ID and parent ID is
+            # insufficient when the current-turn repository evidence is for
+            # another repository.
+            _session_file(
+                sessions,
+                expected_id,
+                unrelated,
+                "GENERIC-LOW",
+                cwd=unrelated,
+                thread_source="subagent",
+                forked_from_id=first_id,
+            )
+            _session_file(sessions, unrelated_id, unrelated, "GENERIC-LOW", cwd=unrelated)
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=expected_id):
+                rolled = osys.rollover(force=True, thread_id=expected_id).snapshot
+
+            with desktop_environment(sessions, thread_id=unrelated_id):
+                unrelated_status = osys.status()
+                self.assertEqual(unrelated_status["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(unrelated_status["telemetry"]["binding_reason"], "NOT_EXPECTED_CONTINUATION")
+
+            with desktop_environment(sessions, thread_id=expected_id):
+                wrong_repository = osys.status()
+                self.assertEqual(wrong_repository["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(wrong_repository["telemetry"]["binding_reason"], "NOT_ASSOCIATED")
+                self.assertEqual(wrong_repository["next_action"], "stop model work; restore the expected rollover telemetry binding")
+
+            self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
+            self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 1)
+
+    def test_rollover_rejects_same_task_from_a_different_git_worktree(self):
+        with generic_worktree_pair("rollover-worktree") as (root, other), tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000084"
+            expected_id = "00000000-0000-0000-0000-000000000085"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            _session_file(
+                sessions,
+                expected_id,
+                other,
+                "GENERIC-LOW",
+                cwd=other,
+                thread_source="subagent",
+                forked_from_id=first_id,
+            )
+            self.assertNotEqual(
+                Path(run_git(root, "rev-parse", "--show-toplevel")).resolve(),
+                Path(run_git(other, "rev-parse", "--show-toplevel")).resolve(),
+            )
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=expected_id):
+                rolled = osys.rollover(force=True, thread_id=expected_id).snapshot
+            with desktop_environment(sessions, thread_id=expected_id):
+                status = osys.status()
+                self.assertEqual(status["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(status["telemetry"]["binding_reason"], "NOT_ASSOCIATED")
+                self.assertEqual(status["next_action"], "stop model work; restore the expected rollover telemetry binding")
+            self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
+            self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 1)
+
+    def test_rollover_rejects_stale_previous_epoch_session(self):
+        with generic_repo("desktop-rollover-stale") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000086"
+            expected_id = "00000000-0000-0000-0000-000000000087"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            _session_file(
+                sessions,
+                expected_id,
+                root,
+                "GENERIC-LOW",
+                cwd=root.parent,
+                thread_source="subagent",
+                forked_from_id="00000000-0000-0000-0000-000000000080",
+            )
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=expected_id):
+                rolled = osys.rollover(force=True, thread_id=expected_id).snapshot
+            with desktop_environment(sessions, thread_id=first_id):
+                stale = osys.status()
+                self.assertEqual(stale["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(stale["telemetry"]["binding_reason"], "PREVIOUS_EPOCH_SESSION")
+                self.assertEqual(stale["telemetry"]["current_epoch_measurement"], "UNMEASURED")
+            with desktop_environment(sessions, thread_id=expected_id):
+                wrong_parent = osys.status()
+                self.assertEqual(wrong_parent["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(wrong_parent["telemetry"]["binding_reason"], "NOT_ASSOCIATED")
+                self.assertEqual(wrong_parent["next_action"], "stop model work; restore the expected rollover telemetry binding")
+            self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
+            self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 1)
+
+    def test_rollover_duplicate_exact_continuations_fail_safely_as_ambiguous(self):
+        with generic_repo("desktop-rollover-ambiguous") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000088"
+            expected_id = "00000000-0000-0000-0000-000000000089"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            for day in ("11", "12"):
+                _session_file(
+                    sessions,
+                    expected_id,
+                    root,
+                    "GENERIC-LOW",
+                    cwd=root.parent,
+                    thread_source="subagent",
+                    forked_from_id=first_id,
+                    session_day=day,
+                )
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=expected_id):
+                rolled = osys.rollover(force=True, thread_id=expected_id).snapshot
+            with desktop_environment(sessions, thread_id=expected_id):
+                ambiguous = osys.status()
+                self.assertEqual(ambiguous["telemetry"]["status"], "ADAPTER_BLOCKED")
+                self.assertEqual(ambiguous["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(ambiguous["telemetry"]["binding_reason"], "AMBIGUOUS")
+                self.assertEqual(ambiguous["telemetry"]["telemetry_binding"]["candidates"], [expected_id])
+                self.assertEqual(ambiguous["next_action"], "stop model work; restore the expected rollover telemetry binding")
+            self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
+            self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 1)
+
+    def test_rollover_missing_expected_source_is_unmeasured_and_noncorrupting(self):
+        with generic_repo("desktop-rollover-missing") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000090"
+            missing_id = "00000000-0000-0000-0000-000000000091"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=missing_id):
+                rolled = osys.rollover(force=True, thread_id=missing_id).snapshot
+            with desktop_environment(sessions, thread_id=missing_id):
+                missing = osys.status()
+                self.assertEqual(missing["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(missing["telemetry"]["binding_reason"], "NOT_ASSOCIATED")
+                self.assertEqual(missing["telemetry"]["current_epoch_measurement"], "UNMEASURED")
+                self.assertEqual(missing["telemetry"]["current_epoch_requests_measurement"], "UNMEASURED")
+                self.assertEqual(missing["next_action"], "stop model work; restore the expected rollover telemetry binding")
+                self.assertEqual(missing["work_packet"]["telemetry_availability"], "UNMEASURED")
+                self.assertEqual(missing["work_packet"]["telemetry_binding_status"], "TELEMETRY_UNBOUND")
+                (root / "app.py").write_text("def add(a, b):\n    return a + b + 1\n", encoding="utf-8")
+                run_git(root, "add", "app.py")
+                run_git(root, "commit", "-qm", "unadopted while telemetry is unbound")
+                still_blocked = osys.status()
+                self.assertTrue(still_blocked["unadopted_product_commit"])
+                self.assertEqual(still_blocked["next_action"], "stop model work; restore the expected rollover telemetry binding")
+            self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
+            self.assertEqual(read_current(root).state["context"]["epoch"], 2)
+            self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 1)
+
+    def test_repeated_rollover_for_same_expected_session_is_idempotent(self):
+        with generic_repo("desktop-rollover-idempotent") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000092"
+            expected_id = "00000000-0000-0000-0000-000000000093"
+            third_id = "00000000-0000-0000-0000-000000000102"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            second_source = _session_file(
+                sessions,
+                expected_id,
+                root,
+                "GENERIC-LOW",
+                cwd=root.parent,
+                thread_source="subagent",
+                forked_from_id=first_id,
+            )
+            _session_file(
+                sessions,
+                third_id,
+                root,
+                "GENERIC-LOW",
+                cwd=root.parent,
+                thread_source="subagent",
+                forked_from_id=expected_id,
+            )
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=expected_id):
+                first_rollover = osys.rollover(force=True, thread_id=expected_id)
+                retry = osys.rollover(force=True, thread_id=expected_id)
+                self.assertFalse(first_rollover.idempotent)
+                self.assertTrue(retry.idempotent)
+                self.assertEqual(retry.snapshot.generation_hash, first_rollover.snapshot.generation_hash)
+                self.assertEqual(retry.snapshot.state["context"]["epoch"], 2)
+                rebound = osys.status()
+                self.assertEqual(rebound["telemetry"]["binding_reason"], "PERSISTED")
+                self.assertEqual(rebound["telemetry"]["telemetry_binding"]["session_id"], expected_id)
+                second_usage = UsageAppender(second_source)
+                for _ in range(5):
+                    second_usage.add(1_000)
+                self.assertEqual(osys.status()["governor"]["action"], "ROLLOVER_REQUIRED")
+                with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                    osys.rollover(thread_id="invalid/context")
+            with desktop_environment(sessions, thread_id=first_id):
+                with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                    osys.rollover(thread_id=first_id)
+            with desktop_environment(sessions):
+                with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                    osys.rollover(thread_id=first_id)
+            self.assertEqual(read_current(root).state["context"]["epoch"], 2)
+            self.assertEqual(read_current(root).state["context"]["thread_id"], expected_id)
+            with desktop_environment(sessions, thread_id=third_id):
+                second_rollover = osys.rollover(thread_id=third_id)
+                self.assertFalse(second_rollover.idempotent)
+                self.assertEqual(second_rollover.snapshot.state["context"]["epoch"], 3)
+                self.assertEqual(second_rollover.snapshot.state["context"]["thread_id"], third_id)
+                third_status = osys.status()
+                self.assertEqual(third_status["telemetry"]["binding_status"], "BOUND")
+                self.assertEqual(third_status["telemetry"]["telemetry_binding"]["session_id"], third_id)
+                self.assertEqual(third_status["telemetry"]["telemetry_binding"]["parent_session_id"], expected_id)
+                self.assertEqual(third_status["telemetry"]["current_epoch_model_requests"], 0)
+            self.assertEqual(len(list((root / ".buildos/runtime/telemetry_bindings").glob("*.json"))), 3)
+
+    def test_root_user_rollover_binds_only_when_canonical_context_names_its_physical_id(self):
+        with generic_repo("desktop-rollover-root-user") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000094"
+            second_id = "00000000-0000-0000-0000-000000000095"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            _session_file(sessions, second_id, root, "GENERIC-LOW")
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=second_id):
+                rolled = osys.rollover(force=True, thread_id=second_id).snapshot
+                status = osys.status()
+                self.assertEqual(status["telemetry"]["binding_status"], "BOUND")
+                self.assertEqual(status["telemetry"]["telemetry_binding"]["session_id"], second_id)
+                self.assertEqual(status["telemetry"]["telemetry_binding"]["association"], "ROOT_USER")
+                self.assertEqual(status["work_packet"]["thread_id"], second_id)
+            self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
+
+    def test_legacy_root_binding_with_context_label_and_fork_header_remains_readable(self):
+        with generic_repo("desktop-rollover-legacy-binding") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000096"
+            second_id = "00000000-0000-0000-0000-000000000097"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            second_source = _session_file(
+                sessions,
+                second_id,
+                root,
+                "GENERIC-LOW",
+                forked_from_id=first_id,
+            )
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+                rolled = osys.rollover(force=True, thread_id="legacy-epoch-label").snapshot
+
+            inspected = inspect_desktop_session(second_source, root=root, task_id="GENERIC-LOW")
+            _persist_binding(root, rolled.state, inspected)
+            epoch_two = next(
+                path for path in (root / ".buildos/runtime/telemetry_bindings").glob("*.json")
+                if json.loads(path.read_text(encoding="utf-8"))["epoch"] == 2
+            )
+            with desktop_environment(sessions, thread_id=second_id):
+                new_format_mismatch = osys.status()
+                self.assertEqual(new_format_mismatch["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(new_format_mismatch["telemetry"]["binding_reason"], "ADAPTER_BLOCKED")
+                self.assertIn("not the expected rollover continuation", new_format_mismatch["telemetry"]["adapter_failures"][0])
+            legacy = json.loads(epoch_two.read_text(encoding="utf-8"))
+            legacy.pop("association")
+            legacy.pop("parent_session_id")
+            legacy["header_fingerprint"] = _desktop_header_fingerprint(
+                inspected,
+                include_fork_parent=False,
+            )
+            epoch_two.write_text(json.dumps(legacy, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+            with desktop_environment(sessions, thread_id=second_id):
+                status = osys.status()
+                self.assertEqual(status["telemetry"]["binding_status"], "BOUND")
+                self.assertEqual(status["telemetry"]["binding_reason"], "PERSISTED")
+                self.assertEqual(status["telemetry"]["telemetry_binding"]["session_id"], second_id)
+                self.assertEqual(status["telemetry"]["telemetry_binding"]["association"], "ROOT_USER")
+
+    def test_corrupt_handoff_ancestry_blocks_the_next_epoch_without_corrupting_lifecycle(self):
+        with generic_repo("desktop-rollover-ancestry") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000098"
+            second_id = "00000000-0000-0000-0000-000000000099"
+            third_id = "00000000-0000-0000-0000-000000000100"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            _session_file(
+                sessions,
+                second_id,
+                root,
+                "GENERIC-LOW",
+                cwd=root.parent,
+                thread_source="subagent",
+                forked_from_id=first_id,
+            )
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+            with desktop_environment(sessions, thread_id=second_id):
+                osys.rollover(force=True, thread_id=second_id)
+
+            epoch_two = next(
+                path for path in (root / ".buildos/runtime/telemetry_bindings").glob("*.json")
+                if json.loads(path.read_text(encoding="utf-8"))["epoch"] == 2
+            )
+            corrupt = json.loads(epoch_two.read_text(encoding="utf-8"))
+            corrupt["parent_session_id"] = "00000000-0000-0000-0000-000000000001"
+            epoch_two.write_text(json.dumps(corrupt, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+            with desktop_environment(sessions, thread_id=third_id):
+                third = osys.rollover(force=True, thread_id=third_id).snapshot
+                status = osys.status()
+                self.assertEqual(third.state["context"]["epoch"], 3)
+                self.assertEqual(read_current(root).generation_hash, third.generation_hash)
+                self.assertEqual(status["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(status["telemetry"]["binding_reason"], "ADAPTER_BLOCKED")
+                self.assertIn("handoff ancestry is inconsistent", status["telemetry"]["adapter_failures"][0])
+                self.assertEqual(status["next_action"], "stop model work; restore the expected rollover telemetry binding")
+
+    def test_invalid_rollover_context_identity_fails_telemetry_closed(self):
+        with generic_repo("desktop-rollover-invalid-context") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            first_id = "00000000-0000-0000-0000-000000000101"
+            _session_file(sessions, first_id, root, "GENERIC-LOW")
+            with desktop_environment(sessions, thread_id=first_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+                rolled = osys.rollover(force=True, thread_id="invalid/context").snapshot
+                status = osys.status()
+                self.assertEqual(rolled.state["context"]["epoch"], 2)
+                self.assertEqual(status["telemetry"]["binding_status"], "TELEMETRY_UNBOUND")
+                self.assertEqual(status["telemetry"]["binding_reason"], "INVALID_EXPECTED_CONTINUATION")
+                self.assertEqual(status["next_action"], "stop model work; restore the expected rollover telemetry binding")
+                self.assertEqual(read_current(root).generation_hash, rolled.generation_hash)
 
     def test_corrupt_prior_epoch_binding_blocks_rebinding_without_blocking_rollover(self):
         with generic_repo("desktop-prior-binding-corrupt") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
@@ -642,6 +1096,67 @@ class DesktopBindingTests(unittest.TestCase):
                 self.assertEqual(raw["usage"]["output_tokens"], 28_180)
                 self.assertEqual(raw["usage"]["reasoning_tokens"], 11_521)
                 self.assertEqual(raw["usage"]["projected_prompt_tokens"], 179_884)
+
+    @unittest.skipUnless(
+        ROLLOVER_FIELD_TRACE.is_file() and ROLLOVER_FIELD_ROOT.is_dir(),
+        "failed rollover Desktop field trace is not present",
+    )
+    def test_failed_rollover_field_trace_would_bind_via_read_only_handoff_proof(self):
+        before_trace = (ROLLOVER_FIELD_TRACE.stat().st_size, ROLLOVER_FIELD_TRACE.stat().st_mtime_ns)
+        binding_dir = ROLLOVER_FIELD_ROOT / ".buildos" / "runtime" / "telemetry_bindings"
+        before_bindings = sorted(path.name for path in binding_dir.glob("*.json")) if binding_dir.is_dir() else []
+        inspected = inspect_desktop_session(
+            ROLLOVER_FIELD_TRACE,
+            root=ROLLOVER_FIELD_ROOT,
+            task_id=ROLLOVER_FIELD_TASK,
+            expected_session_id=ROLLOVER_FIELD_SESSION,
+        )
+        self.assertEqual(inspected["thread_source"], "subagent")
+        self.assertTrue(inspected["self_owned_stream"])
+        self.assertFalse(inspected["eligible_user_stream"])
+        self.assertEqual(inspected["forked_from_id"], ROLLOVER_FIELD_PARENT)
+        self.assertTrue(inspected["repository_match"])
+        self.assertTrue(inspected["task_match"])
+        self.assertTrue(inspected["current_turn_repository_match"])
+        self.assertTrue(inspected["current_turn_task_match"])
+
+        state = {
+            "task_id": ROLLOVER_FIELD_TASK,
+            "revision": 1,
+            "created_at": "2026-08-11T01:00:58Z",
+            "updated_at": "2026-08-11T01:02:46Z",
+            "context": {
+                "epoch": 2,
+                "epoch_id": "epoch-cafbcd8f05594080b76f9e29924fbb37",
+                "thread_id": ROLLOVER_FIELD_SESSION,
+            },
+        }
+
+        def read_only_binding(_root, _state, selected, *, association):
+            return {
+                "session_id": selected["session_id"],
+                "association": association,
+                "parent_session_id": selected["forked_from_id"],
+            }
+
+        # Discovery, the legacy epoch-one binding, and association run against
+        # the real field artifacts. Only publication is replaced, so this
+        # proof can never write the interrupted product's runtime.
+        with (
+            patch("buildos.telemetry._persist_binding", side_effect=read_only_binding) as publish,
+            desktop_environment(ROLLOVER_FIELD_SESSIONS, thread_id=ROLLOVER_FIELD_SESSION),
+        ):
+            discovery = discover_desktop_session(ROLLOVER_FIELD_ROOT, state)
+
+        self.assertEqual(discovery["status"], "BOUND")
+        self.assertEqual(discovery["reason"], "ROLLOVER_HANDOFF")
+        self.assertEqual(discovery["binding"]["session_id"], ROLLOVER_FIELD_SESSION)
+        self.assertEqual(discovery["binding"]["parent_session_id"], ROLLOVER_FIELD_PARENT)
+        self.assertEqual(publish.call_count, 1)
+        self.assertEqual(publish.call_args.kwargs["association"], "ROLLOVER_HANDOFF")
+        after_bindings = sorted(path.name for path in binding_dir.glob("*.json")) if binding_dir.is_dir() else []
+        self.assertEqual(after_bindings, before_bindings)
+        self.assertEqual((ROLLOVER_FIELD_TRACE.stat().st_size, ROLLOVER_FIELD_TRACE.stat().st_mtime_ns), before_trace)
 
     @unittest.skipUnless(FIELD_TRACE.is_file(), "recovered read-only Desktop field trace is not present")
     def test_recovered_field_trace_is_parsed_read_only_with_exact_full_turn_usage(self):

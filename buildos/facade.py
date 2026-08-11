@@ -108,13 +108,28 @@ def _skill_reference(root: Path, package_root: Path, skill_id: str | None) -> di
     }
 
 
+def _rollover_binding_blocked(state: Mapping[str, Any], telemetry: Mapping[str, Any]) -> bool:
+    context = state.get("context") or {}
+    return bool(
+        int(context.get("epoch", 1)) > 1
+        and (
+            telemetry.get("binding_status") == "TELEMETRY_UNBOUND"
+            or telemetry.get("binding_reason") in {"SOURCE_UNAVAILABLE", "ADAPTER_BLOCKED"}
+        )
+    )
+
+
 def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[str, Any], skill: Mapping[str, Any] | None) -> dict[str, Any]:
     state = snapshot.state
     commit = state.get("product_commit") or {}
     assurance = state.get("assurance") or {}
     next_action = state["next_action"]
+    context = state.get("context") or {}
+    rollover_binding_blocked = _rollover_binding_blocked(state, telemetry)
     if state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
-        if governor.get("action") in {"ROLLOVER_REQUIRED", "HARD_STOP"}:
+        if rollover_binding_blocked:
+            next_action = "stop model work; restore the expected rollover telemetry binding"
+        elif governor.get("action") in {"ROLLOVER_REQUIRED", "HARD_STOP"}:
             next_action = "run rollover before further model work"
         elif governor.get("action") == "PREPARE_COMPACT":
             next_action = "prepare a compact continuation and monitor for rollover"
@@ -133,10 +148,15 @@ def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[
             {"path": item.get("path"), "sha256": item.get("sha256"), "kind": item.get("kind")}
             for item in state.get("evidence") or []
         ],
-        "epoch": (state.get("context") or {}).get("epoch"),
-        "epoch_id": (state.get("context") or {}).get("epoch_id"),
+        "epoch": context.get("epoch"),
+        "epoch_id": context.get("epoch_id"),
+        "thread_id": context.get("thread_id"),
         "rollover_decision": governor.get("action"),
-        "telemetry_availability": telemetry.get("status", "UNMEASURED"),
+        "telemetry_availability": (
+            "UNMEASURED" if rollover_binding_blocked else governor.get("measurement", "UNMEASURED")
+        ),
+        "telemetry_binding_status": telemetry.get("binding_status"),
+        "telemetry_binding_reason": telemetry.get("binding_reason"),
         "state_generation": snapshot.generation,
         "state_hash": snapshot.generation_hash,
         "skill": skill,
@@ -323,8 +343,18 @@ class BuildOS:
         self.project(confirmed)
         return CommitResult(confirmed, committed=False, idempotent=True)
 
-    def _usage(self, snapshot: Snapshot, override: Mapping[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
-        telemetry = auto_refresh(self.root, snapshot.state)
+    def _usage(
+        self,
+        snapshot: Snapshot,
+        override: Mapping[str, Any] | None = None,
+        *,
+        rollover_thread_id: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        telemetry = auto_refresh(
+            self.root,
+            snapshot.state,
+            rollover_thread_id=rollover_thread_id,
+        )
         epoch_measured = telemetry.get("current_epoch_measurement") == "MEASURED"
         requests_measured = telemetry.get("current_epoch_requests_measurement") == "MEASURED"
         usage = {
@@ -444,6 +474,8 @@ class BuildOS:
                 next_action = "restore observable Git repository state before the next lifecycle action"
             elif read_only_violation:
                 next_action = "READ_ONLY baseline changed; restore it or abort without adopting product mutation"
+            elif _rollover_binding_blocked(state, telemetry) and state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
+                next_action = "stop model work; restore the expected rollover telemetry binding"
             elif state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"} and governor["action"] in {"ROLLOVER_REQUIRED", "HARD_STOP"}:
                 next_action = "run rollover before further model work"
             elif relation_problem:
@@ -678,7 +710,11 @@ class BuildOS:
             if op_id is not None and previous.operation_id == op_id:
                 raise KernelError("operation_id was reused with a different rollover intent")
         usage = {key: value for key, value in request_intent.items() if key in {"projected_prompt_tokens", "requests_in_epoch"} and value is not None}
-        _, signal = self._usage(previous, usage)
+        _, signal = self._usage(
+            previous,
+            usage,
+            rollover_thread_id=thread_id,
+        )
         if force:
             signal["force"] = True
         candidate, event = transition_rollover(previous.state, signal, thread_id=thread_id)

@@ -69,12 +69,19 @@ intercept an already-issued model request.
 
 During normal Codex Desktop execution no telemetry configuration is required.
 The facade uses the exact `CODEX_THREAD_ID` inherited by its tool process,
-validates the corresponding root-user rollout JSONL against the active task and
+validates the corresponding rollout JSONL against the active task and
 repository, and persists one immutable source/baseline binding per
-Task/Revision/Epoch under `.buildos/runtime/telemetry_bindings/`.  Retries reuse
-that binding; a rollover selects a different physical Desktop stream and never
-merges the prior epoch's counters.  Subagent streams are not selected as the
-productive task stream.
+Task/Revision/Epoch under `.buildos/runtime/telemetry_bindings/`.  Initial
+binding requires a root-user stream.  A rollover may also bind the exact
+self-owned Desktop fork named by the canonical disposable `thread_id`, but only
+when its first-header `forked_from_id` is the immediately prior epoch's bound
+session.  Retries reuse that binding and old/new counters are never merged.
+Other subagent streams remain ineligible.
+
+For a new Desktop binding after rollover, `--thread-id` names the fresh
+physical continuation exactly; it remains disposable with the epoch and is not
+a durable lifecycle identity. Already-persisted bindings from the first v1.22
+corrective remain readable for compatibility.
 
 If the exact Desktop identity is unavailable, discovery binds only one live
 root-user session whose declared cwd is the repository.  Multiple plausible
@@ -90,6 +97,13 @@ Missing or malformed telemetry is reported as `UNMEASURED` or
 also append a `CONTROL` tool-action record, while productive model usage is
 never fabricated when no source exists.  The detailed binding and field-replay
 contract is in `docs/TELEMETRY_BINDING.md`.
+
+`WORK_PACKET.json` projects the current disposable `thread_id` beside Task,
+Revision, Epoch, and `epoch_id`, so the expected rollover continuation remains
+visible without making the packet authoritative. It also projects current
+governor measurement plus telemetry binding status/reason. An unbound or
+unavailable rollover source explicitly tells the Worker to stop model work and
+restore binding before continuing.
 
 Two optional static `SKILL.md` guides are included (`python-change-v122` and
 `git-validation-v122`).  Selection is explicit; no registry, executable plugin,
