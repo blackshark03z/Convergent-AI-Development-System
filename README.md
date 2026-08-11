@@ -67,14 +67,29 @@ intercept an already-issued model request.
 
 ## Telemetry and Skills
 
-When a configured source exists (`BUILDOS_TELEMETRY_FILE`,
-`AI_BUILD_OS_CODEX_APP_SERVER_USAGE_FILE`, or `AI_BUILD_OS_USAGE_FILE`), the
-facade imports it automatically and binds records to task, revision, epoch,
-thread, and source.  Codex cumulative notifications are baselined at task and
-epoch binding.  Missing or malformed telemetry is reported as `UNMEASURED` or
+During normal Codex Desktop execution no telemetry configuration is required.
+The facade uses the exact `CODEX_THREAD_ID` inherited by its tool process,
+validates the corresponding root-user rollout JSONL against the active task and
+repository, and persists one immutable source/baseline binding per
+Task/Revision/Epoch under `.buildos/runtime/telemetry_bindings/`.  Retries reuse
+that binding; a rollover selects a different physical Desktop stream and never
+merges the prior epoch's counters.  Subagent streams are not selected as the
+productive task stream.
+
+If the exact Desktop identity is unavailable, discovery binds only one live
+root-user session whose declared cwd is the repository.  Multiple plausible
+sessions report `TELEMETRY_UNBOUND/AMBIGUOUS`; zero remain truthfully
+`UNMEASURED`.  `BUILDOS_CODEX_DESKTOP_SESSION_FILE` is an explicit validated
+file override for unusual environments.  Existing configured sources
+(`BUILDOS_TELEMETRY_FILE`, `AI_BUILD_OS_CODEX_APP_SERVER_USAGE_FILE`, or
+`AI_BUILD_OS_USAGE_FILE`) retain precedence.
+
+Codex cumulative notifications are baselined at task and epoch binding.
+Missing or malformed telemetry is reported as `UNMEASURED` or
 `ADAPTER_BLOCKED`; it cannot change canonical lifecycle state.  CLI invocations
 also append a `CONTROL` tool-action record, while productive model usage is
-never fabricated when no source exists.
+never fabricated when no source exists.  The detailed binding and field-replay
+contract is in `docs/TELEMETRY_BINDING.md`.
 
 Two optional static `SKILL.md` guides are included (`python-change-v122` and
 `git-validation-v122`).  Selection is explicit; no registry, executable plugin,

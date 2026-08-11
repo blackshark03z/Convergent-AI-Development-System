@@ -5,17 +5,25 @@ returns UNMEASURED/ADAPTER_BLOCKED and can never roll back or corrupt a task.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any, Iterable, Mapping
+import uuid
 
-from .store import atomic_json
+from .model import canonical_bytes
+from .store import RecoveryRequired, atomic_json, atomic_write, publish_immutable
 
 
 SCHEMA = "buildos.telemetry.v1"
+BINDING_SCHEMA = "buildos.telemetry_binding.v1"
+DESKTOP_SOURCE = "CODEX_DESKTOP_JSONL"
+DESKTOP_SESSION_FILE_ENV = "BUILDOS_CODEX_DESKTOP_SESSION_FILE"
+DESKTOP_SESSIONS_DIR_ENV = "BUILDOS_CODEX_SESSIONS_DIR"
+SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 ENV_SOURCES = (
     ("BUILDOS_TELEMETRY_FILE", "NORMALIZED"),
     ("AI_BUILD_OS_CODEX_APP_SERVER_USAGE_FILE", "CODEX_APP_SERVER"),
@@ -36,6 +44,590 @@ def _number(value: Any) -> int:
         return max(0, int(value or 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _desktop_number(value: Any, *, field: str) -> int:
+    if isinstance(value, bool):
+        raise TelemetryError(f"Codex Desktop {field} must be a non-negative integer")
+    try:
+        result = int(value or 0)
+    except (TypeError, ValueError) as exc:
+        raise TelemetryError(f"Codex Desktop {field} must be a non-negative integer") from exc
+    if result < 0:
+        raise TelemetryError(f"Codex Desktop {field} must be a non-negative integer")
+    return result
+
+
+def _safe_session_id(value: Any) -> str | None:
+    selected = str(value or "").strip()
+    return selected if SESSION_ID_RE.fullmatch(selected) else None
+
+
+def desktop_session_id_from_environment() -> str | None:
+    """Return only a portable exact Desktop identity inherited by this process."""
+    return _safe_session_id(os.environ.get("CODEX_THREAD_ID"))
+
+
+def _same_path(left: Path | str, right: Path | str) -> bool:
+    return os.path.normcase(str(Path(left).resolve())) == os.path.normcase(str(Path(right).resolve()))
+
+
+def _contains_path(text: str, root: Path) -> bool:
+    marker = re.sub(r"\\+", r"\\", str(root.resolve()).replace("/", "\\")).rstrip("\\").casefold()
+    # Tool calls are stored as source text, so a Windows separator can appear
+    # once as a path character or twice as a language-string escape.
+    candidate = re.sub(r"\\+", r"\\", str(text).replace("/", "\\")).casefold()
+    start = 0
+    boundaries = set("\\\"'` \t\r\n,;:)]}")
+    while True:
+        index = candidate.find(marker, start)
+        if index < 0:
+            return False
+        after = index + len(marker)
+        if after == len(candidate) or candidate[after] in boundaries:
+            return True
+        start = index + 1
+
+
+def _contains_task_id(text: str, task_id: str) -> bool:
+    escaped = re.escape(task_id)
+    return re.search(rf"(?<![A-Za-z0-9_.-]){escaped}(?![A-Za-z0-9_.-])", str(text), re.IGNORECASE) is not None
+
+
+def _association_fragments(record: Mapping[str, Any]) -> list[str]:
+    payload = record.get("payload") or {}
+    if not isinstance(payload, Mapping):
+        return []
+    fragments: list[str] = []
+    record_type = str(record.get("type") or "")
+    payload_type = str(payload.get("type") or "")
+    if record_type == "response_item" and payload_type in {
+        "custom_tool_call", "custom_tool_call_output", "function_call", "function_call_output", "message",
+    }:
+        for field in ("input", "arguments", "output", "message"):
+            value = payload.get(field)
+            if value is not None:
+                fragments.append(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, sort_keys=True))
+        content = payload.get("content")
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, Mapping):
+                    value = item.get("text")
+                    if value is not None:
+                        fragments.append(str(value))
+    elif record_type == "event_msg" and payload_type in {"user_message", "agent_message"}:
+        for field in ("message", "text"):
+            if payload.get(field) is not None:
+                fragments.append(str(payload[field]))
+    return fragments
+
+
+def inspect_desktop_session(
+    path: Path | str,
+    *,
+    root: Path | str | None = None,
+    task_id: str | None = None,
+    expected_session_id: str | None = None,
+) -> dict[str, Any]:
+    """Inspect a Codex Desktop rollout JSONL without treating it as authority.
+
+    A live file may end in a partially written final line.  Only that tail is
+    ignored; malformed complete records fail the adapter safely.
+    """
+    source_path = Path(path).expanduser().resolve()
+    if not source_path.is_file():
+        raise TelemetryError(f"Desktop session file does not exist: {source_path}")
+    repository = Path(root).resolve() if root is not None else None
+    expected = _safe_session_id(expected_session_id) if expected_session_id else None
+    if expected_session_id and not expected:
+        raise TelemetryError("Desktop session identity is invalid")
+
+    metadata: dict[str, Any] | None = None
+    repository_match = False
+    cwd_match = False
+    task_match = task_id is None
+    current_turn_repository_match = False
+    current_turn_task_match = task_id is None
+    current_turn_started = False
+    last_repository_activity: datetime | None = None
+    latest_started: datetime | None = None
+    latest_complete: datetime | None = None
+    last_timestamp: datetime | None = None
+    partial_tail = False
+    token_events = 0
+    totals: dict[str, int] | None = None
+    max_prompt = 0
+    prompt_measured = False
+    request_prompt_tokens: list[int | None] = []
+    last_token_at: str | None = None
+
+    with source_path.open("rb") as handle:
+        for line_number, raw in enumerate(handle, 1):
+            complete_line = raw.endswith(b"\n")
+            try:
+                record = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                if not complete_line:
+                    partial_tail = True
+                    break
+                raise TelemetryError(f"invalid Desktop JSONL record at line {line_number}") from exc
+            if not isinstance(record, dict):
+                continue
+            observed = _timestamp(record.get("timestamp"))
+            if observed and (last_timestamp is None or observed > last_timestamp):
+                last_timestamp = observed
+            record_type = str(record.get("type") or "")
+            payload = record.get("payload") or {}
+            if not isinstance(payload, Mapping):
+                continue
+            payload_type = str(payload.get("type") or "")
+            if record_type == "session_meta":
+                # Compacted/forked rollouts may replay ancestor metadata after
+                # the current file header.  The first header owns this physical
+                # stream; later headers are historical context only.
+                if metadata is None:
+                    metadata = dict(payload)
+                    session_cwd = payload.get("cwd")
+                    if repository is not None and session_cwd:
+                        try:
+                            if _same_path(str(session_cwd), repository):
+                                repository_match = True
+                                cwd_match = True
+                                last_repository_activity = observed
+                        except OSError:
+                            pass
+            if record_type == "event_msg" and payload_type == "task_started":
+                latest_started = observed or latest_started
+                # Fork/compaction history can replay old task and repository
+                # strings before the current turn. Only current-turn evidence
+                # may establish automatic task association.
+                current_turn_started = True
+                current_turn_repository_match = False
+                current_turn_task_match = task_id is None
+            if record_type == "event_msg" and payload_type == "task_complete":
+                latest_complete = observed or latest_complete
+
+            fragments = _association_fragments(record)
+            if repository is not None and any(_contains_path(item, repository) for item in fragments):
+                repository_match = True
+                if current_turn_started:
+                    current_turn_repository_match = True
+                if observed and (last_repository_activity is None or observed > last_repository_activity):
+                    last_repository_activity = observed
+            if task_id is not None and any(_contains_task_id(item, task_id) for item in fragments):
+                task_match = True
+                if current_turn_started:
+                    current_turn_task_match = True
+
+            if record_type != "event_msg" or payload_type != "token_count":
+                continue
+            info = payload.get("info") or {}
+            total_usage = info.get("total_token_usage") or {}
+            last_usage = info.get("last_token_usage") or {}
+            if not isinstance(total_usage, Mapping) or not total_usage:
+                raise TelemetryError(f"Desktop token_count has no cumulative usage at line {line_number}")
+            current = {
+                "raw_input_tokens": _desktop_number(total_usage.get("input_tokens"), field="input_tokens"),
+                "cached_input_tokens": _desktop_number(total_usage.get("cached_input_tokens"), field="cached_input_tokens"),
+                "output_tokens": _desktop_number(total_usage.get("output_tokens"), field="output_tokens"),
+                "reasoning_tokens": _desktop_number(total_usage.get("reasoning_output_tokens"), field="reasoning_output_tokens"),
+            }
+            if totals is not None and any(current[field] < totals[field] for field in current):
+                raise TelemetryError(f"Desktop cumulative usage regressed at line {line_number}")
+            if totals is not None and current == totals:
+                # Desktop can replay an identical token_count notification.
+                # A model request is one cumulative advance, not one row.
+                continue
+            totals = current
+            token_events += 1
+            if isinstance(last_usage, Mapping) and "input_tokens" in last_usage:
+                prompt_value = _desktop_number(last_usage.get("input_tokens"), field="last input_tokens")
+                request_prompt_tokens.append(prompt_value)
+                max_prompt = max(max_prompt, prompt_value)
+                prompt_measured = True
+            else:
+                request_prompt_tokens.append(None)
+            last_token_at = str(record.get("timestamp") or last_token_at or _now())
+
+    if metadata is None:
+        raise TelemetryError("Desktop JSONL has no session_meta record")
+    # `id` is the physical rollout/stream and matches CODEX_THREAD_ID and the
+    # filename.  Subagents can inherit a parent's `session_id`, so that field
+    # is diagnostic only and must never be used to merge counters.
+    session_id = _safe_session_id(metadata.get("id"))
+    logical_session_id = _safe_session_id(metadata.get("session_id"))
+    if session_id is None or logical_session_id is None:
+        raise TelemetryError("Desktop session_meta requires valid id and session_id identities")
+    if expected and session_id != expected:
+        raise TelemetryError("Desktop session identity does not match the requested session")
+    if not source_path.stem.endswith(f"-{session_id}"):
+        raise TelemetryError("Desktop session identity does not match the rollout filename")
+    if str(metadata.get("originator") or "").casefold() != "codex desktop":
+        raise TelemetryError("telemetry source is not a Codex Desktop session")
+
+    usage = None
+    if totals is not None:
+        usage = {
+            "thread_id": session_id,
+            **totals,
+            "model_requests": token_events,
+            "model_requests_measured": True,
+            "projected_prompt_tokens": max_prompt,
+            "projected_prompt_tokens_measured": prompt_measured,
+            "role": "PRODUCTIVE",
+            "cumulative": True,
+            "observed_at": last_token_at or _now(),
+        }
+    active = latest_complete is None or (latest_started is not None and latest_started > latest_complete)
+    return {
+        "path": str(source_path),
+        "session_id": session_id,
+        "logical_session_id": logical_session_id,
+        "thread_source": metadata.get("thread_source"),
+        "eligible_user_stream": (
+            str(metadata.get("thread_source") or "").casefold() == "user"
+            and logical_session_id == session_id
+        ),
+        "originator": metadata.get("originator"),
+        "session_started_at": metadata.get("timestamp"),
+        "session_cwd": metadata.get("cwd"),
+        "repository_match": repository_match if repository is not None else None,
+        "cwd_match": cwd_match if repository is not None else None,
+        "task_match": task_match if task_id is not None else None,
+        "current_turn_repository_match": current_turn_repository_match if repository is not None else None,
+        "current_turn_task_match": current_turn_task_match if task_id is not None else None,
+        "last_repository_activity": last_repository_activity.isoformat().replace("+00:00", "Z") if last_repository_activity else None,
+        "last_timestamp": last_timestamp.isoformat().replace("+00:00", "Z") if last_timestamp else None,
+        "active": active,
+        "partial_tail": partial_tail,
+        "token_events": token_events,
+        "request_prompt_tokens": request_prompt_tokens,
+        "usage": usage,
+    }
+
+
+def _binding_identity(state: Mapping[str, Any]) -> dict[str, Any]:
+    context = state.get("context") or {}
+    return {
+        "task_id": str(state.get("task_id") or ""),
+        "revision": int(state.get("revision", 0)),
+        "epoch": int(context.get("epoch", 1)),
+        "epoch_id": str(context.get("epoch_id") or ""),
+    }
+
+
+def _desktop_header_fingerprint(inspected: Mapping[str, Any]) -> str:
+    return hashlib.sha256(canonical_bytes({
+        "session_id": inspected.get("session_id"),
+        "logical_session_id": inspected.get("logical_session_id"),
+        "session_started_at": inspected.get("session_started_at"),
+        "session_cwd": inspected.get("session_cwd"),
+        "originator": inspected.get("originator"),
+        "thread_source": inspected.get("thread_source"),
+    })).hexdigest()
+
+
+def _binding_file(root: Path | str, state: Mapping[str, Any]) -> Path:
+    identity = _binding_identity(state)
+    key = hashlib.sha256(canonical_bytes(identity)).hexdigest()
+    return Path(root).resolve() / ".buildos" / "runtime" / "telemetry_bindings" / f"{key}.json"
+
+
+def _read_binding(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any] | None:
+    path = _binding_file(root, state)
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TelemetryError("persisted Desktop telemetry binding is unreadable") from exc
+    identity = _binding_identity(state)
+    if not isinstance(value, dict) or value.get("schema") != BINDING_SCHEMA:
+        raise TelemetryError("persisted Desktop telemetry binding has invalid structure")
+    if any(value.get(field) != expected for field, expected in identity.items()):
+        raise TelemetryError("persisted Desktop telemetry binding identity mismatch")
+    if value.get("source") != DESKTOP_SOURCE or not _safe_session_id(value.get("session_id")):
+        raise TelemetryError("persisted Desktop telemetry binding source is invalid")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("header_fingerprint") or "")):
+        raise TelemetryError("persisted Desktop telemetry binding header fingerprint is invalid")
+    if not value.get("path") or not value.get("repository_root"):
+        raise TelemetryError("persisted Desktop telemetry binding repository is missing")
+    if not _same_path(value.get("repository_root"), root):
+        raise TelemetryError("persisted Desktop telemetry binding repository mismatch")
+    baseline = value.get("baseline")
+    baseline_fields = {
+        "raw_input_tokens", "cached_input_tokens", "output_tokens",
+        "reasoning_tokens", "model_requests",
+    }
+    if not isinstance(baseline, dict) or not baseline_fields.issubset(baseline):
+        raise TelemetryError("persisted Desktop telemetry binding baseline is invalid")
+    for field in baseline_fields:
+        _desktop_number(baseline.get(field), field=f"binding baseline {field}")
+    return value
+
+
+def _persist_binding(root: Path | str, state: Mapping[str, Any], inspected: Mapping[str, Any]) -> dict[str, Any]:
+    root_path = Path(root).resolve()
+    final = _binding_file(root_path, state)
+    existing = _read_binding(root_path, state)
+    if existing is not None:
+        return existing
+    usage = inspected.get("usage") or {}
+    value = {
+        "schema": BINDING_SCHEMA,
+        **_binding_identity(state),
+        "source": DESKTOP_SOURCE,
+        "session_id": inspected["session_id"],
+        "path": str(Path(str(inspected["path"])).resolve()),
+        "repository_root": str(root_path),
+        "session_started_at": inspected.get("session_started_at"),
+        "header_fingerprint": _desktop_header_fingerprint(inspected),
+        # The first safely selected cumulative snapshot is the immutable epoch
+        # baseline. This preserves the existing v1.22 accounting contract and
+        # closes the bind-before-ledger crash window.
+        "baseline": {
+            "raw_input_tokens": _number(usage.get("raw_input_tokens")),
+            "cached_input_tokens": _number(usage.get("cached_input_tokens")),
+            "output_tokens": _number(usage.get("output_tokens")),
+            "reasoning_tokens": _number(usage.get("reasoning_tokens")),
+            "model_requests": _number(usage.get("model_requests")),
+        },
+    }
+    data = canonical_bytes(value)
+    final.parent.mkdir(parents=True, exist_ok=True)
+    stage = final.parent / f".{final.stem}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+    atomic_write(stage, data)
+    try:
+        publish_immutable(stage, final)
+    except RecoveryRequired:
+        if stage.exists():
+            stage.unlink()
+        # A simultaneous observer may have selected the binding first.  Its
+        # immutable result wins; retries never replace it.
+        selected = _read_binding(root_path, state)
+        if selected is None:
+            raise TelemetryError("Desktop telemetry binding publication conflicted")
+        return selected
+    return value
+
+
+def _sessions_root() -> Path:
+    configured = os.environ.get(DESKTOP_SESSIONS_DIR_ENV)
+    if configured:
+        return Path(configured).expanduser().resolve()
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return (Path(codex_home).expanduser().resolve() / "sessions")
+    return (Path.home() / ".codex" / "sessions").resolve()
+
+
+def _associated(inspected: Mapping[str, Any]) -> bool:
+    return bool(
+        inspected.get("eligible_user_stream")
+        and inspected.get("repository_match")
+        and inspected.get("task_match")
+        and inspected.get("current_turn_task_match")
+        and (inspected.get("cwd_match") or inspected.get("current_turn_repository_match"))
+    )
+
+
+def _unbound(reason: str, *, candidates: Iterable[str] = ()) -> dict[str, Any]:
+    return {
+        "status": "TELEMETRY_UNBOUND",
+        "reason": reason,
+        "source": DESKTOP_SOURCE,
+        "candidates": sorted(set(str(item) for item in candidates if item)),
+    }
+
+
+def _previous_epoch_sessions(root: Path | str, state: Mapping[str, Any]) -> set[str]:
+    identity = _binding_identity(state)
+    root_path = Path(root).resolve()
+    directory = root_path / ".buildos" / "runtime" / "telemetry_bindings"
+    if not directory.is_dir():
+        return set()
+    result: set[str] = set()
+    for path in directory.glob("*.json"):
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TelemetryError("persisted Desktop telemetry binding history is unreadable") from exc
+        if not isinstance(value, dict) or value.get("schema") != BINDING_SCHEMA:
+            raise TelemetryError("persisted Desktop telemetry binding history has invalid structure")
+        try:
+            historical_state = {
+                "task_id": str(value["task_id"]),
+                "revision": int(value["revision"]),
+                "context": {
+                    "epoch": int(value["epoch"]),
+                    "epoch_id": str(value["epoch_id"]),
+                },
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise TelemetryError("persisted Desktop telemetry binding history has invalid identity") from exc
+        expected_path = _binding_file(root_path, historical_state)
+        if not _same_path(path, expected_path):
+            raise TelemetryError("persisted Desktop telemetry binding history filename mismatch")
+        validated = _read_binding(root_path, historical_state)
+        if validated is None:
+            raise TelemetryError("persisted Desktop telemetry binding history disappeared during validation")
+        if (
+            validated.get("task_id") == identity["task_id"]
+            and int(validated.get("revision", 0)) == identity["revision"]
+            and int(validated.get("epoch", 0)) < identity["epoch"]
+        ):
+            result.add(str(validated["session_id"]))
+    return result
+
+
+def _desktop_bound_usage(
+    inspected: Mapping[str, Any],
+    binding: Mapping[str, Any],
+    state: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    current = inspected.get("usage")
+    if not isinstance(current, Mapping):
+        return None
+    baseline = binding.get("baseline") or {}
+    numeric = ("raw_input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "model_requests")
+    adjusted: dict[str, int] = {}
+    for field in numeric:
+        current_value = _desktop_number(current.get(field), field=field)
+        baseline_value = _desktop_number(baseline.get(field), field=f"binding baseline {field}")
+        if current_value < baseline_value:
+            raise TelemetryError(f"Desktop cumulative {field} fell below the persisted epoch baseline")
+        adjusted[field] = current_value - baseline_value
+    if adjusted["model_requests"] == 0:
+        return None
+    prompts = inspected.get("request_prompt_tokens") or []
+    baseline_requests = _desktop_number(baseline.get("model_requests"), field="binding baseline model_requests")
+    if not isinstance(prompts, list) or len(prompts) < baseline_requests:
+        raise TelemetryError("Desktop request history no longer contains the persisted epoch baseline")
+    current_prompts = [
+        _desktop_number(value, field="last input_tokens")
+        for value in prompts[baseline_requests:]
+        if value is not None
+    ]
+    context_thread = (state.get("context") or {}).get("thread_id")
+    payload: dict[str, Any] = {
+        **adjusted,
+        "thread_id": context_thread or binding.get("session_id"),
+        "source_session_id": binding.get("session_id"),
+        "model_requests_measured": True,
+        "role": "PRODUCTIVE",
+        "cumulative": True,
+        "observed_at": current.get("observed_at") or _now(),
+    }
+    if current_prompts:
+        payload["projected_prompt_tokens"] = max(current_prompts)
+    return payload
+
+
+def discover_desktop_session(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
+    """Resolve exactly one Desktop session or fail observability closed."""
+    root_path = Path(root).resolve()
+    persisted = _read_binding(root_path, state)
+    if persisted is not None:
+        return {
+            "status": "BOUND",
+            "reason": "PERSISTED",
+            "source": DESKTOP_SOURCE,
+            "binding": persisted,
+            "available": Path(str(persisted["path"])).is_file(),
+        }
+
+    context_thread = _safe_session_id((state.get("context") or {}).get("thread_id"))
+    environment_thread = desktop_session_id_from_environment()
+    prior_sessions = _previous_epoch_sessions(root_path, state)
+
+    override = os.environ.get(DESKTOP_SESSION_FILE_ENV)
+    if override:
+        try:
+            inspected = inspect_desktop_session(
+                override,
+                root=root_path,
+                task_id=str(state.get("task_id") or ""),
+                expected_session_id=environment_thread,
+            )
+        except TelemetryError as exc:
+            raise TelemetryError(f"explicit Desktop telemetry override is invalid: {exc}") from exc
+        if not _associated(inspected):
+            raise TelemetryError("explicit Desktop telemetry override is not associated with the active repository and task")
+        if inspected["session_id"] in prior_sessions:
+            raise TelemetryError("explicit Desktop telemetry override reuses a prior epoch session")
+        binding = _persist_binding(root_path, state, inspected)
+        return {"status": "BOUND", "reason": "EXPLICIT_OVERRIDE", "source": DESKTOP_SOURCE, "binding": binding, "available": True}
+
+    sessions = _sessions_root()
+    if not sessions.is_dir():
+        return _unbound("UNAVAILABLE")
+
+    exact_thread = environment_thread or context_thread
+    if exact_thread:
+        matches: list[dict[str, Any]] = []
+        exact_errors: list[str] = []
+        for candidate in sorted(sessions.rglob(f"*{exact_thread}*.jsonl"), key=lambda item: str(item).casefold()):
+            try:
+                inspected = inspect_desktop_session(
+                    candidate,
+                    root=root_path,
+                    task_id=str(state.get("task_id") or ""),
+                    expected_session_id=exact_thread,
+                )
+            except TelemetryError as exc:
+                exact_errors.append(str(exc))
+                continue
+            if _associated(inspected):
+                matches.append(inspected)
+        if not matches:
+            if exact_errors:
+                raise TelemetryError(f"exact Desktop session is unreadable: {exact_errors[0]}")
+            if environment_thread:
+                return _unbound("NOT_ASSOCIATED", candidates=[exact_thread])
+        elif any(item["session_id"] in prior_sessions for item in matches):
+            return _unbound("PREVIOUS_EPOCH_SESSION", candidates=[item["session_id"] for item in matches])
+        elif len(matches) > 1:
+            return _unbound("AMBIGUOUS", candidates=[item["session_id"] for item in matches])
+        elif len(matches) == 1:
+            binding = _persist_binding(root_path, state, matches[0])
+            return {"status": "BOUND", "reason": "EXACT_SESSION_ID", "source": DESKTOP_SOURCE, "binding": binding, "available": True}
+
+    created = _timestamp(state.get("created_at")) or datetime.now(timezone.utc)
+    freshness_floor = created - timedelta(minutes=5)
+    plausible: list[dict[str, Any]] = []
+    for candidate in sorted(sessions.rglob("rollout-*.jsonl"), key=lambda item: str(item).casefold()):
+        try:
+            inspected = inspect_desktop_session(candidate, root=root_path, task_id=str(state.get("task_id") or ""))
+        except (OSError, TelemetryError):
+            continue
+        activity = _timestamp(inspected.get("last_repository_activity"))
+        if (
+            _associated(inspected)
+            and inspected.get("cwd_match")
+            and inspected.get("active")
+            and inspected.get("session_id") not in prior_sessions
+            and activity
+            and activity >= freshness_floor
+        ):
+            plausible.append(inspected)
+    if not plausible:
+        return _unbound("UNAVAILABLE")
+    if len(plausible) > 1:
+        return _unbound("AMBIGUOUS", candidates=[item["session_id"] for item in plausible])
+    binding = _persist_binding(root_path, state, plausible[0])
+    return {"status": "BOUND", "reason": "UNIQUE_REPOSITORY_ACTIVITY", "source": DESKTOP_SOURCE, "binding": binding, "available": True}
 
 
 def _record_id(record: Mapping[str, Any]) -> str:
@@ -73,6 +665,7 @@ def normalize(payload: Mapping[str, Any], state: Mapping[str, Any], *, source: s
         "epoch": payload_epoch,
         "epoch_id": payload.get("epoch_id") or (state.get("context") or {}).get("epoch_id"),
         "thread_id": payload.get("thread_id"),
+        "source_session_id": payload.get("source_session_id"),
         "source": source,
         "role": role,
         "raw_input_tokens": _number(payload.get("raw_input_tokens", payload.get("input_tokens"))),
@@ -144,8 +737,11 @@ def _load_source(path: Path, source: str) -> list[dict[str, Any]]:
     if source == "CODEX_APP_SERVER":
         threads = {str(item.get("thread_id")) for item in records if item.get("thread_id")}
         configured = os.environ.get("BUILDOS_THREAD_ID") or os.environ.get("AI_BUILD_OS_CODEX_THREAD_ID")
+        inherited = desktop_session_id_from_environment()
         if configured:
             records = [item for item in records if item.get("thread_id") == configured]
+        elif inherited and inherited in threads:
+            records = [item for item in records if item.get("thread_id") == inherited]
         elif len(threads) > 1:
             raise TelemetryError("multiple unbound Codex threads; refusing to guess active telemetry")
         # Cumulative notifications supersede older values from the same thread.
@@ -296,15 +892,140 @@ def auto_refresh(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             ]
             count = ingest(root, state, payloads, source=source)
             result = summarize(root, state)
-            result.update({"adapter": source, "ingested": count, "adapter_failures": failures})
+            result.update({
+                "adapter": source,
+                "ingested": count,
+                "adapter_failures": failures,
+                "binding_status": "CONFIGURED_SOURCE",
+                "binding_reason": variable,
+                "telemetry_binding": {
+                    "status": "CONFIGURED_SOURCE",
+                    "reason": variable,
+                    "source": source,
+                    "session_id": None,
+                },
+            })
             return result
         except Exception as exc:
             failures.append(f"{source}: {exc}")
-    result = summarize(root, state)
-    if failures and result["status"] == "UNMEASURED":
-        result["status"] = "ADAPTER_BLOCKED"
-    result.update({"adapter": selected or "NONE", "ingested": 0, "adapter_failures": failures})
-    return result
+    if selected:
+        result = summarize(root, state)
+        if result["status"] == "UNMEASURED":
+            result["status"] = "ADAPTER_BLOCKED"
+        result.update({
+            "adapter": selected,
+            "ingested": 0,
+            "adapter_failures": failures,
+            "binding_status": "CONFIGURED_SOURCE",
+            "binding_reason": "ADAPTER_BLOCKED",
+            "telemetry_binding": {
+                "status": "CONFIGURED_SOURCE",
+                "reason": "ADAPTER_BLOCKED",
+                "source": selected,
+                "session_id": None,
+            },
+        })
+        return result
+
+    try:
+        discovery = discover_desktop_session(root, state)
+    except Exception as exc:
+        result = summarize(root, state)
+        if result["status"] == "UNMEASURED":
+            result["status"] = "ADAPTER_BLOCKED"
+        result.update({
+            "adapter": DESKTOP_SOURCE,
+            "ingested": 0,
+            "adapter_failures": [f"{DESKTOP_SOURCE}: {exc}"],
+            "binding_status": "TELEMETRY_UNBOUND",
+            "binding_reason": "ADAPTER_BLOCKED",
+            "telemetry_binding": {
+                "status": "TELEMETRY_UNBOUND",
+                "reason": "ADAPTER_BLOCKED",
+                "source": DESKTOP_SOURCE,
+                "session_id": None,
+            },
+        })
+        return result
+
+    if discovery["status"] != "BOUND":
+        result = summarize(root, state)
+        if result["status"] == "UNMEASURED" and discovery.get("reason") in {"AMBIGUOUS", "PREVIOUS_EPOCH_SESSION"}:
+            result["status"] = "ADAPTER_BLOCKED"
+        result.update({
+            "adapter": DESKTOP_SOURCE if discovery.get("reason") == "AMBIGUOUS" else "NONE",
+            "ingested": 0,
+            "adapter_failures": [],
+            "binding_status": "TELEMETRY_UNBOUND",
+            "binding_reason": discovery.get("reason"),
+            "telemetry_binding": {
+                "status": "TELEMETRY_UNBOUND",
+                "reason": discovery.get("reason"),
+                "source": DESKTOP_SOURCE,
+                "session_id": None,
+                "candidates": discovery.get("candidates") or [],
+            },
+        })
+        return result
+
+    binding = discovery["binding"]
+    binding_view = {
+        "status": "BOUND",
+        "reason": discovery.get("reason"),
+        "source": DESKTOP_SOURCE,
+        "session_id": binding.get("session_id"),
+        "path": binding.get("path"),
+        "task_id": binding.get("task_id"),
+        "revision": binding.get("revision"),
+        "epoch": binding.get("epoch"),
+        "epoch_id": binding.get("epoch_id"),
+    }
+    if not discovery.get("available"):
+        result = summarize(root, state)
+        binding_view["reason"] = "SOURCE_UNAVAILABLE"
+        result.update({
+            "adapter": DESKTOP_SOURCE,
+            "ingested": 0,
+            "adapter_failures": [],
+            "binding_status": "BOUND",
+            "binding_reason": "SOURCE_UNAVAILABLE",
+            "telemetry_binding": binding_view,
+        })
+        return result
+    try:
+        inspected = inspect_desktop_session(binding["path"], expected_session_id=binding["session_id"])
+        if not inspected.get("eligible_user_stream"):
+            raise TelemetryError("bound Desktop source is no longer a root-user stream")
+        if _desktop_header_fingerprint(inspected) != binding.get("header_fingerprint"):
+            raise TelemetryError("bound Desktop source header identity changed")
+        payload = _desktop_bound_usage(inspected, binding, state)
+        payloads = [payload] if payload else []
+        count = ingest(root, state, payloads, source=DESKTOP_SOURCE)
+        result = summarize(root, state)
+        warnings = ["partial Desktop telemetry tail ignored"] if inspected.get("partial_tail") else []
+        result.update({
+            "adapter": DESKTOP_SOURCE,
+            "ingested": count,
+            "adapter_failures": [],
+            "adapter_warnings": warnings,
+            "binding_status": "BOUND",
+            "binding_reason": discovery.get("reason"),
+            "telemetry_binding": binding_view,
+        })
+        return result
+    except Exception as exc:
+        result = summarize(root, state)
+        if result["status"] == "UNMEASURED":
+            result["status"] = "ADAPTER_BLOCKED"
+        result.update({
+            "adapter": DESKTOP_SOURCE,
+            "ingested": 0,
+            "adapter_failures": [f"{DESKTOP_SOURCE}: {exc}"],
+            "binding_status": "BOUND",
+            "binding_reason": "ADAPTER_BLOCKED",
+            "telemetry_binding": {**binding_view, "reason": "ADAPTER_BLOCKED"},
+        })
+        return result
 
 
 def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -320,12 +1041,14 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             "records": 0,
             "productive_model_requests": 0,
             "productive_raw_input_tokens": 0,
+            "productive_cached_input_tokens": 0,
             "productive_noncached_input_tokens": 0,
             "productive_output_tokens": 0,
             "productive_reasoning_tokens": 0,
             "control_model_requests": 0,
             "control_tool_actions": 0,
             "control_raw_input_tokens": 0,
+            "control_cached_input_tokens": 0,
             "control_noncached_input_tokens": 0,
             "control_output_tokens": 0,
             "control_reasoning_tokens": 0,
@@ -358,12 +1081,14 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
         "records": len(records),
         "productive_model_requests": total(productive, "model_requests"),
         "productive_raw_input_tokens": total(productive, "raw_input_tokens"),
+        "productive_cached_input_tokens": total(productive, "cached_input_tokens"),
         "productive_noncached_input_tokens": total(productive, "noncached_input_tokens"),
         "productive_output_tokens": total(productive, "output_tokens"),
         "productive_reasoning_tokens": total(productive, "reasoning_tokens"),
         "control_model_requests": total(control, "model_requests"),
         "control_tool_actions": total(control, "tool_actions"),
         "control_raw_input_tokens": total(control, "raw_input_tokens"),
+        "control_cached_input_tokens": total(control, "cached_input_tokens"),
         "control_noncached_input_tokens": total(control, "noncached_input_tokens"),
         "control_output_tokens": total(control, "output_tokens"),
         "control_reasoning_tokens": total(control, "reasoning_tokens"),

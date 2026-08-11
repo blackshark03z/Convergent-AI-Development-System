@@ -50,26 +50,26 @@ lifecycle_states=UNINITIALIZED (no CURRENT), ACTIVE, PRODUCT_COMMITTED, ASSURANC
 
 lifecycle_commands=bootstrap, record-commit, validate, rollover, close, recover, new-revision, abort (status/next are derived views; telemetry-ingest is an optional adapter)
 
-persistent_runtime_artifacts=.buildos/control/CURRENT; .buildos/control/LOCK.guard; immutable generations; immutable receipts; immutable evidence; .buildos/runtime/WORK_PACKET.json; optional append-only .buildos/runtime/telemetry.jsonl; optional telemetry_baselines.json; quarantine for invalid receipts
+persistent_runtime_artifacts=.buildos/control/CURRENT; .buildos/control/LOCK.guard; immutable generations; immutable receipts; immutable evidence; .buildos/runtime/WORK_PACKET.json; optional append-only .buildos/runtime/telemetry.jsonl; optional telemetry_baselines.json; immutable per-epoch telemetry_bindings/*.json; quarantine for invalid receipts
 
 context_governor=40k PREPARE_COMPACT, 64k ROLLOVER_REQUIRED, 5 productive model requests/epoch, 128k HARD_STOP. Repository policy may tighten but never raise these maxima. Desktop enforcement is truthfully SUPERVISORY/BOUNDARY, not fictional hard interception; packet/status make the required action explicit.
 
-telemetry=Facade attempts configured source adapters automatically and binds task/revision/epoch/thread. Codex cumulative totals are baselined and unique turns counted; source absence is UNMEASURED, adapter failure is ADAPTER_BLOCKED, and control actions are separately tagged CONTROL. Telemetry is a projection and cannot block/alter canonical lifecycle.
+telemetry=Facade gives configured source adapters precedence, otherwise safely auto-binds the exact root-user Codex Desktop rollout to task/revision/epoch. Cumulative totals are baselined and distinct advances counted; source absence is UNMEASURED, ambiguity/failure is explicit, and control actions are separately tagged CONTROL. Telemetry is a projection and cannot block/alter canonical lifecycle.
 
 minimal_usage_scorecard=productive model requests; productive raw input tokens; productive noncached input tokens; productive output/reasoning tokens; control model requests/tool actions and control token totals; maximum productive projected prompt; epoch/rollover count; measurement coverage/status
 
 risk_authorization=Pure side-effect floor: READ_ONLY=R0, write/create=R1, mutate/type change=R2, delete=R3. Explicit lower risk escalates rather than downgrades. R3 start/revision requires owner APPROVED + nonempty reference and rejects Worker self-approval; validation additionally requires independent reviewer/reference and a distinct rollback/recovery check. Missing/invalid Git, scope, or authorization fails closed.
 
-proof_model=45 deterministic unittest cases: shared store failure injection at every low-level boundary; every lifecycle mutation at six meaningful boundaries plus bootstrap Git-exclude boundaries and retry; evidence publication failures; hard process-death lock recovery; stale/missing/corrupt CURRENT and receipt-frontier recovery; competing/forked receipts; global operation-key binding; monotonic status/packet projection; Git HEAD/root/scope/deletion/type/race/closed-retry cases; R0/R3 authorization; thread rollover and retry under fresher telemetry; telemetry available/unavailable/baseline/thread-binding/dedup; direct and compact-facade unrelated-repository adoption.
+proof_model=61 deterministic unittest cases: the original 45 cases preserve shared store failure injection at every low-level boundary; every lifecycle mutation at six meaningful boundaries plus bootstrap Git-exclude boundaries and retry; evidence publication failures; hard process-death lock recovery; stale/missing/corrupt CURRENT and receipt-frontier recovery; competing/forked receipts; global operation-key binding; monotonic status/packet projection; Git HEAD/root/scope/deletion/type/race/closed-retry cases; R0/R3 authorization; thread rollover and retry under fresher telemetry; telemetry available/unavailable/baseline/thread-binding/dedup; and direct/compact-facade unrelated-repository adoption. Sixteen corrective cases add Desktop binding identity, ambiguity, immutable publication race/history corruption, current-turn association, live-tail/replay, threshold, field-trace, rollover, failure isolation, productive/control, and legacy-source coverage.
 
 removed_or_demoted_from_v121=destructive reopen; prose/task/state/runtime files as authorities; multi-file sequential lifecycle writes; advisory-only transaction markers; durable Attempt/Epoch hierarchy; goal/economics/health/Guardian/browser/media-specific machinery; dynamic Skills/plugin framework; automatic Git rollback/rebase; replay/history in WORK_PACKET
 
 project_specific_assumptions_removed=YouTube Auto names, renderer/browser/media harnesses, fixed branches/remotes, service/port assumptions, package-overlay nested directories, project health/economics gates, and copied product-local docs/config/scripts. Adoption uses an external package, reserved `.buildos/`, explicit Git observation, and optional namespaced `.buildos-policy.json` only.
 
 stable_core_module_count=6
-stable_core_loc=2570 (14 total Python files/3945 LOC including CLI, scripts, and proof suite; LOC is descriptive, not the selection objective)
+stable_core_loc=3240 (15 total Python files/5224 nonblank LOC including CLI, scripts, and proof suite; LOC is descriptive, not the selection objective)
 lifecycle_command_count=8
-mutable_runtime_file_count=4 (CURRENT, LOCK.guard, WORK_PACKET.json, normal-facade telemetry.jsonl; baseline and crash LOCK/quarantine are optional/exception artifacts)
+mutable_runtime_file_count=4 (CURRENT, LOCK.guard, WORK_PACKET.json, normal-facade telemetry.jsonl; baseline and crash LOCK/quarantine are optional/exception artifacts; Desktop binding files are immutable)
 canonical_state_authority_count=1
 normal_bootstrap_actions=1
 normal_closeout_actions=3 (record-commit, validate, close)
@@ -83,7 +83,7 @@ authorization_tests=PASS
 rollover_tests=PASS
 telemetry_tests=PASS
 generic_repo_adoption_test=PASS
-full_candidate_self_test=PASS (45/45; 254.667 seconds on Windows)
+full_candidate_self_test=PASS (61/61; 328.034 seconds on Windows)
 diff_check=PASS (staged content/whitespace/manifest audit; exact clean-tree result is recorded in the final handoff after the single commit)
 
 youtube_auto_modified=NO
@@ -101,3 +101,16 @@ freeze_if_field_passes=YES
 research_after_candidate=NONE
 
 NEXT=READY_FOR_REAL_FIELD_PROOF
+
+## Bounded telemetry governor activation corrective
+
+The field proof exposed `CONFIG_NOT_ENABLED`: Desktop JSONL usage existed but
+the optional configured-file adapter was never automatically selected. The
+bounded corrective documented in `TELEMETRY_BINDING.md` adds native safe
+Desktop binding and feeds the unchanged governor. It preserves all 45 original
+candidate proof behaviors and adds focused binding, ambiguity, parallel-stream,
+field-replay, threshold, failure-isolation, and rollover regression coverage.
+The final self-test passed all 61 cases (45 preserved plus 16 corrective) in
+328.034 seconds on Windows, including the recovered read-only field trace.
+This is a corrective candidate commit only; it does not promote or freeze the
+release.

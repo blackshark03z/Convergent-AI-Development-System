@@ -18,11 +18,12 @@ to an immutable, content-addressed generation:
   runtime/WORK_PACKET.json    # generated continuation view
   runtime/telemetry.jsonl     # append-only optional projection
   runtime/telemetry_baselines.json  # optional cumulative-source baseline
+  runtime/telemetry_bindings/<identity-hash>.json  # immutable Desktop epoch binding/baseline
 ```
 
 The logical authority count is one: the validated generation named by
-`CURRENT`.  Generation files, receipts, evidence, and telemetry do not assert
-independent lifecycle state.  A packet that is torn or stale is simply
+`CURRENT`.  Generation files, receipts, evidence, telemetry, and Desktop
+binding files do not assert independent lifecycle state.  A packet that is torn or stale is simply
 regenerated.
 
 ## Commit sequence
