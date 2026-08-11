@@ -174,18 +174,71 @@ class LifecycleTests(unittest.TestCase):
 
 class GovernorTelemetryTests(unittest.TestCase):
     def test_field_thresholds_and_rollover_identity(self):
-        self.assertEqual(decide({"projected_prompt_tokens": 39_999})["action"], "CONTINUE")
-        self.assertEqual(decide({"projected_prompt_tokens": 40_000})["action"], "PREPARE_COMPACT")
-        self.assertEqual(decide({"projected_prompt_tokens": 64_000})["action"], "ROLLOVER_REQUIRED")
-        self.assertEqual(decide({"requests_in_epoch": 5})["action"], "ROLLOVER_REQUIRED")
-        hard = decide({"projected_prompt_tokens": 128_000})
+        base = {"model_context_window": 258_400}
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 129_199})["action"], "CONTINUE")
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 129_200})["action"], "HEADROOM_WARNING")
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 180_879})["action"], "HEADROOM_WARNING")
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 180_880})["action"], "COMPACT_REQUIRED")
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 206_720})["action"], "COMPACT_REQUIRED")
+        rollover = decide({
+            **base,
+            "projected_prompt_tokens": 206_720,
+            "compaction_status": "UNAVAILABLE",
+            "compaction_evidence": "desktop/no-compact-capability",
+        })
+        self.assertEqual(rollover["action"], "ROLLOVER_REQUIRED")
+        self.assertTrue(rollover["rollover_fallback_eligible"])
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 232_559})["action"], "COMPACT_REQUIRED")
+        hard = decide({**base, "projected_prompt_tokens": 232_560})
         self.assertEqual(hard["action"], "HARD_STOP")
         self.assertFalse(hard["hard_interception_guaranteed"])
         self.assertEqual(decide({})["measurement"], "UNMEASURED")
+        self.assertEqual(decide({})["context_window_source"], "CONSERVATIVE_FALLBACK")
+        # Request count is evidence only, including the two recovered traces.
+        self.assertEqual(decide({**base, "projected_prompt_tokens": 95_985, "requests_in_epoch": 59})["action"], "CONTINUE")
+        # A different runtime W proves proportional rather than model-specific thresholds.
+        other = decide({"model_context_window": 200_000, "projected_prompt_tokens": 140_000})
+        self.assertEqual(other["action"], "COMPACT_REQUIRED")
+        self.assertEqual(other["thresholds"], {"warning": 100_000, "compact": 140_000, "rollover": 160_000, "hard_stop": 175_000})
+        reserve = decide({
+            **base,
+            "projected_prompt_tokens": 208_400,
+            "known_payload_output_reserve_tokens": 50_000,
+        })
+        self.assertEqual(reserve["thresholds"]["hard_stop"], 208_400)
+        self.assertEqual(reserve["action"], "HARD_STOP")
+        self.assertEqual(decide({"runtime_overflow": True})["action"], "HARD_STOP")
+        with self.assertRaisesRegex(KernelError, "evidence reference"):
+            decide({**base, "projected_prompt_tokens": 206_720, "compaction_status": "UNAVAILABLE"})
+        quality = decide({
+            **base,
+            "projected_prompt_tokens": 10_000,
+            "persistent_post_compaction_loss": "DEMONSTRABLE_STATE_LOSS",
+            "compaction_evidence": "review/state-loss-after-compact",
+        })
+        self.assertEqual(quality["action"], "ROLLOVER_REQUIRED")
         with generic_repo("rollover") as root:
             osys = BuildOS(root, package_root=PACKAGE)
             first = osys.bootstrap(request()).snapshot
-            rolled = osys.rollover(projected_prompt_tokens=64_000, thread_id="thread-b").snapshot
+            with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                osys.rollover(
+                    projected_prompt_tokens=180_880,
+                    model_context_window=258_400,
+                    thread_id="premature-thread",
+                )
+            with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                osys.rollover(
+                    projected_prompt_tokens=232_560,
+                    model_context_window=258_400,
+                    thread_id="hard-stop-without-compact-evidence",
+                )
+            rolled = osys.rollover(
+                projected_prompt_tokens=206_720,
+                model_context_window=258_400,
+                compaction_status="ATTEMPTED_INEFFECTIVE",
+                compaction_evidence="trace/compact-attempt-1",
+                thread_id="thread-b",
+            ).snapshot
             self.assertEqual((rolled.state["task_id"], rolled.state["revision"]), (first.state["task_id"], first.state["revision"]))
             self.assertEqual(rolled.state["context"]["epoch"], 2)
             self.assertNotEqual(rolled.state["context"]["epoch_id"], first.state["context"]["epoch_id"])
@@ -197,6 +250,13 @@ class GovernorTelemetryTests(unittest.TestCase):
             absent = summarize(root, state)
             self.assertEqual(absent["status"], "UNMEASURED")
             self.assertEqual(absent["measurement_coverage"], "UNMEASURED")
+            absent_status = osys.status()
+            self.assertEqual(absent_status["governor"]["cache_economics"], {
+                "role": "ADVISORY_ONLY",
+                "cached_input_tokens": None,
+                "noncached_input_tokens": None,
+                "cache_write_input_tokens": None,
+            })
             count = ingest(root, state, [
                 {"role": "PRODUCTIVE", "raw_input_tokens": 1000, "cached_input_tokens": 700, "model_requests": 2, "tool_actions": 3, "projected_prompt_tokens": 41000},
                 {"role": "CONTROL", "raw_input_tokens": 30, "model_requests": 1, "tool_actions": 2},
@@ -210,6 +270,10 @@ class GovernorTelemetryTests(unittest.TestCase):
             self.assertEqual(measured["productive_noncached_input_tokens"], 300)
             self.assertEqual(measured["control_tool_actions"], 2)
             self.assertEqual(measured["max_projected_prompt_tokens"], 41000)
+            economics = osys.status()["governor"]["cache_economics"]
+            self.assertEqual(economics["cached_input_tokens"], 700)
+            self.assertEqual(economics["noncached_input_tokens"], 300)
+            self.assertIsNone(economics["cache_write_input_tokens"])
             with self.assertRaises(TelemetryError):
                 ingest(root, state, [{"task_id": "OTHER", "revision": 1}], source="TEST")
             before_hash = read_current(root).generation_hash
@@ -218,6 +282,40 @@ class GovernorTelemetryTests(unittest.TestCase):
             partial = summarize(root, state)
             self.assertEqual(partial["status"], "PARTIAL")
             self.assertEqual(read_current(root).generation_hash, before_hash)
+
+    def test_compaction_rebaseline_keeps_peak_as_evidence_only(self):
+        with generic_repo("compact-rebaseline") as root:
+            osys = BuildOS(root, package_root=PACKAGE)
+            state = osys.bootstrap(request()).snapshot.state
+            ingest(root, state, [{
+                "role": "PRODUCTIVE",
+                "projected_prompt_tokens": 185_000,
+                "model_context_window": 258_400,
+                "model_requests": 1,
+            }], source="COMPACTION_REPLAY")
+            self.assertEqual(osys.status()["governor"]["action"], "COMPACT_REQUIRED")
+            ingest(root, state, [{
+                "role": "PRODUCTIVE",
+                "projected_prompt_tokens": 53_000,
+                "peak_prompt_tokens": 185_000,
+                "model_context_window": 258_400,
+                "model_requests": 1,
+            }], source="COMPACTION_REPLAY")
+            status = osys.status()
+            self.assertEqual(status["telemetry"]["current_epoch_latest_projected_prompt_tokens"], 53_000)
+            self.assertEqual(status["telemetry"]["current_epoch_max_projected_prompt_tokens"], 185_000)
+            self.assertEqual(status["governor"]["projected_prompt_tokens"], 53_000)
+            self.assertEqual(status["governor"]["peak_prompt_tokens"], 185_000)
+            self.assertEqual(status["governor"]["action"], "CONTINUE")
+            economic_variant = decide({
+                "projected_prompt_tokens": 53_000,
+                "model_context_window": 258_400,
+                "cached_input_tokens": 9_000_000,
+                "noncached_input_tokens": 1,
+                "cache_write_input_tokens": 7_000_000,
+            })
+            self.assertEqual(economic_variant["action"], "CONTINUE")
+            self.assertEqual(economic_variant["cache_economics"]["role"], "ADVISORY_ONLY")
 
 
 class TransactionTests(unittest.TestCase):
@@ -370,7 +468,7 @@ class AdoptionAndCliTests(unittest.TestCase):
             osys.bootstrap(request("UNRELATED-LOW", "R1"))
             product_commit(root)
             osys.record_commit()
-            osys.rollover(projected_prompt_tokens=64_000, thread_id="fresh-thread")
+            osys.rollover(force=True, thread_id="fresh-thread")
             osys.validate(checks=[check_command()], inspected_by="generic-worker")
             closed = osys.close()
             self.assertEqual(closed.snapshot.state["phase"], "CLOSED")

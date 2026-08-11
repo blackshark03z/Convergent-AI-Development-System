@@ -129,10 +129,12 @@ def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[
     if state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
         if rollover_binding_blocked:
             next_action = "stop model work; restore the expected rollover telemetry binding"
-        elif governor.get("action") in {"ROLLOVER_REQUIRED", "HARD_STOP"}:
-            next_action = "run rollover before further model work"
-        elif governor.get("action") == "PREPARE_COMPACT":
-            next_action = "prepare a compact continuation and monitor for rollover"
+        elif governor.get("action") == "HARD_STOP":
+            next_action = "stop substantive model work; compact this chat and re-measure before any fallback rollover"
+        elif governor.get("action") == "ROLLOVER_REQUIRED":
+            next_action = "use the rare rollover fallback before further model work"
+        elif governor.get("action") == "COMPACT_REQUIRED":
+            next_action = "continue this outcome/chat; compact active context, re-measure latest prompt, then continue here if healthy"
     return {
         "schema": "buildos.work_packet.v1.22",
         "task_id": state["task_id"],
@@ -356,14 +358,42 @@ class BuildOS:
             rollover_thread_id=rollover_thread_id,
         )
         epoch_measured = telemetry.get("current_epoch_measurement") == "MEASURED"
+        peak_measured = telemetry.get("current_epoch_peak_measurement") == "MEASURED"
         requests_measured = telemetry.get("current_epoch_requests_measurement") == "MEASURED"
+        window_measured = telemetry.get("current_epoch_context_window_measurement") == "MEASURED"
         usage = {
-            "projected_prompt_tokens": telemetry.get("current_epoch_max_projected_prompt_tokens") if epoch_measured else None,
+            "projected_prompt_tokens": telemetry.get("current_epoch_latest_projected_prompt_tokens") if epoch_measured else None,
+            "peak_prompt_tokens": telemetry.get("current_epoch_max_projected_prompt_tokens") if peak_measured else None,
             "requests_in_epoch": telemetry.get("current_epoch_model_requests") if requests_measured else None,
+            "model_context_window": telemetry.get("current_epoch_model_context_window") if window_measured else None,
+            "cached_input_tokens": (
+                telemetry.get("productive_cached_input_tokens")
+                if telemetry.get("productive_cached_input_measurement") == "MEASURED" else None
+            ),
+            "noncached_input_tokens": (
+                telemetry.get("productive_noncached_input_tokens")
+                if telemetry.get("productive_noncached_input_measurement") == "MEASURED" else None
+            ),
+            "cache_write_input_tokens": (
+                telemetry.get("productive_cache_write_input_tokens")
+                if telemetry.get("productive_cache_write_input_measurement") == "MEASURED" else None
+            ),
         }
         for key, value in dict(override or {}).items():
-            if value is not None:
+            if value is None:
+                continue
+            if key == "projected_prompt_tokens":
                 usage[key] = max(int(value), int(usage.get(key) or 0)) if usage.get(key) is not None else int(value)
+            elif key == "model_context_window":
+                usage[key] = min(int(value), int(usage[key])) if usage.get(key) is not None else int(value)
+            elif key in {"cached_input_tokens", "noncached_input_tokens", "cache_write_input_tokens"}:
+                usage[key] = int(value)
+            elif key in {"peak_prompt_tokens", "requests_in_epoch", "known_payload_output_reserve_tokens"}:
+                usage[key] = max(int(value), int(usage.get(key) or 0))
+            elif key == "runtime_overflow":
+                usage[key] = (bool(usage.get(key)) or value) if isinstance(value, bool) else value
+            elif key in {"compaction_status", "persistent_post_compaction_loss", "compaction_evidence"}:
+                usage[key] = str(value)
         policy = load_policy(self.root)
         policy["enforcement"] = snapshot.state.get("enforcement", "SUPERVISORY")
         governor = governor_decide(usage, policy)
@@ -476,8 +506,10 @@ class BuildOS:
                 next_action = "READ_ONLY baseline changed; restore it or abort without adopting product mutation"
             elif _rollover_binding_blocked(state, telemetry) and state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
                 next_action = "stop model work; restore the expected rollover telemetry binding"
-            elif state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"} and governor["action"] in {"ROLLOVER_REQUIRED", "HARD_STOP"}:
-                next_action = "run rollover before further model work"
+            elif state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"} and governor["action"] == "HARD_STOP":
+                next_action = "stop substantive model work; compact this chat and re-measure before any fallback rollover"
+            elif state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"} and governor["action"] == "ROLLOVER_REQUIRED":
+                next_action = "use the rare rollover fallback before further model work"
             elif relation_problem:
                 next_action = "Git ancestry diverged from the task proof; preserve evidence and create an explicit revision"
             elif late_validated_change:
@@ -688,6 +720,12 @@ class BuildOS:
         *,
         projected_prompt_tokens: int | None = None,
         requests_in_epoch: int | None = None,
+        model_context_window: int | None = None,
+        known_payload_output_reserve_tokens: int | None = None,
+        runtime_overflow: bool = False,
+        compaction_status: str | None = None,
+        persistent_post_compaction_loss: str | None = None,
+        compaction_evidence: str | None = None,
         thread_id: str | None = None,
         force: bool = False,
         op_id: str | None = None,
@@ -703,13 +741,26 @@ class BuildOS:
             "thread_id": thread_id,
             "force": bool(force),
         }
+        optional_intent = {
+            "model_context_window": model_context_window,
+            "known_payload_output_reserve_tokens": known_payload_output_reserve_tokens,
+            "compaction_status": compaction_status,
+            "persistent_post_compaction_loss": persistent_post_compaction_loss,
+            "compaction_evidence": compaction_evidence,
+        }
+        request_intent.update({key: value for key, value in optional_intent.items() if value is not None})
+        if runtime_overflow:
+            request_intent["runtime_overflow"] = True
         if previous.event.get("kind") == "ROLLOVER" and (op_id is None or previous.operation_id == op_id):
             prior_request = previous.event.get("request") or {}
             if prior_request == request_intent:
                 return self._idempotent(previous)
             if op_id is not None and previous.operation_id == op_id:
                 raise KernelError("operation_id was reused with a different rollover intent")
-        usage = {key: value for key, value in request_intent.items() if key in {"projected_prompt_tokens", "requests_in_epoch"} and value is not None}
+        usage = {
+            key: value for key, value in request_intent.items()
+            if key not in {"thread_id", "force"} and value is not None
+        }
         _, signal = self._usage(
             previous,
             usage,

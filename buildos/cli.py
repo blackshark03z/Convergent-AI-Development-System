@@ -39,6 +39,27 @@ def _failure_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--failure-at", help=argparse.SUPPRESS)
 
 
+def _governor_args(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--projected-prompt-tokens", type=int)
+    command.add_argument("--requests-in-epoch", type=int, help="observational only; never an action trigger")
+    command.add_argument("--model-context-window", type=int)
+    command.add_argument("--known-payload-output-reserve-tokens", type=int)
+    command.add_argument("--runtime-overflow", action="store_true")
+    command.add_argument(
+        "--compaction-status",
+        choices=["NOT_ATTEMPTED", "UNAVAILABLE", "ATTEMPTED_INEFFECTIVE"],
+    )
+    command.add_argument(
+        "--persistent-post-compaction-loss",
+        choices=[
+            "VERIFIED_STALE_CONTEXT_CONTRADICTION",
+            "MATERIAL_TASK_OUTCOME_RESET",
+            "DEMONSTRABLE_STATE_LOSS",
+        ],
+    )
+    command.add_argument("--compaction-evidence", help="reference proving compact failure or persistent post-compact loss")
+
+
 def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Build OS v1.22 thin transactional facade")
     p.add_argument("--root", type=Path, default=Path.cwd(), help="target repository")
@@ -62,12 +83,10 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     _failure_arg(bootstrap)
 
     status = commands.add_parser("status", help="derive status, governor, telemetry and packet")
-    status.add_argument("--projected-prompt-tokens", type=int)
-    status.add_argument("--requests-in-epoch", type=int)
+    _governor_args(status)
 
     nxt = commands.add_parser("next", help="print the minimal generated continuation packet")
-    nxt.add_argument("--projected-prompt-tokens", type=int)
-    nxt.add_argument("--requests-in-epoch", type=int)
+    _governor_args(nxt)
 
     record = commands.add_parser("record-commit", help="adopt the normal Git product commit")
     _failure_arg(record)
@@ -82,8 +101,7 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     _failure_arg(validate)
 
     rollover = commands.add_parser("rollover", help="start a disposable context epoch")
-    rollover.add_argument("--projected-prompt-tokens", type=int)
-    rollover.add_argument("--requests-in-epoch", type=int)
+    _governor_args(rollover)
     rollover.add_argument("--thread-id", required=True, help="fresh disposable Codex thread/epoch identity")
     rollover.add_argument("--force", action="store_true")
     _failure_arg(rollover)
@@ -148,6 +166,12 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
                 key: value for key, value in {
                     "projected_prompt_tokens": args.projected_prompt_tokens,
                     "requests_in_epoch": args.requests_in_epoch,
+                    "model_context_window": args.model_context_window,
+                    "known_payload_output_reserve_tokens": args.known_payload_output_reserve_tokens,
+                    "runtime_overflow": args.runtime_overflow or None,
+                    "compaction_status": args.compaction_status,
+                    "persistent_post_compaction_loss": args.persistent_post_compaction_loss,
+                    "compaction_evidence": args.compaction_evidence,
                 }.items() if value is not None
             }
             value = os.status(usage=usage)
@@ -169,6 +193,12 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
             _json(_result(os.rollover(
                 projected_prompt_tokens=args.projected_prompt_tokens,
                 requests_in_epoch=args.requests_in_epoch,
+                model_context_window=args.model_context_window,
+                known_payload_output_reserve_tokens=args.known_payload_output_reserve_tokens,
+                runtime_overflow=args.runtime_overflow,
+                compaction_status=args.compaction_status,
+                persistent_post_compaction_loss=args.persistent_post_compaction_loss,
+                compaction_evidence=args.compaction_evidence,
                 thread_id=args.thread_id,
                 force=args.force,
                 op_id=args.operation_id,

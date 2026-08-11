@@ -172,8 +172,9 @@ and immutable evidence. Risk floors are derived from side effect; a request
 cannot downgrade DELETE/type changes to R0/R1. Read-only tasks validate an
 unchanged baseline directly and cannot record a product commit.
 
-The 40k compact, 64k fresh, 5 requests/epoch, and 128k absolute inputs are
-preserved as kernel maxima. A project may tighten them but cannot raise them or
-claim HARD interception. Source telemetry is task/epoch bound; absent
-productive measurements stay UNMEASURED even when control-plane overhead is
-known.
+The corrective governor is one-chat-first: current P is compared with runtime
+W at 50% warning, 70% same-chat compact, evidence-gated 80% rare rollover, and
+a dynamic hard reserve. Historical PEAK and request count remain evidence only.
+A project cannot restore fixed 40k/64k/five-request/128k triggers or claim HARD
+interception. Source telemetry is task/epoch bound; absent productive prompt
+measurements stay UNMEASURED even when control-plane overhead is known.

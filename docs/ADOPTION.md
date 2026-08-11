@@ -16,9 +16,17 @@ browser/media harnesses, or product source files are copied.  A caller points
 the scripts at a target with `--root`.  On first bootstrap the kernel creates
 only its reserved `.buildos/` control directory and a local Git exclude entry;
 it rejects a dirty product baseline, a non-Git target, or a tracked
-`.buildos` path.  If a project needs thresholds different from the package
-defaults, commit a namespaced `.buildos-policy.json` before bootstrap.  That
-file can tighten, never weaken, the kernel maxima.
+`.buildos` path. If a project needs explicit runtime headroom inputs, commit a
+namespaced `.buildos-policy.json` before bootstrap. The
+one-chat hybrid percentages are fixed; the file may declare a surface-provided
+`context_window_tokens`, a larger known payload/output reserve, or a more
+conservative fallback window. Legacy fixed 40k/64k/five-request/128k keys are
+rejected so an old local file cannot silently restore the superseded governor.
+
+At runtime, measured `model_context_window` takes precedence over configured W.
+If neither exists, status labels the 128k compatibility bound
+`CONSERVATIVE_FALLBACK` rather than claiming the active model window is known.
+Missing current P remains truthfully unmeasured.
 
 The supplied `--root` must be the Git worktree top-level. This keeps scope
 patterns and the reserved control path unambiguous instead of silently making

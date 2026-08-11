@@ -2,7 +2,9 @@
 
 This bounded v1.22 corrective activates the existing context governor during
 normal Codex Desktop work. It does not change lifecycle state, canonical
-authority, risk, authorization, evidence, Skills, or governor thresholds.
+authority, risk, authorization, evidence, Skills, or successor association.
+The later one-chat-first policy corrective changes only how the bound runtime
+measurements drive the orthogonal governor.
 
 ## Binding contract
 
@@ -54,11 +56,18 @@ counters. Automatic productive binding therefore excludes subagent streams
 except for the exact validated rollover handoff described below.
 
 One distinct cumulative `event_msg/token_count` advance is one productive model
-request. Raw input, cached input, output, and reasoning come from the cumulative
-Desktop totals. Noncached input is raw minus cached. Reasoning is already part
-of output and is not added twice. The governor's prompt signal is the maximum
-completed-request input after the persisted epoch baseline. `CONTROL` facade
-tool actions remain separate and add zero model requests.
+request. Raw input, cached input, cache-write input (when exposed), output, and
+reasoning come from the cumulative Desktop totals. Noncached input is raw minus
+cached. Reasoning is already part of output and is not added twice. Request
+count and cache economics are observational only.
+
+The governor uses the latest/current prompt `P` and the latest positive
+`model_context_window` `W`. Historical maximum `PEAK` is retained separately
+for evidence and never substitutes for `P`. Desktop compaction emits a
+same-cumulative zero-prompt notification before `context_compacted`; that row
+rebaselines current `P` without fabricating a model request. The next genuine
+cumulative advance then supplies the next current prompt. `CONTROL` facade tool
+actions remain separate and add zero model requests.
 
 ## Field replay
 
@@ -73,6 +82,7 @@ productive_noncached_input_tokens=206856
 productive_output_tokens=28180
 productive_reasoning_tokens=11521
 max_context_signal=179884
+runtime_context_window=258400
 ```
 
 v1.22 already defined first-bind baseline accounting. At the actual bootstrap
@@ -88,21 +98,27 @@ productive_noncached_input_tokens=175408
 productive_output_tokens=25094
 productive_reasoning_tokens=10245
 max_context_signal=179884
+runtime_context_window=258400
 ```
 
-That bounded replay reaches the fifth-request rollover requirement and the
-40k compact, 64k rollover, and 128k hard-stop prompt boundaries. A first bind
-performed only after a completed historical trace intentionally baselines the
-tail; `inspect_desktop_session` is the read-only forensic parser used to verify
-the full-turn counters without changing live accounting policy.
+Under `PROJECTED_HEADROOM_ONE_CHAT_HYBRID`, the full 59-request replay produces
+only a nonblocking headroom warning: `179884 < 0.70 * 258400`, so neither 59
+requests nor crossing 64k forces compact or rollover. A first bind performed
+only after a completed historical trace intentionally baselines the tail;
+`inspect_desktop_session` is the read-only forensic parser used to verify the
+full-turn counters without changing live accounting policy.
 
 ## Rollover
 
-Rollover remains a normal canonical epoch transition with the same Task and
-Revision and a fresh disposable `epoch_id`/`thread_id`. The existing rollover
-generation is also the narrow handoff producer: its current context names the
-one expected physical Desktop continuation. `WORK_PACKET.json` projects that
-same non-durable ID for Worker visibility, but remains guidance only.
+Rollover remains the same canonical epoch transition, but governor policy now
+treats it as a rare fallback. Normal work stays in one chat and compacts there
+first. A non-forced rollover is eligible only after evidence that compaction is
+unavailable/ineffective while current `P >= 0.80W`, or evidence of an allowed
+material state-loss condition persisting after compaction. The existing
+rollover generation is still the narrow handoff producer; its current context
+names the one expected physical Desktop continuation. `WORK_PACKET.json`
+projects that same non-durable ID for Worker visibility, but remains guidance
+only.
 
 The consumer is Desktop discovery for the current epoch. A root-user
 continuation must have the exact expected physical ID. A Desktop fork may bind

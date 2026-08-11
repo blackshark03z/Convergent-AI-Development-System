@@ -25,7 +25,8 @@ The normal Worker facade exposes eight commands:
 
 The administrative facade additionally exposes `new-revision`, `abort`, and
 `telemetry-ingest`.  A rollover always names a fresh disposable
-`--thread-id`; this makes a retry distinguishable from a new epoch.
+`--thread-id`; this makes a retry distinguishable from a new epoch. Rollover is
+a rare compact-failure fallback, not a normal request-count rhythm.
 
 Typical flow is:
 
@@ -65,6 +66,25 @@ context interception.  The Desktop governor is therefore explicitly
 SUPERVISORY/BOUNDARY: it makes the next action cheap and truthful, but cannot
 intercept an already-issued model request.
 
+## One-chat-first context governor
+
+`PROJECTED_HEADROOM_ONE_CHAT_HYBRID` compares the latest/current prompt `P`
+with the effective runtime context window `W`. Below 50% it continues; 50-70%
+is a nonblocking warning; at 70% it tells the Worker to compact the active chat,
+re-measure P, and continue the same outcome there when healthy. Historical
+`PEAK` and productive request count remain telemetry only, so a successful
+compact can return the action to `CONTINUE` without erasing peak evidence.
+
+Rollover becomes eligible at 80% only with a reference proving same-chat
+compaction unavailable/ineffective, or with an allowed material state-loss
+condition proven to persist after compaction. Hard stop is dynamic at
+`W - max(10% W, 25000, known payload/output reserve)` or an explicit runtime
+overflow. Runtime telemetry supplies W; an explicit surface configuration is
+second choice. If neither is available, status labels a conservative 128k
+fallback and never pretends it measured the active model. Cache-read,
+noncached, and cache-write totals are advisory economics and cannot relax
+safety.
+
 ## Telemetry and Skills
 
 During normal Codex Desktop execution no telemetry configuration is required.
@@ -91,7 +111,11 @@ file override for unusual environments.  Existing configured sources
 (`BUILDOS_TELEMETRY_FILE`, `AI_BUILD_OS_CODEX_APP_SERVER_USAGE_FILE`, or
 `AI_BUILD_OS_USAGE_FILE`) retain precedence.
 
-Codex cumulative notifications are baselined at task and epoch binding.
+Codex cumulative notifications are baselined at task and epoch binding. The
+latest prompt drives the governor while the historical maximum remains a
+separate evidence field; the same-cumulative zero-prompt notification after a
+Desktop `compacted` marker rebaselines the latest prompt without incrementing
+request count.
 Missing or malformed telemetry is reported as `UNMEASURED` or
 `ADAPTER_BLOCKED`; it cannot change canonical lifecycle state.  CLI invocations
 also append a `CONTROL` tool-action record, while productive model usage is

@@ -256,7 +256,10 @@ def transition_rollover(prev: Mapping[str, Any], signal: Mapping[str, Any], *, t
     if prev["phase"] not in {"ACTIVE", "PRODUCT_COMMITTED"}:
         raise KernelError("context rollover is only valid while work is live")
     action = str(signal.get("action", "")).upper()
-    if action not in {"ROLLOVER_REQUIRED", "HARD_STOP", "PREPARE_COMPACT"} and not signal.get("force"):
+    policy_authorized = action == "ROLLOVER_REQUIRED" or (
+        action == "HARD_STOP" and bool(signal.get("rollover_fallback_eligible"))
+    )
+    if not policy_authorized and not signal.get("force"):
         raise KernelError("rollover requires a governor signal or --force")
     thread_id = str(thread_id or "").strip()
     if not thread_id:

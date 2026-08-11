@@ -17,6 +17,7 @@ if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
 from buildos.facade import BuildOS
+from buildos.governor import decide
 from buildos.model import KernelError
 from buildos.store import read_current
 from buildos.telemetry import (
@@ -30,6 +31,9 @@ from tests.test_candidate import generic_repo, request, run_git
 
 FIELD_TRACE = Path(
     r"C:\Users\ADMIN\.codex\sessions\2026\08\11\rollout-2026-08-11T06-38-27-019fee0a-b54a-7190-8a6f-d100ddb06a3a.jsonl"
+)
+EDITORIAL_FIELD_TRACE = Path(
+    r"C:\Users\ADMIN\.codex\sessions\2026\08\11\rollout-2026-08-11T07-59-44-019fee55-2373-7402-a2ab-1690908c2fed.jsonl"
 )
 FIELD_ROOT = Path(r"D:\Youtube\Youtube Studio\_worktrees\advanced-still-camera-motion-v1")
 FIELD_TASK = "ADVANCED-STILL-CAMERA-MOTION-V1"
@@ -69,14 +73,17 @@ def _token_record(at: datetime, row: dict[str, int]) -> dict:
                 "total_token_usage": {
                     "input_tokens": row["raw_input_tokens"],
                     "cached_input_tokens": row["cached_input_tokens"],
+                    "cache_write_input_tokens": row.get("cache_write_input_tokens", 0),
                     "output_tokens": row["output_tokens"],
                     "reasoning_output_tokens": row["reasoning_tokens"],
                     "total_tokens": row["raw_input_tokens"] + row["output_tokens"],
                 },
                 "last_token_usage": {
                     "input_tokens": row["prompt_tokens"],
+                    "cached_input_tokens": row.get("last_cached_input_tokens", 0),
+                    "cache_write_input_tokens": row.get("last_cache_write_input_tokens", 0),
                 },
-                "model_context_window": 258_400,
+                "model_context_window": row.get("model_context_window", 258_400),
             },
         },
     }
@@ -353,13 +360,24 @@ class DesktopBindingTests(unittest.TestCase):
                 osys = BuildOS(root, package_root=PACKAGE)
                 osys.bootstrap(request())
                 usage = UsageAppender(source)
-                usage.add(39_999)
+                usage.add(129_199)
                 self.assertEqual(osys.status()["governor"]["action"], "CONTINUE")
-                usage.add(40_000)
-                self.assertEqual(osys.status()["governor"]["action"], "PREPARE_COMPACT")
-                usage.add(64_000)
-                self.assertEqual(osys.status()["governor"]["action"], "ROLLOVER_REQUIRED")
-                usage.add(128_000)
+                usage.add(129_200)
+                warning = osys.status()
+                self.assertEqual(warning["governor"]["action"], "HEADROOM_WARNING")
+                self.assertNotIn("compact active context", warning["next_action"])
+                usage.add(180_880)
+                compact = osys.status()
+                self.assertEqual(compact["governor"]["action"], "COMPACT_REQUIRED")
+                self.assertIn("continue this outcome/chat", compact["next_action"])
+                usage.add(206_720)
+                self.assertEqual(osys.status()["governor"]["action"], "COMPACT_REQUIRED")
+                rare = osys.status(usage={
+                    "compaction_status": "ATTEMPTED_INEFFECTIVE",
+                    "compaction_evidence": "desktop/compact-attempt",
+                })
+                self.assertEqual(rare["governor"]["action"], "ROLLOVER_REQUIRED")
+                usage.add(232_560)
                 self.assertEqual(osys.status()["governor"]["action"], "HARD_STOP")
 
         with generic_repo("desktop-requests") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
@@ -376,7 +394,8 @@ class DesktopBindingTests(unittest.TestCase):
                 usage.add(1_000)
                 status = osys.status()
                 self.assertEqual(status["telemetry"]["current_epoch_model_requests"], 5)
-                self.assertEqual(status["governor"]["action"], "ROLLOVER_REQUIRED")
+                self.assertEqual(status["governor"]["action"], "CONTINUE")
+                self.assertEqual(status["governor"]["request_count_role"], "OBSERVATIONAL_ONLY")
 
     def test_prebinding_prompt_is_baselined_and_duplicate_rows_are_not_requests(self):
         with generic_repo("desktop-baseline") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
@@ -389,7 +408,13 @@ class DesktopBindingTests(unittest.TestCase):
                 "reasoning_tokens": 8,
                 "prompt_tokens": 144_000,
             }
-            source = _session_file(sessions, session_id, root, "GENERIC-LOW", rows=[initial, initial])
+            deceptive_replay = {**initial, "prompt_tokens": 1}
+            source = _session_file(
+                sessions, session_id, root, "GENERIC-LOW", rows=[initial, deceptive_replay]
+            )
+            before_binding = inspect_desktop_session(source, root=root, task_id="GENERIC-LOW")
+            self.assertEqual(before_binding["token_events"], 1)
+            self.assertEqual(before_binding["usage"]["projected_prompt_tokens"], 144_000)
             with desktop_environment(sessions, thread_id=session_id):
                 osys = BuildOS(root, package_root=PACKAGE)
                 osys.bootstrap(request())
@@ -398,6 +423,101 @@ class DesktopBindingTests(unittest.TestCase):
                 self.assertEqual(status["telemetry"]["current_epoch_model_requests"], 1)
                 self.assertEqual(status["governor"]["projected_prompt_tokens"], 39_999)
                 self.assertEqual(status["governor"]["action"], "CONTINUE")
+
+    def test_desktop_compaction_zero_signal_rebaselines_latest_and_preserves_peak(self):
+        with generic_repo("desktop-compaction") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
+            sessions = Path(td)
+            session_id = "00000000-0000-0000-0000-000000000042"
+            source = _session_file(sessions, session_id, root, "GENERIC-LOW")
+            high = {
+                "raw_input_tokens": 185_000,
+                "cached_input_tokens": 180_000,
+                "cache_write_input_tokens": 7,
+                "output_tokens": 20,
+                "reasoning_tokens": 8,
+                "prompt_tokens": 185_000,
+            }
+            zero = {**high, "prompt_tokens": 0}
+            compacted_at = datetime.now(timezone.utc)
+            with desktop_environment(sessions, thread_id=session_id):
+                osys = BuildOS(root, package_root=PACKAGE)
+                osys.bootstrap(request())
+                _write_records(source, [
+                    _token_record(compacted_at, high),
+                    {
+                        "timestamp": _stamp(compacted_at + timedelta(milliseconds=1)),
+                        "type": "compacted",
+                        "payload": {
+                            "message": "opaque compacted history",
+                            "replacement_history": [],
+                            "window_number": 2,
+                            "first_window_id": "window-1",
+                            "previous_window_id": "window-1",
+                            "window_id": "window-2",
+                        },
+                    },
+                    _token_record(compacted_at + timedelta(milliseconds=2), zero),
+                    {
+                        "timestamp": _stamp(compacted_at + timedelta(milliseconds=3)),
+                        "type": "event_msg",
+                        "payload": {"type": "context_compacted"},
+                    },
+                ], append=True)
+                compacted = osys.status()
+                self.assertEqual(compacted["telemetry"]["current_epoch_model_requests"], 1)
+                self.assertEqual(compacted["telemetry"]["current_epoch_latest_projected_prompt_tokens"], 0)
+                self.assertEqual(compacted["telemetry"]["current_epoch_max_projected_prompt_tokens"], 185_000)
+                self.assertEqual(compacted["governor"]["action"], "CONTINUE")
+
+                after = {
+                    "raw_input_tokens": 238_000,
+                    "cached_input_tokens": 232_000,
+                    "cache_write_input_tokens": 12,
+                    "output_tokens": 30,
+                    "reasoning_tokens": 12,
+                    "prompt_tokens": 53_000,
+                }
+                _append_rows(source, [after])
+                status = osys.status()
+                self.assertEqual(status["telemetry"]["current_epoch_model_requests"], 2)
+                self.assertEqual(status["telemetry"]["current_epoch_latest_projected_prompt_tokens"], 53_000)
+                self.assertEqual(status["telemetry"]["current_epoch_max_projected_prompt_tokens"], 185_000)
+                self.assertEqual(status["telemetry"]["productive_cache_write_input_tokens"], 12)
+                self.assertEqual(status["governor"]["projected_prompt_tokens"], 53_000)
+                self.assertEqual(status["governor"]["peak_prompt_tokens"], 185_000)
+                self.assertEqual(status["governor"]["action"], "CONTINUE")
+
+            inspected = inspect_desktop_session(source, root=root, task_id="GENERIC-LOW")
+            self.assertEqual(inspected["token_events"], 2)
+            self.assertEqual(inspected["compaction_events"], 1)
+            self.assertEqual(inspected["context_compacted_events"], 1)
+            self.assertEqual(inspected["compaction_zero_events"], 1)
+            self.assertEqual(inspected["usage"]["projected_prompt_tokens"], 53_000)
+            self.assertEqual(inspected["usage"]["peak_prompt_tokens"], 185_000)
+            self.assertEqual(inspected["usage"]["model_context_window"], 258_400)
+
+            missing_cache = _token_record(datetime.now(timezone.utc) + timedelta(milliseconds=10), {
+                "raw_input_tokens": 292_000,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 40,
+                "reasoning_tokens": 16,
+                "prompt_tokens": 54_000,
+            })
+            del missing_cache["payload"]["info"]["total_token_usage"]["cached_input_tokens"]
+            del missing_cache["payload"]["info"]["total_token_usage"]["cache_write_input_tokens"]
+            _write_records(source, [missing_cache], append=True)
+            advisory_missing = inspect_desktop_session(source, root=root, task_id="GENERIC-LOW")
+            self.assertEqual(advisory_missing["token_events"], 3)
+            self.assertEqual(advisory_missing["usage"]["projected_prompt_tokens"], 54_000)
+            self.assertFalse(advisory_missing["usage"]["cached_input_tokens_measured"])
+            self.assertFalse(advisory_missing["usage"]["cache_write_input_tokens_measured"])
+            with desktop_environment(sessions, thread_id=session_id):
+                missing_status = osys.status()
+            self.assertEqual(missing_status["governor"]["action"], "CONTINUE")
+            self.assertIsNone(missing_status["governor"]["cache_economics"]["cached_input_tokens"])
+            self.assertIsNone(missing_status["governor"]["cache_economics"]["noncached_input_tokens"])
+            self.assertIsNone(missing_status["governor"]["cache_economics"]["cache_write_input_tokens"])
 
     def test_subagent_stream_is_not_auto_bound_and_partial_live_tail_is_tolerated(self):
         with generic_repo("desktop-subagent") as root, tempfile.TemporaryDirectory(prefix="desktop-sessions-") as td:
@@ -594,13 +714,13 @@ class DesktopBindingTests(unittest.TestCase):
                 first_usage = UsageAppender(first_source)
                 for _ in range(5):
                     first_usage.add(1_000)
-                self.assertEqual(osys.status()["governor"]["action"], "ROLLOVER_REQUIRED")
+                self.assertEqual(osys.status()["governor"]["action"], "CONTINUE")
                 with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
                     osys.rollover(thread_id=first_id)
                 self.assertEqual(read_current(root).state["context"]["epoch"], 1)
 
             with desktop_environment(sessions, thread_id=second_id):
-                rolled = osys.rollover(thread_id=second_id).snapshot
+                rolled = osys.rollover(force=True, thread_id=second_id).snapshot
                 self.assertEqual((rolled.state["task_id"], rolled.state["revision"]), (first.state["task_id"], first.state["revision"]))
                 self.assertEqual(rolled.state["context"]["epoch"], 2)
                 self.assertNotEqual(rolled.state["context"]["epoch_id"], first.state["context"]["epoch_id"])
@@ -652,8 +772,8 @@ class DesktopBindingTests(unittest.TestCase):
                 second_usage.add(2_000)
                 epoch_limit = osys.status()
                 self.assertEqual(epoch_limit["telemetry"]["current_epoch_model_requests"], 5)
-                self.assertEqual(epoch_limit["governor"]["action"], "ROLLOVER_REQUIRED")
-                self.assertEqual(epoch_limit["governor"]["reason"], "REQUESTS_PER_EPOCH_LIMIT")
+                self.assertEqual(epoch_limit["governor"]["action"], "CONTINUE")
+                self.assertEqual(epoch_limit["governor"]["request_count_role"], "OBSERVATIONAL_ONLY")
                 second_source.unlink()
                 source_missing = osys.status()
                 self.assertEqual(source_missing["telemetry"]["binding_status"], "BOUND")
@@ -874,7 +994,7 @@ class DesktopBindingTests(unittest.TestCase):
                 second_usage = UsageAppender(second_source)
                 for _ in range(5):
                     second_usage.add(1_000)
-                self.assertEqual(osys.status()["governor"]["action"], "ROLLOVER_REQUIRED")
+                self.assertEqual(osys.status()["governor"]["action"], "CONTINUE")
                 with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
                     osys.rollover(thread_id="invalid/context")
             with desktop_environment(sessions, thread_id=first_id):
@@ -886,7 +1006,7 @@ class DesktopBindingTests(unittest.TestCase):
             self.assertEqual(read_current(root).state["context"]["epoch"], 2)
             self.assertEqual(read_current(root).state["context"]["thread_id"], expected_id)
             with desktop_environment(sessions, thread_id=third_id):
-                second_rollover = osys.rollover(thread_id=third_id)
+                second_rollover = osys.rollover(force=True, thread_id=third_id)
                 self.assertFalse(second_rollover.idempotent)
                 self.assertEqual(second_rollover.snapshot.state["context"]["epoch"], 3)
                 self.assertEqual(second_rollover.snapshot.state["context"]["thread_id"], third_id)
@@ -1080,8 +1200,11 @@ class DesktopBindingTests(unittest.TestCase):
                 self.assertEqual(telemetry["productive_noncached_input_tokens"], 175_408)
                 self.assertEqual(telemetry["productive_output_tokens"], 25_094)
                 self.assertEqual(telemetry["productive_reasoning_tokens"], 10_245)
+                self.assertEqual(telemetry["current_epoch_latest_projected_prompt_tokens"], 179_884)
                 self.assertEqual(telemetry["current_epoch_max_projected_prompt_tokens"], 179_884)
-                self.assertEqual(status["governor"]["action"], "HARD_STOP")
+                self.assertEqual(telemetry["current_epoch_model_context_window"], 258_400)
+                self.assertEqual(status["governor"]["action"], "HEADROOM_WARNING")
+                self.assertEqual(status["governor"]["requests_in_epoch"], 49)
                 self.assertEqual(telemetry["control_model_requests"], 0)
                 self.assertTrue(osys.record_control_action("status", "PASS"))
                 accounted = osys.status()["telemetry"]
@@ -1096,6 +1219,8 @@ class DesktopBindingTests(unittest.TestCase):
                 self.assertEqual(raw["usage"]["output_tokens"], 28_180)
                 self.assertEqual(raw["usage"]["reasoning_tokens"], 11_521)
                 self.assertEqual(raw["usage"]["projected_prompt_tokens"], 179_884)
+                self.assertEqual(raw["usage"]["peak_prompt_tokens"], 179_884)
+                self.assertEqual(raw["usage"]["model_context_window"], 258_400)
 
     @unittest.skipUnless(
         ROLLOVER_FIELD_TRACE.is_file() and ROLLOVER_FIELD_ROOT.is_dir(),
@@ -1149,11 +1274,14 @@ class DesktopBindingTests(unittest.TestCase):
             discovery = discover_desktop_session(ROLLOVER_FIELD_ROOT, state)
 
         self.assertEqual(discovery["status"], "BOUND")
-        self.assertEqual(discovery["reason"], "ROLLOVER_HANDOFF")
+        self.assertIn(discovery["reason"], {"ROLLOVER_HANDOFF", "PERSISTED"})
         self.assertEqual(discovery["binding"]["session_id"], ROLLOVER_FIELD_SESSION)
         self.assertEqual(discovery["binding"]["parent_session_id"], ROLLOVER_FIELD_PARENT)
-        self.assertEqual(publish.call_count, 1)
-        self.assertEqual(publish.call_args.kwargs["association"], "ROLLOVER_HANDOFF")
+        if discovery["reason"] == "ROLLOVER_HANDOFF":
+            self.assertEqual(publish.call_count, 1)
+            self.assertEqual(publish.call_args.kwargs["association"], "ROLLOVER_HANDOFF")
+        else:
+            self.assertEqual(publish.call_count, 0)
         after_bindings = sorted(path.name for path in binding_dir.glob("*.json")) if binding_dir.is_dir() else []
         self.assertEqual(after_bindings, before_bindings)
         self.assertEqual((ROLLOVER_FIELD_TRACE.stat().st_size, ROLLOVER_FIELD_TRACE.stat().st_mtime_ns), before_trace)
@@ -1173,7 +1301,34 @@ class DesktopBindingTests(unittest.TestCase):
         self.assertEqual(inspected["usage"]["output_tokens"], 28_180)
         self.assertEqual(inspected["usage"]["reasoning_tokens"], 11_521)
         self.assertEqual(inspected["usage"]["projected_prompt_tokens"], 179_884)
+        self.assertEqual(inspected["usage"]["peak_prompt_tokens"], 179_884)
+        self.assertEqual(inspected["usage"]["model_context_window"], 258_400)
+        replay = decide({
+            "projected_prompt_tokens": inspected["usage"]["projected_prompt_tokens"],
+            "peak_prompt_tokens": inspected["usage"]["peak_prompt_tokens"],
+            "requests_in_epoch": inspected["token_events"],
+            "model_context_window": inspected["usage"]["model_context_window"],
+        })
+        self.assertEqual(replay["requests_in_epoch"], 59)
+        self.assertEqual(replay["action"], "HEADROOM_WARNING")
         self.assertEqual((FIELD_TRACE.stat().st_size, FIELD_TRACE.stat().st_mtime_ns), before)
+
+    @unittest.skipUnless(EDITORIAL_FIELD_TRACE.is_file(), "Editorial Desktop field trace is not present")
+    def test_editorial_request_twenty_replays_without_request_count_rollover(self):
+        before = (EDITORIAL_FIELD_TRACE.stat().st_size, EDITORIAL_FIELD_TRACE.stat().st_mtime_ns)
+        inspected = inspect_desktop_session(EDITORIAL_FIELD_TRACE)
+        self.assertGreaterEqual(len(inspected["request_prompt_tokens"]), 20)
+        prompt = inspected["request_prompt_tokens"][19]
+        self.assertEqual(prompt, 95_985)
+        replay = decide({
+            "projected_prompt_tokens": prompt,
+            "peak_prompt_tokens": prompt,
+            "requests_in_epoch": 11,
+            "model_context_window": 258_400,
+        })
+        self.assertEqual(replay["action"], "CONTINUE")
+        self.assertEqual(replay["request_count_role"], "OBSERVATIONAL_ONLY")
+        self.assertEqual((EDITORIAL_FIELD_TRACE.stat().st_size, EDITORIAL_FIELD_TRACE.stat().st_mtime_ns), before)
 
 
 if __name__ == "__main__":

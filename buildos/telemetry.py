@@ -171,8 +171,19 @@ def inspect_desktop_session(
     token_events = 0
     totals: dict[str, int] | None = None
     max_prompt = 0
-    prompt_measured = False
+    peak_prompt_measured = False
+    latest_prompt: int | None = None
+    latest_prompt_measured = False
+    latest_context_window: int | None = None
+    cached_input_complete = True
+    cache_write_input_complete = True
     request_prompt_tokens: list[int | None] = []
+    request_context_windows: list[int | None] = []
+    compaction_events = 0
+    context_compacted_events = 0
+    compaction_zero_events = 0
+    compaction_pending = False
+    latest_compacted_at: str | None = None
     last_token_at: str | None = None
 
     with source_path.open("rb") as handle:
@@ -195,6 +206,14 @@ def inspect_desktop_session(
             if not isinstance(payload, Mapping):
                 continue
             payload_type = str(payload.get("type") or "")
+            if record_type == "compacted":
+                compaction_events += 1
+                compaction_pending = True
+                latest_compacted_at = str(record.get("timestamp") or latest_compacted_at or _now())
+            if record_type == "event_msg" and payload_type == "context_compacted":
+                context_compacted_events += 1
+                compaction_pending = False
+                latest_compacted_at = str(record.get("timestamp") or latest_compacted_at or _now())
             if record_type == "session_meta":
                 # Compacted/forked rollouts may replay ancestor metadata after
                 # the current file header.  The first header owns this physical
@@ -212,6 +231,13 @@ def inspect_desktop_session(
                             pass
             if record_type == "event_msg" and payload_type == "task_started":
                 latest_started = observed or latest_started
+                if payload.get("model_context_window") is not None:
+                    task_window = _desktop_number(
+                        payload.get("model_context_window"), field="model_context_window"
+                    )
+                    if task_window <= 0:
+                        raise TelemetryError("Codex Desktop model_context_window must be a positive integer")
+                    latest_context_window = task_window
                 # Fork/compaction history can replay old task and repository
                 # strings before the current turn. Only current-turn evidence
                 # may establish automatic task association.
@@ -240,28 +266,81 @@ def inspect_desktop_session(
             last_usage = info.get("last_token_usage") or {}
             if not isinstance(total_usage, Mapping) or not total_usage:
                 raise TelemetryError(f"Desktop token_count has no cumulative usage at line {line_number}")
+            if info.get("model_context_window") is not None:
+                observed_window = _desktop_number(
+                    info.get("model_context_window"), field="model_context_window"
+                )
+                if observed_window <= 0:
+                    raise TelemetryError("Codex Desktop model_context_window must be a positive integer")
+            else:
+                observed_window = None
+            observed_prompt_measured = isinstance(last_usage, Mapping) and "input_tokens" in last_usage
+            observed_prompt = (
+                _desktop_number(last_usage.get("input_tokens"), field="last input_tokens")
+                if observed_prompt_measured else None
+            )
+            prior_cached = totals.get("cached_input_tokens", 0) if totals is not None else 0
+            if "cached_input_tokens" in total_usage:
+                observed_cached = _desktop_number(
+                    total_usage.get("cached_input_tokens"), field="cached_input_tokens"
+                )
+                if observed_cached < prior_cached:
+                    cached_input_complete = False
+                    observed_cached = prior_cached
+            else:
+                cached_input_complete = False
+                observed_cached = prior_cached
+            prior_cache_write = totals.get("cache_write_input_tokens", 0) if totals is not None else 0
+            if "cache_write_input_tokens" in total_usage:
+                observed_cache_write = _desktop_number(
+                    total_usage.get("cache_write_input_tokens"), field="cache_write_input_tokens"
+                )
+                if observed_cache_write < prior_cache_write:
+                    cache_write_input_complete = False
+                    observed_cache_write = prior_cache_write
+            else:
+                cache_write_input_complete = False
+                observed_cache_write = prior_cache_write
             current = {
                 "raw_input_tokens": _desktop_number(total_usage.get("input_tokens"), field="input_tokens"),
-                "cached_input_tokens": _desktop_number(total_usage.get("cached_input_tokens"), field="cached_input_tokens"),
+                "cached_input_tokens": observed_cached,
+                "cache_write_input_tokens": observed_cache_write,
                 "output_tokens": _desktop_number(total_usage.get("output_tokens"), field="output_tokens"),
                 "reasoning_tokens": _desktop_number(total_usage.get("reasoning_output_tokens"), field="reasoning_output_tokens"),
             }
-            if totals is not None and any(current[field] < totals[field] for field in current):
+            core_cumulative = ("raw_input_tokens", "output_tokens", "reasoning_tokens")
+            if totals is not None and any(current[field] < totals[field] for field in core_cumulative):
                 raise TelemetryError(f"Desktop cumulative usage regressed at line {line_number}")
-            if totals is not None and current == totals:
+            if totals is not None and all(current[field] == totals[field] for field in core_cumulative):
                 # Desktop can replay an identical token_count notification.
-                # A model request is one cumulative advance, not one row.
+                # Advisory cache counters may appear/disappear independently;
+                # a model request is one core cumulative advance, not one row.
+                if compaction_pending and observed_prompt_measured and observed_prompt == 0:
+                    # A real Desktop compact emits: top-level `compacted`, a
+                    # same-cumulative zero prompt, then `context_compacted`.
+                    # Only that sequence may let a non-request row rebaseline P.
+                    latest_prompt = 0
+                    latest_prompt_measured = True
+                    if observed_window is not None:
+                        latest_context_window = observed_window
+                    last_token_at = str(record.get("timestamp") or last_token_at or _now())
+                    compaction_zero_events += 1
+                    compaction_pending = False
+                totals = current
                 continue
             totals = current
             token_events += 1
-            if isinstance(last_usage, Mapping) and "input_tokens" in last_usage:
-                prompt_value = _desktop_number(last_usage.get("input_tokens"), field="last input_tokens")
-                request_prompt_tokens.append(prompt_value)
-                max_prompt = max(max_prompt, prompt_value)
-                prompt_measured = True
-            else:
-                request_prompt_tokens.append(None)
+            latest_prompt = observed_prompt if observed_prompt_measured else None
+            latest_prompt_measured = observed_prompt_measured
+            if observed_prompt_measured:
+                max_prompt = max(max_prompt, int(observed_prompt))
+                peak_prompt_measured = True
+            if observed_window is not None:
+                latest_context_window = observed_window
             last_token_at = str(record.get("timestamp") or last_token_at or _now())
+            compaction_pending = False
+            request_prompt_tokens.append(latest_prompt if latest_prompt_measured else None)
+            request_context_windows.append(latest_context_window)
 
     if metadata is None:
         raise TelemetryError("Desktop JSONL has no session_meta record")
@@ -290,8 +369,14 @@ def inspect_desktop_session(
             **totals,
             "model_requests": token_events,
             "model_requests_measured": True,
-            "projected_prompt_tokens": max_prompt,
-            "projected_prompt_tokens_measured": prompt_measured,
+            "cached_input_tokens_measured": token_events > 0 and cached_input_complete,
+            "cache_write_input_tokens_measured": token_events > 0 and cache_write_input_complete,
+            "projected_prompt_tokens": latest_prompt,
+            "projected_prompt_tokens_measured": latest_prompt_measured,
+            "peak_prompt_tokens": max_prompt if peak_prompt_measured else None,
+            "peak_prompt_tokens_measured": peak_prompt_measured,
+            "model_context_window": latest_context_window,
+            "model_context_window_measured": latest_context_window is not None,
             "role": "PRODUCTIVE",
             "cumulative": True,
             "observed_at": last_token_at or _now(),
@@ -321,7 +406,12 @@ def inspect_desktop_session(
         "active": active,
         "partial_tail": partial_tail,
         "token_events": token_events,
+        "compaction_events": compaction_events,
+        "context_compacted_events": context_compacted_events,
+        "compaction_zero_events": compaction_zero_events,
+        "latest_compacted_at": latest_compacted_at,
         "request_prompt_tokens": request_prompt_tokens,
+        "request_context_windows": request_context_windows,
         "usage": usage,
     }
 
@@ -410,6 +500,11 @@ def _read_binding(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any] 
         raise TelemetryError("persisted Desktop telemetry binding baseline is invalid")
     for field in baseline_fields:
         _desktop_number(baseline.get(field), field=f"binding baseline {field}")
+    if "cache_write_input_tokens" in baseline:
+        _desktop_number(
+            baseline.get("cache_write_input_tokens"),
+            field="binding baseline cache_write_input_tokens",
+        )
     return value
 
 
@@ -448,6 +543,7 @@ def _persist_binding(
         "baseline": {
             "raw_input_tokens": _number(usage.get("raw_input_tokens")),
             "cached_input_tokens": _number(usage.get("cached_input_tokens")),
+            "cache_write_input_tokens": _number(usage.get("cache_write_input_tokens")),
             "output_tokens": _number(usage.get("output_tokens")),
             "reasoning_tokens": _number(usage.get("reasoning_tokens")),
             "model_requests": _number(usage.get("model_requests")),
@@ -641,7 +737,10 @@ def _desktop_bound_usage(
     if not isinstance(current, Mapping):
         return None
     baseline = binding.get("baseline") or {}
-    numeric = ("raw_input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "model_requests")
+    numeric = (
+        "raw_input_tokens", "cached_input_tokens", "cache_write_input_tokens",
+        "output_tokens", "reasoning_tokens", "model_requests",
+    )
     adjusted: dict[str, int] = {}
     for field in numeric:
         current_value = _desktop_number(current.get(field), field=field)
@@ -666,12 +765,22 @@ def _desktop_bound_usage(
         "thread_id": context_thread or binding.get("session_id"),
         "source_session_id": binding.get("session_id"),
         "model_requests_measured": True,
+        "cached_input_tokens_measured": bool(current.get("cached_input_tokens_measured")),
+        "cache_write_input_tokens_measured": bool(current.get("cache_write_input_tokens_measured")),
         "role": "PRODUCTIVE",
         "cumulative": True,
         "observed_at": current.get("observed_at") or _now(),
     }
+    if current.get("projected_prompt_tokens_measured"):
+        payload["projected_prompt_tokens"] = _desktop_number(
+            current.get("projected_prompt_tokens"), field="latest input_tokens"
+        )
     if current_prompts:
-        payload["projected_prompt_tokens"] = max(current_prompts)
+        payload["peak_prompt_tokens"] = max(current_prompts)
+    if current.get("model_context_window_measured"):
+        payload["model_context_window"] = _desktop_number(
+            current.get("model_context_window"), field="model_context_window"
+        )
     return payload
 
 
@@ -858,6 +967,38 @@ def normalize(payload: Mapping[str, Any], state: Mapping[str, Any], *, source: s
     payload_epoch = _number(payload.get("epoch", active_epoch)) or 1
     if payload_epoch != active_epoch:
         raise TelemetryError("telemetry epoch number does not match the active disposable epoch")
+    raw_prompt = payload.get("projected_prompt_tokens", payload.get("latest_request_input_tokens"))
+    prompt_present = (
+        ("projected_prompt_tokens" in payload or "latest_request_input_tokens" in payload)
+        and raw_prompt is not None
+    )
+    prompt_measured = bool(payload.get("projected_prompt_tokens_measured", prompt_present)) and prompt_present
+    raw_peak = payload.get("peak_prompt_tokens", raw_prompt)
+    peak_present = ("peak_prompt_tokens" in payload and raw_peak is not None) or prompt_measured
+    peak_measured = bool(payload.get("peak_prompt_tokens_measured", peak_present)) and peak_present
+    raw_input_present = (
+        ("raw_input_tokens" in payload or "input_tokens" in payload)
+        and payload.get("raw_input_tokens", payload.get("input_tokens")) is not None
+    )
+    cached_input_present = (
+        ("cached_input_tokens" in payload or "cached_read_tokens" in payload)
+        and payload.get("cached_input_tokens", payload.get("cached_read_tokens")) is not None
+    )
+    cache_write_present = (
+        ("cache_write_input_tokens" in payload or "cache_write_tokens" in payload)
+        and payload.get("cache_write_input_tokens", payload.get("cache_write_tokens")) is not None
+    )
+    cached_input_measured = bool(
+        payload.get("cached_input_tokens_measured", cached_input_present)
+    ) and cached_input_present
+    cache_write_measured = bool(
+        payload.get("cache_write_input_tokens_measured", cache_write_present)
+    ) and cache_write_present
+    noncached_present = "noncached_input_tokens" in payload and payload.get("noncached_input_tokens") is not None
+    noncached_measured = bool(payload.get(
+        "noncached_input_tokens_measured",
+        noncached_present or (raw_input_present and cached_input_measured),
+    )) and (noncached_present or (raw_input_present and cached_input_measured))
     record = {
         "schema": SCHEMA,
         "task_id": task_id,
@@ -870,18 +1011,35 @@ def normalize(payload: Mapping[str, Any], state: Mapping[str, Any], *, source: s
         "role": role,
         "raw_input_tokens": _number(payload.get("raw_input_tokens", payload.get("input_tokens"))),
         "cached_input_tokens": _number(payload.get("cached_input_tokens", payload.get("cached_read_tokens"))),
+        "cache_write_input_tokens": _number(
+            payload.get("cache_write_input_tokens", payload.get("cache_write_tokens"))
+        ),
+        "cached_input_tokens_measured": cached_input_measured,
+        "cache_write_input_tokens_measured": cache_write_measured,
         "noncached_input_tokens": _number(payload.get("noncached_input_tokens")),
+        "noncached_input_tokens_measured": noncached_measured,
         "output_tokens": _number(payload.get("output_tokens")),
         "reasoning_tokens": _number(payload.get("reasoning_tokens")),
         "model_requests": _number(payload.get("model_requests", 0)),
         "model_requests_measured": bool(payload.get("model_requests_measured", "model_requests" in payload)),
         "tool_actions": _number(payload.get("tool_actions")),
-        "projected_prompt_tokens": _number(payload.get("projected_prompt_tokens", payload.get("latest_request_input_tokens"))),
-        "projected_prompt_tokens_measured": "projected_prompt_tokens" in payload or "latest_request_input_tokens" in payload,
+        "projected_prompt_tokens": _number(raw_prompt),
+        "projected_prompt_tokens_measured": prompt_measured,
+        "peak_prompt_tokens": _number(raw_peak),
+        "peak_prompt_tokens_measured": peak_measured,
+        "model_context_window": _number(
+            payload.get("model_context_window", payload.get("context_window_tokens"))
+        ),
+        "model_context_window_measured": bool(
+            payload.get(
+                "model_context_window_measured",
+                _number(payload.get("model_context_window", payload.get("context_window_tokens"))) > 0,
+            )
+        ),
         "cumulative": bool(payload.get("cumulative", False)),
         "observed_at": str(payload.get("observed_at") or _now()),
     }
-    if not record["noncached_input_tokens"]:
+    if noncached_measured and not noncached_present:
         record["noncached_input_tokens"] = max(0, record["raw_input_tokens"] - record["cached_input_tokens"])
     record["record_id"] = str(payload.get("record_id") or _record_id(record))
     return record
@@ -896,19 +1054,29 @@ def _codex_notification(payload: Mapping[str, Any]) -> dict[str, Any] | None:
     last = usage.get("last") or {}
     if not total and not last:
         raise TelemetryError("Codex token notification has no usage payload")
-    return {
+    result = {
         "thread_id": params.get("threadId"),
         "raw_input_tokens": total.get("inputTokens", last.get("inputTokens", 0)),
-        "cached_input_tokens": total.get("cachedInputTokens", last.get("cachedInputTokens", 0)),
         "output_tokens": total.get("outputTokens", last.get("outputTokens", 0)),
         "reasoning_tokens": total.get("reasoningOutputTokens", last.get("reasoningOutputTokens", 0)),
         "model_requests": params.get("modelRequests"),
         "model_requests_measured": params.get("modelRequests") is not None,
         "turn_id": params.get("turnId"),
-        "projected_prompt_tokens": last.get("inputTokens", 0),
         "role": "PRODUCTIVE",
         "cumulative": True,
     }
+    if "inputTokens" in last:
+        result["projected_prompt_tokens"] = last.get("inputTokens")
+    if "cachedInputTokens" in total or "cachedInputTokens" in last:
+        result["cached_input_tokens"] = total.get("cachedInputTokens", last.get("cachedInputTokens"))
+    if "cacheWriteInputTokens" in total or "cacheWriteInputTokens" in last:
+        result["cache_write_input_tokens"] = total.get(
+            "cacheWriteInputTokens", last.get("cacheWriteInputTokens")
+        )
+    context_window = params.get("modelContextWindow", usage.get("modelContextWindow"))
+    if context_window is not None:
+        result["model_context_window"] = context_window
+    return result
 
 
 def _load_source(path: Path, source: str) -> list[dict[str, Any]]:
@@ -949,6 +1117,20 @@ def _load_source(path: Path, source: str) -> list[dict[str, Any]]:
             explicit = [_number(item.get("model_requests")) for item in records if item.get("model_requests_measured")]
             turns = {str(item.get("turn_id")) for item in records if item.get("turn_id")}
             latest = records[-1]
+            measured_prompts = [
+                _number(item.get("projected_prompt_tokens"))
+                for item in records
+                if "projected_prompt_tokens" in item
+            ]
+            if measured_prompts:
+                latest["peak_prompt_tokens"] = max(measured_prompts)
+            measured_windows = [
+                _number(item.get("model_context_window"))
+                for item in records
+                if _number(item.get("model_context_window")) > 0
+            ]
+            if measured_windows and not _number(latest.get("model_context_window")):
+                latest["model_context_window"] = measured_windows[-1]
             if explicit:
                 latest["model_requests"] = max(explicit)
                 latest["model_requests_measured"] = True
@@ -992,7 +1174,8 @@ def _apply_cumulative_baseline(root: Path | str, state: Mapping[str, Any], paylo
     ], separators=(",", ":"))
     numeric = (
         "raw_input_tokens", "cached_input_tokens", "noncached_input_tokens",
-        "output_tokens", "reasoning_tokens", "model_requests", "tool_actions",
+        "cache_write_input_tokens", "output_tokens", "reasoning_tokens",
+        "model_requests", "tool_actions",
     )
     current = {field: _number(payload.get(field)) for field in numeric}
     current["model_requests_measured"] = bool(payload.get("model_requests_measured"))
@@ -1083,6 +1266,7 @@ def _without_current_epoch_coverage(
     if rollover_requested or int((state.get("context") or {}).get("epoch", 1)) > 1:
         result["current_epoch_measurement"] = "UNMEASURED"
         result["current_epoch_requests_measurement"] = "UNMEASURED"
+        result["current_epoch_context_window_measurement"] = "UNMEASURED"
     return result
 
 
@@ -1288,13 +1472,18 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             "productive_model_requests": 0,
             "productive_raw_input_tokens": 0,
             "productive_cached_input_tokens": 0,
+            "productive_cache_write_input_tokens": 0,
             "productive_noncached_input_tokens": 0,
+            "productive_cached_input_measurement": "UNMEASURED",
+            "productive_cache_write_input_measurement": "UNMEASURED",
+            "productive_noncached_input_measurement": "UNMEASURED",
             "productive_output_tokens": 0,
             "productive_reasoning_tokens": 0,
             "control_model_requests": 0,
             "control_tool_actions": 0,
             "control_raw_input_tokens": 0,
             "control_cached_input_tokens": 0,
+            "control_cache_write_input_tokens": 0,
             "control_noncached_input_tokens": 0,
             "control_output_tokens": 0,
             "control_reasoning_tokens": 0,
@@ -1303,14 +1492,23 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             "measurement_coverage": "UNMEASURED",
             "ledger_errors": errors,
             "current_epoch_model_requests": 0,
+            "current_epoch_latest_projected_prompt_tokens": 0,
             "current_epoch_max_projected_prompt_tokens": 0,
             "current_epoch_measurement": "UNMEASURED",
+            "current_epoch_peak_measurement": "UNMEASURED",
             "current_epoch_requests_measurement": "UNMEASURED",
+            "current_epoch_model_context_window": 0,
+            "current_epoch_context_window_measurement": "UNMEASURED",
         }
     productive = [item for item in records if item.get("role") == "PRODUCTIVE"]
     control = [item for item in records if item.get("role") == "CONTROL"]
     current_epoch = int((state.get("context") or {}).get("epoch", 1))
     current_records = [item for item in productive if int(item.get("epoch", 0)) == current_epoch]
+    latest_current_record = current_records[-1] if current_records else None
+    current_window_records = [
+        item for item in current_records
+        if item.get("model_context_window_measured") and _number(item.get("model_context_window")) > 0
+    ]
 
     def total(items: list[dict[str, Any]], field: str) -> int:
         delta = [item for item in items if not item.get("cumulative")]
@@ -1321,6 +1519,14 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
             grouped[key] = max(grouped.get(key, 0), _number(item.get(field)))
         return sum(_number(item.get(field)) for item in delta) + sum(grouped.values())
 
+    def prompt_peak(item: Mapping[str, Any]) -> int:
+        values = []
+        if item.get("projected_prompt_tokens_measured"):
+            values.append(_number(item.get("projected_prompt_tokens")))
+        if item.get("peak_prompt_tokens_measured"):
+            values.append(_number(item.get("peak_prompt_tokens")))
+        return max(values, default=0)
+
     return {
         "status": ("MEASURED" if not errors else "PARTIAL") if productive else "UNMEASURED",
         "source": "+".join(sorted({str(item.get("source")) for item in records})),
@@ -1328,17 +1534,28 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
         "productive_model_requests": total(productive, "model_requests"),
         "productive_raw_input_tokens": total(productive, "raw_input_tokens"),
         "productive_cached_input_tokens": total(productive, "cached_input_tokens"),
+        "productive_cache_write_input_tokens": total(productive, "cache_write_input_tokens"),
         "productive_noncached_input_tokens": total(productive, "noncached_input_tokens"),
+        "productive_cached_input_measurement": (
+            "MEASURED" if productive and productive[-1].get("cached_input_tokens_measured") else "UNMEASURED"
+        ),
+        "productive_cache_write_input_measurement": (
+            "MEASURED" if productive and productive[-1].get("cache_write_input_tokens_measured") else "UNMEASURED"
+        ),
+        "productive_noncached_input_measurement": (
+            "MEASURED" if productive and productive[-1].get("noncached_input_tokens_measured") else "UNMEASURED"
+        ),
         "productive_output_tokens": total(productive, "output_tokens"),
         "productive_reasoning_tokens": total(productive, "reasoning_tokens"),
         "control_model_requests": total(control, "model_requests"),
         "control_tool_actions": total(control, "tool_actions"),
         "control_raw_input_tokens": total(control, "raw_input_tokens"),
         "control_cached_input_tokens": total(control, "cached_input_tokens"),
+        "control_cache_write_input_tokens": total(control, "cache_write_input_tokens"),
         "control_noncached_input_tokens": total(control, "noncached_input_tokens"),
         "control_output_tokens": total(control, "output_tokens"),
         "control_reasoning_tokens": total(control, "reasoning_tokens"),
-        "max_projected_prompt_tokens": max((_number(item.get("projected_prompt_tokens")) for item in productive), default=0),
+        "max_projected_prompt_tokens": max((prompt_peak(item) for item in productive), default=0),
         "rollovers": max(0, int((state.get("context") or {}).get("epoch", 1)) - 1),
         "measurement_coverage": (
             ("MEASURED" if not errors else "PARTIAL")
@@ -1347,7 +1564,30 @@ def summarize(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any]:
         ),
         "ledger_errors": errors,
         "current_epoch_model_requests": total(current_records, "model_requests"),
-        "current_epoch_max_projected_prompt_tokens": max((_number(item.get("projected_prompt_tokens")) for item in current_records), default=0),
-        "current_epoch_measurement": "MEASURED" if any(item.get("projected_prompt_tokens_measured") for item in current_records) else "UNMEASURED",
+        "current_epoch_latest_projected_prompt_tokens": (
+            _number(latest_current_record.get("projected_prompt_tokens"))
+            if latest_current_record and latest_current_record.get("projected_prompt_tokens_measured") else 0
+        ),
+        "current_epoch_max_projected_prompt_tokens": max(
+            (prompt_peak(item) for item in current_records), default=0
+        ),
+        "current_epoch_measurement": (
+            "MEASURED"
+            if latest_current_record and latest_current_record.get("projected_prompt_tokens_measured")
+            else "UNMEASURED"
+        ),
+        "current_epoch_peak_measurement": (
+            "MEASURED"
+            if any(
+                item.get("peak_prompt_tokens_measured") or item.get("projected_prompt_tokens_measured")
+                for item in current_records
+            )
+            else "UNMEASURED"
+        ),
         "current_epoch_requests_measurement": "MEASURED" if any(item.get("model_requests_measured") for item in current_records) else "UNMEASURED",
+        "current_epoch_model_context_window": (
+            _number(current_window_records[-1].get("model_context_window"))
+            if current_window_records else 0
+        ),
+        "current_epoch_context_window_measurement": "MEASURED" if current_window_records else "UNMEASURED",
     }

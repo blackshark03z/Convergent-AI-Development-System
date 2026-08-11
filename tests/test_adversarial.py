@@ -643,7 +643,7 @@ class AssuranceAdversarialTests(unittest.TestCase):
 
 
 class GovernorTelemetryAdversarialTests(unittest.TestCase):
-    def test_measured_usage_cannot_be_overridden_down_and_rollover_resets_epoch(self):
+    def test_measured_latest_cannot_be_overridden_down_and_rollover_resets_epoch(self):
         with generic_repo("measured-governor") as root:
             osys = BuildOS(root, package_root=PACKAGE)
             state = osys.bootstrap(request()).snapshot.state
@@ -652,13 +652,23 @@ class GovernorTelemetryAdversarialTests(unittest.TestCase):
                 "raw_input_tokens": 70_000,
                 "model_requests": 5,
                 "projected_prompt_tokens": 64_000,
+                "model_context_window": 128_000,
             }], source="TEST")
-            status = osys.status(usage={"projected_prompt_tokens": 1, "requests_in_epoch": 0})
-            self.assertEqual(status["governor"]["action"], "ROLLOVER_REQUIRED")
+            status = osys.status(usage={
+                "projected_prompt_tokens": 1,
+                "requests_in_epoch": 0,
+                "model_context_window": 1_000_000,
+            })
+            self.assertEqual(status["governor"]["action"], "HEADROOM_WARNING")
             self.assertEqual(status["governor"]["projected_prompt_tokens"], 64_000)
+            self.assertEqual(status["governor"]["peak_prompt_tokens"], 64_000)
+            self.assertEqual(status["governor"]["model_context_window"], 128_000)
             self.assertEqual(status["governor"]["requests_in_epoch"], 5)
-            self.assertEqual(status["work_packet"]["next_action"], "run rollover before further model work")
-            rolled = osys.rollover(thread_id="fresh-thread")
+            self.assertEqual(status["governor"]["request_count_role"], "OBSERVATIONAL_ONLY")
+            self.assertNotIn("rollover before", status["work_packet"]["next_action"])
+            with self.assertRaisesRegex(KernelError, "rollover requires a governor signal"):
+                osys.rollover(thread_id="fresh-thread")
+            rolled = osys.rollover(force=True, thread_id="fresh-thread")
             self.assertEqual(rolled.snapshot.state["context"]["epoch"], 2)
             after = osys.status()
             self.assertEqual(after["governor"]["action"], "CONTINUE_UNMEASURED")
@@ -695,7 +705,19 @@ class GovernorTelemetryAdversarialTests(unittest.TestCase):
             self.assertEqual(count, 1)
             measured = summarize(root, second)
             self.assertEqual(measured["records"], 1)
+            self.assertEqual(measured["current_epoch_latest_projected_prompt_tokens"], 64_000)
             self.assertEqual(measured["current_epoch_max_projected_prompt_tokens"], 64_000)
+            ingest(root, second, [{
+                "record_id": "2",
+                "role": "PRODUCTIVE",
+                "raw_input_tokens": 1,
+                "model_requests": 0,
+            }], source="SOURCE")
+            latest_unmeasured = osys.status()
+            self.assertEqual(latest_unmeasured["telemetry"]["current_epoch_measurement"], "UNMEASURED")
+            self.assertEqual(latest_unmeasured["telemetry"]["current_epoch_peak_measurement"], "MEASURED")
+            self.assertEqual(latest_unmeasured["governor"]["measurement"], "UNMEASURED")
+            self.assertEqual(latest_unmeasured["governor"]["peak_prompt_tokens"], 64_000)
 
     def test_control_overhead_is_automatic_and_epoch_binding_is_strict(self):
         with generic_repo("control-telemetry") as root:
@@ -776,12 +798,13 @@ class GovernorTelemetryAdversarialTests(unittest.TestCase):
                 status = osys.status()
                 self.assertEqual(status["telemetry"]["current_epoch_model_requests"], 5)
                 self.assertEqual(status["telemetry"]["current_epoch_requests_measurement"], "MEASURED")
-                self.assertEqual(status["governor"]["action"], "ROLLOVER_REQUIRED")
-                osys.rollover(thread_id="thread-next")
+                self.assertEqual(status["governor"]["action"], "CONTINUE")
+                self.assertEqual(status["governor"]["request_count_role"], "OBSERVATIONAL_ONLY")
+                osys.rollover(force=True, thread_id="thread-next")
                 after = osys.status()
                 self.assertNotEqual(after["governor"]["action"], "ROLLOVER_REQUIRED")
 
-    def test_project_policy_cannot_claim_hard_or_weaken_field_limits(self):
+    def test_project_policy_cannot_claim_hard_or_restore_obsolete_governors(self):
         with self.assertRaisesRegex(KernelError, "SUPERVISORY or BOUNDARY"):
             decide({"projected_prompt_tokens": 1}, {"enforcement": "HARD"})
         with tempfile.TemporaryDirectory(prefix="buildos-policy-") as td:
@@ -795,7 +818,7 @@ class GovernorTelemetryAdversarialTests(unittest.TestCase):
                     "enforcement": "SUPERVISORY",
                 }
             }), encoding="utf-8")
-            with self.assertRaisesRegex(KernelError, "exceeds the kernel safety maximum"):
+            with self.assertRaisesRegex(KernelError, "obsolete fixed context policy keys"):
                 load_policy(root)
         with self.assertRaisesRegex(KernelError, "non-negative integer"):
             decide({"projected_prompt_tokens": "not-a-number"})

@@ -1,10 +1,15 @@
 {
   "schema": "buildos.policy.v1.22",
   "context_governor": {
-    "compact_prompt_tokens": 40000,
-    "rollover_prompt_tokens": 64000,
-    "requests_per_epoch": 5,
-    "absolute_prompt_cap": 128000,
+    "policy_name": "PROJECTED_HEADROOM_ONE_CHAT_HYBRID",
+    "warning_percent": 50,
+    "compact_percent": 70,
+    "rollover_percent": 80,
+    "hard_stop_reserve_percent": 10,
+    "hard_stop_min_reserve_tokens": 25000,
+    "known_payload_output_reserve_tokens": 0,
+    "context_window_tokens": null,
+    "fallback_context_window_tokens": 128000,
     "enforcement": "SUPERVISORY"
   },
   "risk": {
