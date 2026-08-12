@@ -14,7 +14,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "PACKAGE_MANIFEST.json"
 PACKAGE_STORE = Path(os.environ.get("BUILDOS_PACKAGE_STORE", r"D:\Youtube\_packages"))
-OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.22_project_lifecycle_kit_v1.0.4_continuity_v1.0.4_working_state_capsule.zip"
+OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.22_project_lifecycle_kit_v1.0.4_continuity_v1.0.4_working_state_capsule_r2.zip"
 EXCLUDE = {"__pycache__", ".git", ".buildos", "_proof_tmp"}
 VALIDATION = ROOT / "PACKAGE_VALIDATION.json"
 CONTENTS = ROOT / "PACKAGE_CONTENTS.sha256"

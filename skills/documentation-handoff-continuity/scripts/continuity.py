@@ -407,7 +407,21 @@ def verify_reality(root: Path, value: dict[str, Any]) -> tuple[str, list[str]]:
     return ("SAFE_TO_CONTINUE" if not problems else "NEEDS_RECONCILIATION"), problems
 
 
-def capsule_text(value: dict[str, Any], live_state: dict[str, Any], kernel: dict[str, Any], state: str, problems: list[str]) -> str:
+def evidence_result(root: Path, item: dict[str, Any]) -> str:
+    """Read only compact result metadata; never project evidence bodies."""
+    target = root / str(item.get("path") or "")
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        checks = payload.get("checks")
+        if isinstance(checks, list) and checks:
+            passed = sum(1 for check in checks if int(check.get("returncode", 1)) == 0)
+            return f"{'PASS' if passed == len(checks) else 'FAIL'} {passed}/{len(checks)}"
+        return "BOUND"
+    except (OSError, ValueError, TypeError):
+        return "TARGETED_READ_REQUIRED"
+
+
+def capsule_text(root: Path, value: dict[str, Any], live_state: dict[str, Any], kernel: dict[str, Any], state: str, problems: list[str]) -> str:
     """Render the bounded model-facing projection; source state remains canonical."""
     def text(item: Any, label: str, maximum: int = 480) -> str:
         return bounded(str(item or ""), label, maximum).replace("\n", " ") or "NONE"
@@ -436,8 +450,9 @@ def capsule_text(value: dict[str, Any], live_state: dict[str, Any], kernel: dict
         f"continuity:{item.get('path')} sha256={item.get('sha256')} result=REFERENCED"
         for item in value.get("evidence") or []
     ]
+    validation_results = [evidence_result(root, item) for item in live_state.get("evidence") or []]
     kernel_evidence = [
-        f"buildos:{item.get('kind', 'EVIDENCE')}:{item.get('path')} sha256={item.get('sha256')} result=BOUND"
+        f"buildos:{item.get('kind', 'EVIDENCE')}:{item.get('path')} sha256={item.get('sha256')} result={evidence_result(root, item)}"
         for item in live_state.get("evidence") or []
     ]
     evidence_rows, additional_evidence = limited(kernel_evidence + sidecar_evidence, "evidence pointer", 4, 220)
@@ -478,6 +493,7 @@ def capsule_text(value: dict[str, Any], live_state: dict[str, Any], kernel: dict
         f"documentation_authorities={' | '.join(authorities) if authorities else 'NONE'}",
         f"additional_documentation_authorities={additional_authorities}",
         f"validation_status=phase:{phase} evidence_bound={len(kernel_evidence)}",
+        f"validation_result={' | '.join(validation_results) if validation_results else 'NOT_RUN'}",
         f"unresolved_acceptance={' | '.join(unresolved) if unresolved else 'NONE'}",
         f"additional_unresolved_acceptance={additional_acceptance if unresolved else 0}",
         f"evidence_pointers={' | '.join(evidence_rows) if evidence_rows else 'NONE'}",
@@ -495,7 +511,7 @@ def command_working_set(args: argparse.Namespace) -> dict[str, Any]:
     live_state, kernel = kernel_state(root)
     state, problems = verify_reality(root, value)
     try:
-        rendered = capsule_text(value, live_state, kernel, state, problems)
+        rendered = capsule_text(root, value, live_state, kernel, state, problems)
     except ContinuityError:
         # Do not risk printing a credential-bearing or otherwise unsafe source field.
         rendered = "\n".join([

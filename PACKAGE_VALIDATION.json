@@ -9,6 +9,6 @@
   "exit_code": 0,
   "frozen_kernel_byte_identical": true,
   "manifest_valid": true,
-  "output_tail": ".........................\n----------------------------------------------------------------------\nRan 25 tests in 78.314s\n\nOK\n",
+  "output_tail": ".........................\n----------------------------------------------------------------------\nRan 25 tests in 76.408s\n\nOK\n",
   "schema": "buildos.portable-validation-evidence.v1"
 }
