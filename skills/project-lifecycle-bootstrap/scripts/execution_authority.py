@@ -7,10 +7,12 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sys
 
 KERNEL_VERSION = "1.22"
 KERNEL_COMMIT = "e41ca10826b32b2d46a3b859345f734c113e00ae"
-LIFECYCLE_KIT_VERSION = "1.0.3"
+LIFECYCLE_KIT_VERSION = "1.0.4"
+CONTINUITY_SKILL_VERSION = "1.0.4"
 RECORD = ".buildos-authority.json"
 LEGACY_EXECUTABLES = ("scripts/ai.py", "scripts/ai_os.py")
 EXECUTOR_FILENAMES = {"ai.py", "ai_os.py", "buildos.py", "build_os.py"}
@@ -36,7 +38,7 @@ def expected_record(package_root: Path) -> dict[str, object]:
         "kernel_version": KERNEL_VERSION,
         "kernel_commit": KERNEL_COMMIT,
         "project_lifecycle_kit_version": LIFECYCLE_KIT_VERSION,
-        "continuity_skill_version": "1.0.3",
+        "continuity_skill_version": CONTINUITY_SKILL_VERSION,
         "package_root": str(package_root.resolve()),
         "canonical_executor": str(executor),
         "canonical_admin_executor": str(admin),
@@ -93,6 +95,10 @@ def check(root: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv == ["--version"]:
+        print(json.dumps({"component": "execution-authority", "kernel_commit": KERNEL_COMMIT, "kernel_version": KERNEL_VERSION, "project_lifecycle_kit_version": LIFECYCLE_KIT_VERSION, "continuity_skill_version": CONTINUITY_SKILL_VERSION}, sort_keys=True))
+        return 0
     parser = argparse.ArgumentParser(description="Build OS v1.22 execution authority preflight")
     parser.add_argument("--root", required=True)
     parser.add_argument("--package-root")

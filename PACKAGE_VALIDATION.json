@@ -4,11 +4,15 @@
     "-m",
     "unittest",
     "tests.test_project_lifecycle",
-    "tests.test_continuity_sidecar"
+    "tests.test_continuity_sidecar",
+    "tests.test_execution_authority",
+    "tests.test_package_identity"
   ],
   "exit_code": 0,
   "frozen_kernel_byte_identical": true,
+  "identity_output": "{\"errors\": [], \"invariant\": \"PACKAGE_IDENTITY_CONSISTENT\", \"observed_components\": [\"authority\", \"continuity\", \"lifecycle\"], \"status\": \"PASS\"}\n",
   "manifest_valid": true,
-  "output_tail": ".........................\n----------------------------------------------------------------------\nRan 25 tests in 76.408s\n\nOK\n",
+  "output_tail": "..................................\n----------------------------------------------------------------------\nRan 34 tests in 80.345s\n\nOK\n",
+  "package_identity_consistent": true,
   "schema": "buildos.portable-validation-evidence.v1"
 }

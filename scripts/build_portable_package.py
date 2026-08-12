@@ -9,17 +9,19 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "PACKAGE_MANIFEST.json"
 PACKAGE_STORE = Path(os.environ.get("BUILDOS_PACKAGE_STORE", r"D:\Youtube\_packages"))
-OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.22_project_lifecycle_kit_v1.0.4_continuity_v1.0.4_working_state_capsule_r2.zip"
+OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.22_project_lifecycle_kit_v1.0.4_continuity_v1.0.4_working_state_capsule_r3.zip"
 EXCLUDE = {"__pycache__", ".git", ".buildos", "_proof_tmp"}
 VALIDATION = ROOT / "PACKAGE_VALIDATION.json"
 CONTENTS = ROOT / "PACKAGE_CONTENTS.sha256"
 FROZEN_KERNEL_COMMIT = "e41ca10826b32b2d46a3b859345f734c113e00ae"
 FROZEN_KERNEL = ROOT / "FROZEN_KERNEL.sha256"
+IDENTITY = ROOT / "scripts" / "package_identity.py"
 
 
 def eligible(path: Path) -> bool:
@@ -46,8 +48,9 @@ def frozen_kernel_matches() -> bool:
 
 
 def validate() -> dict:
-    command = [sys.executable, "-m", "unittest", "tests.test_project_lifecycle", "tests.test_continuity_sidecar"]
+    command = [sys.executable, "-m", "unittest", "tests.test_project_lifecycle", "tests.test_continuity_sidecar", "tests.test_execution_authority", "tests.test_package_identity"]
     completed = _run(command)
+    identity = _run([sys.executable, str(IDENTITY), "--root", str(ROOT)])
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     result = {
         "schema": "buildos.portable-validation-evidence.v1", "command": command,
@@ -56,9 +59,11 @@ def validate() -> dict:
         "manifest_valid": manifest.get("frozen_kernel_commit") == FROZEN_KERNEL_COMMIT
             and manifest.get("project_lifecycle_kit", {}).get("version") == "1.0.4"
             and manifest.get("continuity_skill", {}).get("version") == "1.0.4",
+        "package_identity_consistent": identity.returncode == 0,
+        "identity_output": identity.stdout[-1000:] + identity.stderr[-1000:],
     }
     VALIDATION.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    if completed.returncode or not result["frozen_kernel_byte_identical"] or not result["manifest_valid"]:
+    if completed.returncode or identity.returncode or not result["frozen_kernel_byte_identical"] or not result["manifest_valid"] or not result["package_identity_consistent"]:
         raise RuntimeError("portable validation failed; inspect PACKAGE_VALIDATION.json")
     return result
 
@@ -98,7 +103,13 @@ def verify_zip(manifest: dict) -> dict:
             payload = archive.read(name)
             if (b"-----BEGIN " in payload and b"PRIVATE KEY-----" in payload) or re.search(rb"\b(?:sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b", payload):
                 raise RuntimeError(f"ZIP contains secret-like material: {name}")
-    return {"zip_opens": True, "manifest_valid": True, "frozen_kernel_byte_identical": True, "excluded_runtime_content": True, "secret_scan": True}
+    with tempfile.TemporaryDirectory(prefix="buildos-package-identity-") as raw:
+        with zipfile.ZipFile(OUT, "r") as extracted:
+            extracted.extractall(raw)
+        identity = subprocess.run([sys.executable, str(Path(raw) / "scripts" / "package_identity.py"), "--root", raw], text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=60)
+        if identity.returncode:
+            raise RuntimeError(f"ZIP package identity validation failed: {identity.stdout[-1000:]}{identity.stderr[-1000:]}")
+    return {"zip_opens": True, "manifest_valid": True, "package_identity_consistent": True, "frozen_kernel_byte_identical": True, "excluded_runtime_content": True, "secret_scan": True}
 
 
 def main() -> int:

@@ -11,7 +11,7 @@ import subprocess
 import sys
 from typing import Any
 
-KIT_VERSION = "1.0.3"
+KIT_VERSION = "1.0.4"
 POLICY_FILE = ".buildos-policy.json"
 REQUIRED_CATEGORIES = {
     "USER_BEHAVIOR", "ARCHITECTURE_OWNERSHIP_BOUNDARY", "API_CONFIG_SCHEMA",
@@ -294,6 +294,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv == ["--version"]:
+        print(json.dumps({"component": "project-lifecycle-kit", "version": KIT_VERSION}, sort_keys=True))
+        return 0
     args = parser().parse_args(argv)
     try:
         root = git_root(Path(args.root).resolve()); policy, _ = read_policy(root); facts = validate_policy(root, policy)

@@ -750,6 +750,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv == ["--version"]:
+        print(json.dumps({"component": "documentation-handoff-continuity", "version": SKILL_VERSION}, sort_keys=True))
+        return 0
     args = parser().parse_args(argv)
     try:
         if args.command in {"checkpoint", "bootstrap"}: result = command_checkpoint(args)
