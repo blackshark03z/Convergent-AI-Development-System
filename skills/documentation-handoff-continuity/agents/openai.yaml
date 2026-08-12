@@ -1,0 +1,4 @@
+interface:
+  display_name: Documentation Handoff Continuity
+  short_description: Bounded Git sidecar for continuity and documentation gates.
+  default_prompt: Use the bounded continuity sidecar before recording a product commit, then re-check it during validation without replaying detailed evidence.

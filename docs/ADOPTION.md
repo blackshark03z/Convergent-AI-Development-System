@@ -44,3 +44,28 @@ proves both a low-risk write task and an authorized R3 task,
 normal product commits, descendant closeout, rollover, telemetry present and
 absent, partial runtime repair, hard-process lock recovery, stale-pointer
 recovery, scope/deletion checks, and immutable evidence preservation.
+
+## Continuity adoption contract
+
+The portable package includes the mandatory operational Skill
+`documentation-handoff-continuity`, `adoption/initialize.ps1`, a policy example
+and wrapper. Its sidecar is an atomically replaced bounded projection in the
+Git common directory, never `.ai` or a tracked product file. It records both
+the declared accepted-ref selector and the resolved SHA at checkpoint time.
+It is not a kernel/security boundary and does not alter frozen `buildos/`.
+Workers perform the impact check before `record-commit`; the injected
+`docs-check` repeats deterministic validation during Build OS `validate`.
+
+## Project Lifecycle Kit adoption
+
+`adoption/initialize.ps1` now takes explicit project intent and an executable
+quality gate, writes the single `.buildos-policy.json`, and invokes
+`project-lifecycle-bootstrap`. The bootstrap creates only missing core
+Knowledge Pack templates, preserving existing repository documentation and
+marking unverified existing history `UNKNOWN`. It rejects absent accepted
+baseline/SHA, gate, canonical authority mapping, safety boundary, continuity or
+Field Study. See [PROJECT_LIFECYCLE_KIT.md](PROJECT_LIFECYCLE_KIT.md) for the
+one canonical lifecycle specification and policy choices. For ordinary work,
+the adopted guidance reads only relevant authorities, persists detailed command
+output as evidence with short summaries/pointers, and keeps task briefs focused
+on product-specific objectives, constraints, and acceptance criteria.

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "C:\\Users\\ADMIN\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "-m",
+    "unittest",
+    "tests.test_project_lifecycle",
+    "tests.test_continuity_sidecar"
+  ],
+  "exit_code": 0,
+  "frozen_kernel_byte_identical": true,
+  "manifest_valid": true,
+  "output_tail": ".........................\n----------------------------------------------------------------------\nRan 25 tests in 78.314s\n\nOK\n",
+  "schema": "buildos.portable-validation-evidence.v1"
+}

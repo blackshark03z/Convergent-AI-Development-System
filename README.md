@@ -135,6 +135,39 @@ or dynamic precedence exists.  Skill text is untrusted guidance and cannot
 change risk, authorization, Git scope, lifecycle, or evidence rules.  The
 kernel works with zero Skills.
 
+## Portable continuity sidecar
+
+Portable adoption additionally requires the operational
+`documentation-handoff-continuity` Skill. It is mandatory adoption guidance,
+not kernel/security enforcement: `buildos/` stays frozen and has no rebinding
+mechanism. The sidecar is stored in the Git common directory, carries an
+accepted-ref selector plus dynamically resolved Git SHA, and gates documentation impact
+before the ordinary product commit. See [docs/ADOPTION.md](docs/ADOPTION.md).
+
+## Project Lifecycle Kit
+
+Project Lifecycle Kit v1.0.4 extends portable adoption without changing the
+frozen kernel. Its mandatory-by-adoption `project-lifecycle-bootstrap` Skill
+creates or adopts a bounded Project Knowledge Pack, checks the policy's
+accepted baseline, executable quality gates, safety boundaries, Field Study and
+continuity integration, then assists accepted-baseline reconciliation. The
+canonical specification is [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md).
+It preserves `documentation-handoff-continuity v1.0.4` as the active-work
+authority and keeps Build OS CLOSED, accepted integration and deployment
+separate. Its bounded working-set guidance keeps detailed evidence in files
+with short summaries and pointers, reads only affected Knowledge Pack
+authorities, converges validation before one bounded closeout, and leaves
+one-chat-first compaction/governor policy unchanged. For normal
+start/resume/takeover or post-compaction rehydration, call the Continuity
+Skill's read-only `working-set` (or `capsule`) command first. The Working State
+Capsule derives bounded live facts and targeted pointers, never becomes a
+second mutable authority, and returns `TARGETED_READ_REQUIRED` rather than
+silently omitting safety-critical truth. Adoption writes a machine-
+verifiable `.buildos-authority.json` and fails closed unless it resolves exactly
+one v1.22 executor; project-local legacy lifecycle CLIs/state and conflicting
+Worker instructions are rejected, while archives and historical documentation
+remain provenance only.
+
 Run the deterministic proof suite from this directory:
 
 ```powershell

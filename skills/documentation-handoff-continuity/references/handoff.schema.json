@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Build OS documentation handoff continuity sidecar",
+  "type": "object",
+  "required": ["schema", "self_hash", "task_id", "revision", "accepted_ref", "resolved_accepted_sha", "task_base_sha", "policy_hash", "skill", "worktree", "git", "kernel", "checkpoint", "operational", "documentation", "evidence"],
+  "properties": {
+    "schema": {"const": "buildos.continuity-sidecar.v1"},
+    "self_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "task_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "accepted_ref": {"type": "string", "minLength": 1},
+    "resolved_accepted_sha": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+    "task_base_sha": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+    "policy_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "skill": {"type": "object"},
+    "worktree": {"type": "object"},
+    "git": {"type": "object"},
+    "kernel": {"type": "object"},
+    "checkpoint": {"type": "object"},
+    "documentation": {"type": "object"},
+    "operational": {"type": "object"},
+    "evidence": {"type": "array"}
+  },
+  "additionalProperties": false
+}
