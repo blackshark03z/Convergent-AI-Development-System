@@ -7,7 +7,7 @@ description: Establish or adopt the bounded Project Lifecycle Kit operating cont
 
 Project Lifecycle Kit v1.0.4 is mandatory by the portable adoption contract,
 not kernel-enforced security. It does not modify frozen `buildos/` and it does
-not replace `documentation-handoff-continuity v1.0.0`, which remains the sole
+not replace `documentation-handoff-continuity v1.0.4`, which remains the sole
 authority for active operational intent.
 
 Read `docs/PROJECT_LIFECYCLE_KIT.md` for the authority model and the bounded

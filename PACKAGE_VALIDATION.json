@@ -12,7 +12,7 @@
   "frozen_kernel_byte_identical": true,
   "identity_output": "{\"errors\": [], \"invariant\": \"PACKAGE_IDENTITY_CONSISTENT\", \"observed_components\": [\"authority\", \"continuity\", \"lifecycle\"], \"status\": \"PASS\"}\n",
   "manifest_valid": true,
-  "output_tail": "..................................\n----------------------------------------------------------------------\nRan 34 tests in 80.345s\n\nOK\n",
+  "output_tail": "..................................\n----------------------------------------------------------------------\nRan 34 tests in 83.167s\n\nOK\n",
   "package_identity_consistent": true,
   "schema": "buildos.portable-validation-evidence.v1"
 }

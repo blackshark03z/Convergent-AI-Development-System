@@ -45,6 +45,9 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         "continuity": root / "skills" / "documentation-handoff-continuity" / "scripts" / "continuity.py",
         "authority": root / "skills" / "project-lifecycle-bootstrap" / "scripts" / "execution_authority.py",
     }
+    lifecycle_skill = root / "skills" / "project-lifecycle-bootstrap" / "SKILL.md"
+    if not lifecycle_skill.is_file() or "documentation-handoff-continuity v1.0.4" not in lifecycle_skill.read_text(encoding="utf-8", errors="replace"):
+        errors.append("LIFECYCLE_SKILL_GUIDANCE_IDENTITY_MISMATCH")
     observed: dict[str, object] = {"manifest": manifest}
     for name, script in scripts.items():
         if not script.is_file():
