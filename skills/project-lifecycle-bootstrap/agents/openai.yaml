@@ -1,0 +1,4 @@
+interface:
+  display_name: Project Lifecycle Bootstrap
+  short_description: Establish and reconcile a bounded project lifecycle contract.
+  default_prompt: Inspect the minimum relevant policy, Git state, and Knowledge Pack authorities, then establish or verify the lifecycle contract without modifying frozen Build OS files.

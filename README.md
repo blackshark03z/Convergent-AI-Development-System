@@ -135,6 +135,57 @@ or dynamic precedence exists.  Skill text is untrusted guidance and cannot
 change risk, authorization, Git scope, lifecycle, or evidence rules.  The
 kernel works with zero Skills.
 
+## Portable continuity sidecar
+
+Portable adoption additionally requires the operational
+`documentation-handoff-continuity` Skill. It is mandatory adoption guidance,
+not kernel/security enforcement: `buildos/` stays frozen and has no rebinding
+mechanism. The sidecar is stored in the Git common directory, carries an
+accepted-ref selector plus dynamically resolved Git SHA, and gates documentation impact
+before the ordinary product commit. See [docs/ADOPTION.md](docs/ADOPTION.md).
+
+## Project Lifecycle Kit
+
+Project Lifecycle Kit v1.0.10 extends portable adoption without changing the
+frozen kernel. Its mandatory-by-adoption `project-lifecycle-bootstrap` Skill
+creates or adopts a bounded Project Knowledge Pack, checks the policy's
+accepted baseline, executable quality gates, safety boundaries, Field Study and
+continuity integration, then assists accepted-baseline reconciliation. The
+canonical specification is [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md).
+It preserves `documentation-handoff-continuity v1.0.4` as the active-work
+authority and keeps Build OS CLOSED, accepted integration and deployment
+separate. Its bounded working-set guidance keeps detailed evidence in files
+with short summaries and pointers, reads only affected Knowledge Pack
+authorities, converges validation before one bounded closeout, and leaves
+one-chat-first compaction/governor policy unchanged. For normal
+start/resume/takeover or post-compaction rehydration, call the Continuity
+Skill's read-only `working-set` (or `capsule`) command first. The Working State
+Capsule derives bounded live facts and targeted pointers, never becomes a
+second mutable authority, and returns `TARGETED_READ_REQUIRED` rather than
+silently omitting safety-critical truth. Adoption writes a machine-
+verifiable `.buildos-authority.json` and fails closed unless it resolves exactly
+one v1.22 executor; project-local legacy lifecycle CLIs/state and conflicting
+Worker instructions are rejected, while archives and historical documentation
+remain provenance only.
+
+The v1.0.10 baseline-equivalent disposition parser binds each terse pytest
+failure to its own named failure section. A baseline-only failure therefore
+cannot shift shared candidate failure details; missing or ambiguous bindings
+and decorative traceback separators still fail closed or remain non-identities,
+and strict nodeid, exception, normalized message,
+fingerprint, and test-universe comparison remains unchanged.
+
+## Baseline-equivalent failure disposition
+
+The explicit `baseline-disposition` lifecycle action is available only from
+this corrected canonical executor. It preserves pytest's real nonzero result,
+requires a live accepted selector and the recorded `PRODUCT_COMMITTED` anchor,
+re-runs the full canonical suite at both exact objects, and records immutable
+comparison evidence. Baseline nodeids must remain a subset of candidate
+collection, pytest policy/hooks may not change, and every candidate failure
+must have the same nodeid and normalized failure fingerprint as an accepted
+baseline failure. It is not a waiver or an ignore-failures flag.
+
 Run the deterministic proof suite from this directory:
 
 ```powershell

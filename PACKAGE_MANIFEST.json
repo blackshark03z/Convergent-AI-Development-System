@@ -1,0 +1,10 @@
+{
+  "schema": "buildos.portable-package.v1",
+  "package_id": "build-os-v1.22-project-lifecycle-kit.1.0.10-continuity-1.0.4-baseline-equivalent-disposition-1.0.5",
+  "frozen_kernel_commit": "e41ca10826b32b2d46a3b859345f734c113e00ae",
+  "frozen_kernel_version": "1.22-candidate",
+  "continuity_skill": {"name": "documentation-handoff-continuity", "version": "1.0.4", "mandatory_by_adoption_contract": true, "kernel_enforced": false},
+  "project_lifecycle_kit": {"version": "1.0.10", "bootstrap_skill": {"name": "project-lifecycle-bootstrap", "version": "1.0.10"}, "mandatory_by_adoption_contract": true, "kernel_enforced": false},
+  "field_study": {"version": "external-append-only", "authority": "NON_AUTHORITATIVE"},
+  "included": ["buildos", "scripts", "skills", "templates", "adoption", "config", "docs", "tests", "README.md", "VERSION"]
+}

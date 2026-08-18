@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:\\Users\\ADMIN\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "-m",
+    "unittest",
+    "tests.test_project_lifecycle",
+    "tests.test_continuity_sidecar",
+    "tests.test_execution_authority",
+    "tests.test_package_identity",
+    "tests.test_baseline_equivalence"
+  ],
+  "exit_code": 0,
+  "frozen_kernel_byte_identical": true,
+  "identity_output": "{\"errors\": [], \"invariant\": \"PACKAGE_IDENTITY_CONSISTENT\", \"observed_components\": [\"authority\", \"continuity\", \"lifecycle\"], \"status\": \"PASS\"}\n",
+  "manifest_valid": true,
+  "output_tail": "................................................\n----------------------------------------------------------------------\nRan 48 tests in 75.016s\n\nOK\n",
+  "package_identity_consistent": true,
+  "schema": "buildos.portable-validation-evidence.v1"
+}
