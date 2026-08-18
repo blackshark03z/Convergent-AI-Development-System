@@ -44,3 +44,16 @@ proves both a low-risk write task and an authorized R3 task,
 normal product commits, descendant closeout, rollover, telemetry present and
 absent, partial runtime repair, hard-process lock recovery, stale-pointer
 recovery, scope/deletion checks, and immutable evidence preservation.
+
+## Optional lifecycle adoption
+
+The repository includes a portable Lifecycle Kit, Continuity sidecar and
+Context Epoch capability outside the frozen kernel. `adoption/initialize.ps1`
+is the explicit enrollment path: it writes `.buildos-policy.json` with
+`context_epoch.enabled: true`, creates the Project Knowledge Pack, and checks
+the single active execution authority.
+
+When that policy flag is absent or false, the regular Worker facade does not
+run the context-epoch preflight. This preserves the original v1.22 flow for
+small projects and trials. An operator may explicitly enable or disable the
+guard for one invocation with `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` or `=0`.

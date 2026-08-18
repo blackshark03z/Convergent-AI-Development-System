@@ -1,0 +1,48 @@
+# Engineering Contract
+
+## Code and dependency expectations
+
+{{ENGINEERING_CONVENTIONS}}
+
+## Testing and executable quality gates
+
+Testing strategy: {{TESTING_STRATEGY}}
+
+Configured executable gates are declared in `.buildos-policy.json` and run with
+`project-lifecycle-bootstrap verify-gates`. Keep the set relevant to this
+project; add build, type, regression, lint, packaging or scan commands only
+when applicable.
+
+Run validation as a coherent slice: inspect, implement, focused tests, fix
+relevant failures, integrated relevant validation, and one final acceptance
+pass. Persist detailed command output once, then retain a short summary and
+pointer; use deterministic tooling for hashes, Git state, schema and evidence
+existence. Re-run only after relevant change, failure, stale evidence, or the
+required final clean pass.
+
+## Safety boundaries
+
+- **Production/runtime:** {{PRODUCTION_BOUNDARY}}
+- **Data:** {{DATA_BOUNDARY}}
+- **Secrets/configuration:** {{SECRETS_BOUNDARY}}
+
+## Definition of Done
+
+Implemented behavior, focused evidence, applicable regression, documentation
+impact assessment, synchronized affected authorities, architecture impact
+addressed, no unresolved required work, clean product target, deterministic
+Build OS evidence, coherent continuity state, and Build OS close. Accepted
+integration and deployment are later, separate events.
+
+## Efficient handoff and closeout
+
+Keep active work bounded to the objective, phase, constraints, touched files,
+short decisions/validation summary, evidence pointers and next action. Read
+only affected Knowledge Pack authorities after the documentation impact check.
+Close with final validation, bounded evidence summaries/pointers, continuity and
+documentation gates, then record/validate/close; do not reconstruct task
+history unless deterministic checks report a mismatch.
+
+## Avoid
+
+{{ANTI_PATTERNS}}
