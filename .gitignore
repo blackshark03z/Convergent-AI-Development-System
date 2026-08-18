@@ -4,3 +4,5 @@ __pycache__/
 .coverage
 .buildos/
 _proof_tmp/
+PACKAGE_CONTENTS.sha256
+PACKAGE_VALIDATION.json

@@ -135,6 +135,24 @@ or dynamic precedence exists.  Skill text is untrusted guidance and cannot
 change risk, authorization, Git scope, lifecycle, or evidence rules.  The
 kernel works with zero Skills.
 
+## Optional lifecycle adoption
+
+The repository also ships the `documentation-handoff-continuity` and
+`project-lifecycle-bootstrap` Skills, adoption scripts, and Knowledge Pack
+templates. They are an opt-in adoption layer: the frozen `buildos/` kernel
+remains usable on its own.
+
+Run `adoption/initialize.ps1` to create a project policy and enroll a product
+repository. The generated policy sets `context_epoch.enabled` to `true`; only
+then does `scripts/ai.py` run the context-epoch preflight before mutating
+lifecycle actions. Unenrolled projects retain the original eight-command
+Worker behaviour. Set `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
+one-off opt-in, or `=0` to override the policy for an isolated diagnostic run.
+
+See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md) and
+[docs/CONTEXT_EPOCH_RUNTIME.md](docs/CONTEXT_EPOCH_RUNTIME.md) for the
+adoption contract and runtime boundaries.
+
 Run the deterministic proof suite from this directory:
 
 ```powershell

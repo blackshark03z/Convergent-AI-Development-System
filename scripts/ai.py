@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Eight-command Worker facade for Build OS v1.22."""
+"""Worker facade with an opt-in context-epoch adoption preflight."""
+import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -10,5 +13,50 @@ if str(PACKAGE) not in sys.path:
 from buildos.cli import main
 
 
+MUTATING_COMMANDS = {"record-commit", "validate", "rollover", "close"}
+
+
+def _requested_root(argv: list[str]) -> Path:
+    for index, value in enumerate(argv[:-1]):
+        if value == "--root":
+            return Path(argv[index + 1]).resolve()
+    return Path.cwd().resolve()
+
+
+def _requested_command(argv: list[str]) -> str | None:
+    known = {"bootstrap", "status", "next", "record-commit", "validate", "rollover", "close", "recover"}
+    return next((value for value in argv if value in known), None)
+
+
+def _context_epoch_preflight_enabled(root: Path) -> bool:
+    """Enable the adoption-layer guard only for an explicitly enrolled project."""
+    override = os.environ.get("BUILDOS_CONTEXT_EPOCH_PREFLIGHT", "").strip().lower()
+    if override in {"1", "true", "yes", "on"}:
+        return True
+    if override in {"0", "false", "no", "off"}:
+        return False
+    try:
+        policy = json.loads((root / ".buildos-policy.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    context_epoch = policy.get("context_epoch") if isinstance(policy, dict) else None
+    return isinstance(context_epoch, dict) and context_epoch.get("enabled") is True
+
+
+def _epoch_preflight(argv: list[str]) -> int:
+    if _requested_command(argv) not in MUTATING_COMMANDS:
+        return 0
+    root = _requested_root(argv)
+    if not _context_epoch_preflight_enabled(root):
+        return 0
+    script = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "context_epoch.py"
+    proc = subprocess.run([sys.executable, str(script), "--root", str(root), "preflight"], text=True, capture_output=True)
+    if proc.returncode:
+        # Keep the public facade JSON-only and fail closed before the kernel mutation.
+        print(proc.stdout.strip() or '{"status":"ACTION_REQUIRED","message":"context epoch ownership preflight failed"}')
+    return proc.returncode
+
+
 if __name__ == "__main__":
-    raise SystemExit(main(admin=False))
+    preflight = _epoch_preflight(sys.argv[1:])
+    raise SystemExit(preflight or main(admin=False))

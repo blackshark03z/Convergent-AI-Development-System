@@ -1,0 +1,3 @@
+# The portable package seals source hashes; do not let a platform checkout
+# rewrite text bytes before validation or export.
+* text=auto eol=lf

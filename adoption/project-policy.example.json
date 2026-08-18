@@ -1,0 +1,59 @@
+{
+  "schema": "buildos.project-policy.v1.22",
+  "context_epoch": {
+    "enabled": true
+  },
+  "documentation_handoff": {
+    "accepted_ref": "main",
+    "category_authorities": {
+      "USER_BEHAVIOR": "README.md",
+      "ARCHITECTURE_OWNERSHIP_BOUNDARY": "ARCHITECTURE.md",
+      "API_CONFIG_SCHEMA": "PROJECT_STATUS.md",
+      "DEVELOPER_WORKFLOW": "ENGINEERING.md",
+      "FEATURE_PRESET_INVENTORY": "PROJECT_STATUS.md"
+    },
+    "continuity": {
+      "mandatory_operational_skill": "documentation-handoff-continuity",
+      "max_sidecar_bytes": 16384,
+      "field_study": "EXTERNAL_APPEND_ONLY_NON_AUTHORITATIVE"
+    }
+  },
+  "project_lifecycle": {
+    "project_profile": "small-tool",
+    "project_intent": {
+      "name": "Replace with project name",
+      "purpose": "Replace with the concise product or tool purpose.",
+      "intended_use": "Replace with intended users or use case.",
+      "success_definition": "Replace with a verifiable success definition.",
+      "non_goals": "Replace with key non-goals.",
+      "constraints": "Replace with material technical, safety or delivery constraints."
+    },
+    "knowledge_pack": {
+      "readme": "README.md",
+      "project_status": "PROJECT_STATUS.md",
+      "architecture": "ARCHITECTURE.md",
+      "engineering": "ENGINEERING.md",
+      "roadmap": "ROADMAP.md",
+      "changelog": "CHANGELOG.md"
+    },
+    "quality_gates": [
+      {"id": "replace-with-project-gate", "command": "replace with a safe executable project quality command"}
+    ],
+    "testing_strategy": "Replace with the focused and regression testing strategy.",
+    "engineering_conventions": "Replace with material code organization, dependency and error-handling expectations.",
+    "safety_boundaries": {
+      "runtime": "Replace with the development/runtime boundary.",
+      "production": "No production runtime is enabled for this small-tool profile unless explicitly changed.",
+      "data": "Replace with data handling and persistence boundary.",
+      "secrets": "Do not commit secrets; configure them outside source control."
+    },
+    "modules": {
+      "operations": false,
+      "adr": false,
+      "security": false,
+      "migrations": false,
+      "project_closure": false,
+      "project_brief": false
+    }
+  }
+}
