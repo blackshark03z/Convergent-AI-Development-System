@@ -25,7 +25,7 @@ class ExecutionAuthorityTests(unittest.TestCase):
         code, payload = invoke(root, "--package-root", str(PACKAGE), "write-record")
         self.assertEqual(code, 0, payload)
 
-    def test_one_v122_authority_passes(self):
+    def test_one_v123_authority_passes(self):
         with self.authority_root() as td:
             root = Path(td); self.record(root)
             code, payload = invoke(root, "check")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the deterministic v1.22 candidate proof suite."""
+"""Run the deterministic v1.23 candidate proof suite."""
 from pathlib import Path
 import subprocess
 import sys

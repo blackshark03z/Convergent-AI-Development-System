@@ -9,8 +9,8 @@ import subprocess
 import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
-KERNEL_VERSION = "1.22"
-KERNEL_COMMIT = "e41ca10826b32b2d46a3b859345f734c113e00ae"
+KERNEL_VERSION = "1.23"
+KERNEL_COMMIT = "80be38bf18c559c528477bf7cb7356d340b061a7"
 
 
 def invoke(path: Path) -> dict[str, object]:
@@ -37,7 +37,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         "lifecycle_version": lifecycle.get("version"), "continuity_version": continuity.get("version"),
         "runtime_capability": runtime.get("identity"), "runtime_version": runtime.get("version"),
     }
-    if manifest.get("frozen_kernel_version") != "1.22-candidate": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
+    if manifest.get("frozen_kernel_version") != "1.23-candidate": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
     if manifest.get("frozen_kernel_commit") != KERNEL_COMMIT: errors.append("MANIFEST_KERNEL_COMMIT_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("version") != expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_SKILL_MISMATCH")
     if continuity.get("name") != "documentation-handoff-continuity" or not expected["continuity_version"]: errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")

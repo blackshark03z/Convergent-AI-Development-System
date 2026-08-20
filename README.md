@@ -6,7 +6,7 @@ facade at a product repository; do not copy generated control state into the
 product source tree:
 
 ```powershell
-python D:\path\to\build-os-v122-candidate\scripts\ai.py --root D:\path\to\product bootstrap `
+python D:\path\to\build-os-v123-candidate\scripts\ai.py --root D:\path\to\product bootstrap `
   --task-id TASK-001 --outcome "the change is correct" --allow src/app.py
 ```
 
@@ -171,5 +171,5 @@ Run the deterministic proof suite from this directory:
 python scripts/self_test.py
 ```
 
-The candidate is ready for one real field benchmark only after the final
-commit and clean-tree checks described in `docs/CANDIDATE_REPORT.md`.
+The candidate is ready for a real field benchmark only after the final
+commit and clean-tree checks described in `docs/V1.23_CANDIDATE_REPORT.md`.
