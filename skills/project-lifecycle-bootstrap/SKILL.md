@@ -1,11 +1,11 @@
 ---
 name: project-lifecycle-bootstrap
-description: Establish or adopt the bounded Project Lifecycle Kit operating contract around frozen Build OS v1.22. Use for greenfield setup, existing-project adoption, accepted-baseline reconciliation, quality-gate verification, and explicitly requested project retirement.
+description: Establish or adopt the bounded Project Lifecycle Kit operating contract around frozen Build OS v1.23. Use for greenfield setup, existing-project adoption, accepted-baseline reconciliation, generic side-effect contract validation, quality-gate verification, and explicitly requested project retirement.
 ---
 
 # Project lifecycle bootstrap
 
-Project Lifecycle Kit v1.1.0 is mandatory by the portable adoption contract,
+Project Lifecycle Kit v1.2.0 is mandatory by the portable adoption contract,
 not kernel-enforced security. It does not modify frozen `buildos/` and it does
 not replace `documentation-handoff-continuity v1.1.0`, which remains the sole
 authority for active operational intent.
@@ -49,7 +49,7 @@ Re-run only after relevant change, failure, staleness or a final clean-pass
 requirement. Batch adjacent safe deterministic operations, never risky actions.
 
 Before a Worker takes over, run the portable execution-authority preflight.
-Use only its recorded v1.22 executor; legacy project CLIs and `.ai` state are
+Use only its recorded v1.23 executor; legacy project CLIs and `.ai` state are
 never fallback authorities, and version mismatch or ambiguity is a Tech Lead
 blocker. Archives and historical documents are provenance only.
 
@@ -69,6 +69,14 @@ accepted baseline, meaningful executable gates, all required documentation
 impact mappings, defined runtime/data/production safety boundaries, enabled
 continuity, or default-on external Field Study. Tech Lead decisions must be
 made in that policy, explicitly and durably.
+
+Projects with externally visible, destructive, billable, or non-idempotent
+effects should enable the provider-neutral `side_effect_contract` policy entry
+and maintain `SIDE_EFFECT_CONTRACT.json`. Validate it before implementation.
+Unknown effect state is a queue barrier; retry requires either declared
+idempotency or positive canonical no-effect proof. A project-specific provider
+name, request ID, status string, or heuristic is evidence input, never a
+replacement for the semantic authority predicate.
 
 For an existing repository, inspect Git and source first. Bootstrap writes only
 missing canonical templates and labels unverified history/capabilities as

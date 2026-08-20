@@ -38,6 +38,33 @@ def relation(root: Path | str, ancestor: str | None, descendant: str | None) -> 
     return "UNKNOWN"
 
 
+def resolve_commit(root: Path | str, value: str) -> str:
+    """Resolve an explicit commit-ish to one full commit SHA or fail closed."""
+    raw = str(value).strip()
+    if not raw:
+        raise RuntimeError("commit reference is required")
+    proc = _run(Path(root), "rev-parse", "--verify", f"{raw}^{{commit}}", check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"commit reference does not resolve: {raw}")
+    return proc.stdout.strip()
+
+
+def commit_anchor(root: Path | str, commit: str) -> dict[str, Any]:
+    """Return a bounded immutable Git anchor for a resolved commit."""
+    root = Path(root).resolve()
+    sha = resolve_commit(root, commit)
+    top = _run(root, "rev-parse", "--show-toplevel", check=True).stdout.strip()
+    tree = _run(root, "rev-parse", f"{sha}^{{tree}}", check=True).stdout.strip()
+    return {
+        "available": True,
+        "root": str(Path(top).resolve()),
+        "branch": None,
+        "head": sha,
+        "tree": tree,
+        "dirty": False,
+    }
+
+
 def changed_paths(root: Path | str, older: str | None, newer: str | None, *, diff_filter: str | None = None) -> list[str]:
     if not older or not newer or older == newer:
         return []

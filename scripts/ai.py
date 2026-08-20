@@ -13,7 +13,7 @@ if str(PACKAGE) not in sys.path:
 from buildos.cli import main
 
 
-MUTATING_COMMANDS = {"record-commit", "validate", "rollover", "close"}
+MUTATING_COMMANDS = {"record-commit", "validate", "rollover", "close", "block-for-source-fix", "continue-task"}
 
 
 def _requested_root(argv: list[str]) -> Path:
@@ -24,7 +24,7 @@ def _requested_root(argv: list[str]) -> Path:
 
 
 def _requested_command(argv: list[str]) -> str | None:
-    known = {"bootstrap", "status", "next", "record-commit", "validate", "rollover", "close", "recover"}
+    known = {"bootstrap", "status", "next", "record-commit", "validate", "rollover", "close", "recover", "block-for-source-fix", "continue-task"}
     return next((value for value in argv if value in known), None)
 
 

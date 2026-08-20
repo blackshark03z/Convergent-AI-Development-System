@@ -1,7 +1,7 @@
 # Project Lifecycle Kit
 
-Project Lifecycle Kit v1.1.0 is the portable adoption layer around frozen Build
-OS v1.22. It is mandatory by the adoption contract, not kernel-enforced
+Project Lifecycle Kit v1.2.0 is the portable adoption layer around frozen Build
+OS v1.23. It is mandatory by the adoption contract, not kernel-enforced
 security. `buildos/` continues to own task, revision, lifecycle and immutable
 validation evidence.
 
@@ -24,6 +24,7 @@ default takeover read.
 | Accepted change history | `CHANGELOG.md` |
 | Active task intent and handoff | `documentation-handoff-continuity` sidecar |
 | Validation proof and task lifecycle | frozen Build OS evidence and CURRENT generation |
+| Dangerous side-effect semantics | enabled `SIDE_EFFECT_CONTRACT.json` |
 | Learning | external append-only Field Study |
 | Actual bytes | live Git worktree |
 
@@ -110,6 +111,12 @@ the single accepted-ref and documentation-category-map authority. Its optional
 `project_lifecycle` object supplies profile, Knowledge Pack paths, quality
 gates, safety boundaries and modules.
 
+The optional top-level `side_effect_contract` entry enables a deterministic,
+provider-neutral authority/retry/recovery specification. When enabled, policy
+validation fails closed unless its configured file passes the contract
+validator. This is for systems whose externally visible or destructive actions
+need semantic proof beyond ordinary Git/task lifecycle checks.
+
 Normal adoption must have a resolving accepted ref/SHA, one or more executable
 quality-gate commands, all five documentation-impact mappings, canonical core
 document paths, defined production/data/runtime boundaries, enabled continuity,
@@ -122,7 +129,7 @@ flow and project-specific engineering rules.
 
 `SINGLE_ACTIVE_EXECUTION_AUTHORITY` is a mandatory fail-closed adoption
 invariant. `initialize.ps1` writes `.buildos-authority.json`, binding the
-portable package root, v1.22 kernel commit, lifecycle-kit version, facade hash,
+portable package root, v1.23 kernel commit, lifecycle-kit version, facade hash,
 and the sole resolution rule: `python <package_root>/scripts/ai.py --root
 <project-root> <lifecycle-command>`. The paired `ai_os.py` is an administrative
 facade from that same package authority, not a second authority.
@@ -143,6 +150,13 @@ continuity checkpoint -> product commit -> record-commit -> deterministic
 continuity/docs recheck -> validate -> close -> CLOSED candidate -> accepted
 baseline integration -> accepted knowledge reconciliation -> continuity
 retirement`.
+
+When a live runtime task discovers a defect in the source system rather than
+its bounded task input, use `block-for-source-fix`. It records
+`BLOCKED_SOURCE_FIX`, releases the lease, and preserves the source task as an
+immutable historical fact. Complete the repair under a fresh task identity,
+then use `continue-task` with a resolution reference. Continuation is lineage,
+not resurrection. See `LIFECYCLE_LINEAGE_AND_ADOPTION.md`.
 
 Build OS `CLOSED`, inclusion in `accepted_ref`, and release/deployment are
 different events. A CLOSED candidate not contained by the resolved accepted

@@ -125,6 +125,23 @@ class ProjectLifecycleTests(unittest.TestCase):
                 code, result = invoke(root, "check", check=False)
                 self.assertEqual(code, 2); self.assertIn(expected, result["message"])
 
+    def test_enabled_side_effect_contract_is_validated_by_policy_check(self):
+        with fixture("side-effect") as root:
+            value = policy()
+            value["side_effect_contract"] = {"enabled": True, "path": "SIDE_EFFECT_CONTRACT.json"}
+            template = (PACKAGE / "templates" / "project-lifecycle" / "SIDE_EFFECT_CONTRACT.json.tmpl").read_text(encoding="utf-8")
+            (root / "SIDE_EFFECT_CONTRACT.json").write_text(template, encoding="utf-8")
+            self.write_policy(root, value)
+            checked = invoke(root, "check")[1]
+            self.assertEqual(checked["side_effect_contract"]["status"], "PASS")
+
+            contract = json.loads((root / "SIDE_EFFECT_CONTRACT.json").read_text(encoding="utf-8"))
+            contract["dangerous_actions"][0]["unknown_is_barrier"] = False
+            (root / "SIDE_EFFECT_CONTRACT.json").write_text(json.dumps(contract), encoding="utf-8")
+            code, failed = invoke(root, "check", check=False)
+            self.assertEqual(code, 2)
+            self.assertIn("unknown a queue barrier", failed["message"])
+
     def test_reconciliation_distinguishes_closed_candidate_from_accepted_baseline(self):
         with fixture("reconcile") as root:
             self.write_policy(root, policy()); invoke(root, "bootstrap", "--mode", "greenfield")

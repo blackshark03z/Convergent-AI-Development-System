@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildos.invalid/schemas/side-effect-contract.v1.json",
+  "title": "Build OS provider-neutral side-effect authority contract",
+  "type": "object",
+  "required": ["schema", "system_id", "state_dimensions", "canonical_predicates", "semantic_consumers", "dangerous_actions", "crash_recovery", "schema_compatibility"],
+  "properties": {
+    "schema": {"const": "buildos.side-effect-contract.v1"},
+    "system_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "state_dimensions": {"type": "array", "minItems": 1},
+    "canonical_predicates": {"type": "array", "minItems": 1},
+    "semantic_consumers": {"type": "array", "minItems": 1},
+    "dangerous_actions": {"type": "array", "minItems": 1},
+    "crash_recovery": {"type": "array", "minItems": 1},
+    "schema_compatibility": {"type": "array", "minItems": 1}
+  },
+  "additionalProperties": false
+}

@@ -1,4 +1,4 @@
-# Build OS v1.22 candidate
+# Build OS v1.23 candidate
 
 This is the isolated candidate produced for `BUILD-OS-FINAL-ULTRA-CANDIDATE`.
 It is a small, repository-independent control plane.  Point the external
@@ -18,13 +18,13 @@ policy uses the field-tested defaults.
 
 ## Worker flow
 
-The normal Worker facade exposes eight commands:
+The normal Worker facade exposes ten commands:
 
 `bootstrap`, `status`, `next`, `record-commit`, `validate`, `rollover`,
-`close`, and `recover`.
+`close`, `recover`, `block-for-source-fix`, and `continue-task`.
 
-The administrative facade additionally exposes `new-revision`, `abort`, and
-`telemetry-ingest`.  A rollover always names a fresh disposable
+The administrative facade additionally exposes `adopt-existing-change`,
+`new-revision`, `abort`, and `telemetry-ingest`. A rollover always names a fresh disposable
 `--thread-id`; this makes a retry distinguishable from a new epoch. Rollover is
 a rare compact-failure fallback, not a normal request-count rhythm.
 
@@ -40,6 +40,15 @@ Typical flow is:
 There is no `reopen`.  A product change after assurance is preserved as proof
 of the prior revision and requires `new-revision`; a legitimate tree-equivalent
 descendant is simply recorded during close.
+
+A live task blocked by a defect in its source system uses
+`block-for-source-fix`. This releases its lease without rewriting the event as
+an ordinary abort. After a bounded repair task is complete, `continue-task`
+creates a fresh identity with immutable lineage to the released task; it never
+resurrects that task. An already-existing clean Git change can be enrolled only
+through the admin `adopt-existing-change` path and is permanently labelled
+`EXTERNAL_PREEXISTING`, so Build OS does not claim to have supervised creation
+of that commit.
 
 ## Authority and crash model
 
@@ -145,13 +154,16 @@ remains usable on its own.
 Run `adoption/initialize.ps1` to create a project policy and enroll a product
 repository. The generated policy sets `context_epoch.enabled` to `true`; only
 then does `scripts/ai.py` run the context-epoch preflight before mutating
-lifecycle actions. Unenrolled projects retain the original eight-command
-Worker behaviour. Set `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
+lifecycle actions. Unenrolled projects retain the same kernel lifecycle rules,
+including the two new public release/continuation commands. Set
+`BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
 one-off opt-in, or `=0` to override the policy for an isolated diagnostic run.
 
-See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md) and
-[docs/CONTEXT_EPOCH_RUNTIME.md](docs/CONTEXT_EPOCH_RUNTIME.md) for the
-adoption contract and runtime boundaries.
+See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md),
+[docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md](docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md),
+[docs/SIDE_EFFECT_SPEC_CONTRACT.md](docs/SIDE_EFFECT_SPEC_CONTRACT.md), and
+[docs/CONTEXT_EPOCH_RUNTIME.md](docs/CONTEXT_EPOCH_RUNTIME.md) for the adoption
+contract and runtime boundaries.
 
 Run the deterministic proof suite from this directory:
 

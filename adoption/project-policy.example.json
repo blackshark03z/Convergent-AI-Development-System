@@ -3,6 +3,10 @@
   "context_epoch": {
     "enabled": true
   },
+  "side_effect_contract": {
+    "enabled": false,
+    "path": "SIDE_EFFECT_CONTRACT.json"
+  },
   "documentation_handoff": {
     "accepted_ref": "main",
     "category_authorities": {

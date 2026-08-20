@@ -1,4 +1,4 @@
-"""Command-line interface for the thin v1.22 facade."""
+"""Command-line interface for the thin v1.23 candidate facade."""
 from __future__ import annotations
 
 import argparse
@@ -60,26 +60,49 @@ def _governor_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--compaction-evidence", help="reference proving compact failure or persistent post-compact loss")
 
 
+def _task_args(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--task-id", required=True)
+    command.add_argument("--outcome", required=True)
+    command.add_argument("--accept", action="append", default=[])
+    command.add_argument("--check", action="append", default=[])
+    command.add_argument("--risk", default="auto", choices=["auto", "R0", "R1", "R2", "R3"])
+    command.add_argument("--side-effect", default="WRITE", choices=["READ_ONLY", "WRITE", "CREATE_NEW_VERSION", "MUTATE_IN_PLACE", "OVERWRITE", "DELETE"])
+    command.add_argument("--allow", action="append", default=[])
+    command.add_argument("--prohibit", action="append", default=[])
+    command.add_argument("--worker-id", default="WORKER")
+    command.add_argument("--owner-authorization", default="NONE", choices=["NONE", "APPROVED"])
+    command.add_argument("--authorization-reference", default="")
+    command.add_argument("--authorization-actor", default="OWNER")
+    command.add_argument("--enforcement", default="SUPERVISORY", choices=["SUPERVISORY", "BOUNDARY"])
+    command.add_argument("--skill")
+
+
+def _task_request(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "task_id": args.task_id,
+        "outcome": args.outcome,
+        "acceptance": args.accept or [args.outcome],
+        "acceptance_commands": args.check,
+        "risk": args.risk,
+        "side_effect": args.side_effect,
+        "allowed_paths": args.allow,
+        "prohibited_paths": args.prohibit,
+        "worker_id": args.worker_id,
+        "owner_authorization": args.owner_authorization,
+        "authorization_reference": args.authorization_reference,
+        "authorization_actor": args.authorization_actor,
+        "enforcement": args.enforcement,
+        "skill": args.skill,
+    }
+
+
 def parser(*, admin: bool = False) -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Build OS v1.22 thin transactional facade")
+    p = argparse.ArgumentParser(description="Build OS v1.23 candidate transactional facade")
     p.add_argument("--root", type=Path, default=Path.cwd(), help="target repository")
     commands = p.add_subparsers(dest="command", required=True)
 
     bootstrap = commands.add_parser("bootstrap", help="materialize one task atomically")
-    bootstrap.add_argument("--task-id", required=True)
-    bootstrap.add_argument("--outcome", required=True)
-    bootstrap.add_argument("--accept", action="append", default=[])
-    bootstrap.add_argument("--check", action="append", default=[])
-    bootstrap.add_argument("--risk", default="auto", choices=["auto", "R0", "R1", "R2", "R3"])
-    bootstrap.add_argument("--side-effect", default="WRITE", choices=["READ_ONLY", "WRITE", "CREATE_NEW_VERSION", "MUTATE_IN_PLACE", "OVERWRITE", "DELETE"])
-    bootstrap.add_argument("--allow", action="append", default=[])
-    bootstrap.add_argument("--prohibit", action="append", default=[])
-    bootstrap.add_argument("--worker-id", default="WORKER")
-    bootstrap.add_argument("--owner-authorization", default="NONE", choices=["NONE", "APPROVED"])
-    bootstrap.add_argument("--authorization-reference", default="")
-    bootstrap.add_argument("--authorization-actor", default="OWNER")
-    bootstrap.add_argument("--enforcement", default="SUPERVISORY", choices=["SUPERVISORY", "BOUNDARY"])
-    bootstrap.add_argument("--skill")
+    _task_args(bootstrap)
     _failure_arg(bootstrap)
 
     status = commands.add_parser("status", help="derive status, governor, telemetry and packet")
@@ -113,7 +136,27 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     recover.add_argument("--check-only", action="store_true")
     recover.add_argument("--failure-at", help=argparse.SUPPRESS)
 
+    block = commands.add_parser("block-for-source-fix", help="release a live task for a bounded source repair")
+    block.add_argument("--reason", required=True)
+    block.add_argument("--defect-reference", required=True)
+    _failure_arg(block)
+
+    continuation = commands.add_parser("continue-task", help="start a fresh task with immutable released-task lineage")
+    _task_args(continuation)
+    continuation.add_argument("--from-task", required=True)
+    continuation.add_argument("--from-revision", type=int)
+    continuation.add_argument("--reason", required=True)
+    continuation.add_argument("--resolution-reference")
+    _failure_arg(continuation)
+
     if admin:
+        adopt = commands.add_parser("adopt-existing-change", help="record a pre-existing clean HEAD without claiming supervised creation")
+        _task_args(adopt)
+        adopt.add_argument("--base", required=True)
+        adopt.add_argument("--target", required=True)
+        adopt.add_argument("--reason", required=True)
+        _failure_arg(adopt)
+
         revise = commands.add_parser("new-revision", help="explicitly revise scope; evidence remains immutable")
         revise.add_argument("--reason", required=True)
         revise.add_argument("--risk", choices=["R0", "R1", "R2", "R3"])
@@ -141,22 +184,7 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
     try:
         if args.command == "bootstrap":
             value = os.bootstrap(
-                {
-                    "task_id": args.task_id,
-                    "outcome": args.outcome,
-                    "acceptance": args.accept or [args.outcome],
-                    "acceptance_commands": args.check,
-                    "risk": args.risk,
-                    "side_effect": args.side_effect,
-                    "allowed_paths": args.allow,
-                    "prohibited_paths": args.prohibit,
-                    "worker_id": args.worker_id,
-                    "owner_authorization": args.owner_authorization,
-                    "authorization_reference": args.authorization_reference,
-                    "authorization_actor": args.authorization_actor,
-                    "enforcement": args.enforcement,
-                    "skill": args.skill,
-                },
+                _task_request(args),
                 op_id=args.operation_id,
                 configured_failures=args.failure_at,
             )
@@ -208,6 +236,32 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
             _json(_result(os.close(op_id=args.operation_id, configured_failures=args.failure_at)))
         elif args.command == "recover":
             _json(os.recover(repair_pointer=not args.check_only, configured_failures=args.failure_at))
+        elif args.command == "block-for-source-fix":
+            _json(_result(os.block_for_source_fix(
+                reason=args.reason,
+                defect_reference=args.defect_reference,
+                op_id=args.operation_id,
+                configured_failures=args.failure_at,
+            )))
+        elif args.command == "continue-task":
+            _json(_result(os.continue_task(
+                _task_request(args),
+                source_task_id=args.from_task,
+                source_revision=args.from_revision,
+                reason=args.reason,
+                resolution_reference=args.resolution_reference,
+                op_id=args.operation_id,
+                configured_failures=args.failure_at,
+            )))
+        elif args.command == "adopt-existing-change":
+            _json(_result(os.adopt_existing_change(
+                _task_request(args),
+                base=args.base,
+                target=args.target,
+                reason=args.reason,
+                op_id=args.operation_id,
+                configured_failures=args.failure_at,
+            )))
         elif args.command == "new-revision":
             _json(_result(os.revise(
                 reason=args.reason,

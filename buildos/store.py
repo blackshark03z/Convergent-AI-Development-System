@@ -479,6 +479,40 @@ def current_chain(root: Path | str, tip: Snapshot | None = None) -> list[Snapsho
     return list(reversed(chain))
 
 
+def task_snapshots(root: Path | str, task_id: str) -> list[Snapshot]:
+    """Return canonical-chain snapshots for one durable task identity."""
+    task_id = str(task_id).strip()
+    tip = read_current(root, allow_uninitialized=True)
+    if tip is None:
+        return []
+    return [item for item in current_chain(root, tip) if item.state.get("task_id") == task_id]
+
+
+def task_id_exists(root: Path | str, task_id: str) -> bool:
+    return bool(task_snapshots(root, task_id))
+
+
+def find_task_revision(root: Path | str, task_id: str, revision: int | None = None) -> Snapshot:
+    """Select the latest canonical snapshot for an exact task revision.
+
+    Historical generations remain immutable; this helper never makes the
+    selected snapshot current and therefore cannot create a second authority.
+    """
+    candidates = task_snapshots(root, task_id)
+    if not candidates:
+        raise KernelError(f"historical task not found: {task_id}")
+    if revision is None:
+        selected_revision = max(int(item.state.get("revision", 0)) for item in candidates)
+    else:
+        selected_revision = int(revision)
+        if selected_revision < 1:
+            raise KernelError("source revision must be positive")
+    matches = [item for item in candidates if int(item.state.get("revision", 0)) == selected_revision]
+    if not matches:
+        raise KernelError(f"historical task revision not found: {task_id}@r{selected_revision:03d}")
+    return max(matches, key=lambda item: item.generation)
+
+
 def find_operation(root: Path | str, operation_id: str, *, committed_only: bool = False) -> list[Snapshot]:
     if not operation_id:
         return []

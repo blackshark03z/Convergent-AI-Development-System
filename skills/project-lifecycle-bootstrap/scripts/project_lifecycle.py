@@ -11,7 +11,9 @@ import subprocess
 import sys
 from typing import Any
 
-KIT_VERSION = "1.1.0"
+from side_effect_contract import ContractError, validate_file as validate_side_effect_contract
+
+KIT_VERSION = "1.2.0"
 POLICY_FILE = ".buildos-policy.json"
 REQUIRED_CATEGORIES = {
     "USER_BEHAVIOR", "ARCHITECTURE_OWNERSHIP_BOUNDARY", "API_CONFIG_SCHEMA",
@@ -99,6 +101,24 @@ def lifecycle(policy: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def side_effect_contract(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
+    """Validate an optional, provider-neutral side-effect contract."""
+    value = policy.get("side_effect_contract", {"enabled": False})
+    if not isinstance(value, dict) or not isinstance(value.get("enabled"), bool):
+        raise LifecycleError("side_effect_contract must declare enabled as a boolean")
+    if not value["enabled"]:
+        return {"enabled": False, "status": "NOT_CONFIGURED"}
+    contract_path = safe_path(value.get("path"), "side_effect_contract.path")
+    path = root / contract_path
+    if not path.is_file():
+        raise LifecycleError(f"enabled side-effect contract is missing: {contract_path}")
+    try:
+        result = validate_side_effect_contract(path)
+    except ContractError as exc:
+        raise LifecycleError(f"side-effect contract failed: {exc}") from exc
+    return {"enabled": True, "path": contract_path, **result}
+
+
 def validate_policy(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
     handoff = policy.get("documentation_handoff")
     if not isinstance(handoff, dict):
@@ -150,7 +170,8 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(intent, dict): raise LifecycleError("project_intent is required; do not silently invent project purpose")
     for name in ("purpose", "intended_use", "success_definition", "non_goals", "constraints"):
         required_string(intent.get(name), f"project_intent.{name}")
-    return {"accepted_ref": accepted_ref, "accepted_sha": sha, "handoff": handoff, "profile": profile, "pack": pack, "gates": gates, "boundaries": boundaries, "modules": modules, "intent": intent, "testing_strategy": required_string(cfg.get("testing_strategy"), "testing_strategy"), "engineering_conventions": required_string(cfg.get("engineering_conventions"), "engineering_conventions")}
+    effect_contract = side_effect_contract(root, policy)
+    return {"accepted_ref": accepted_ref, "accepted_sha": sha, "handoff": handoff, "profile": profile, "pack": pack, "gates": gates, "boundaries": boundaries, "modules": modules, "intent": intent, "side_effect_contract": effect_contract, "testing_strategy": required_string(cfg.get("testing_strategy"), "testing_strategy"), "engineering_conventions": required_string(cfg.get("engineering_conventions"), "engineering_conventions")}
 
 
 def package_root() -> Path:
@@ -301,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         root = git_root(Path(args.root).resolve()); policy, _ = read_policy(root); facts = validate_policy(root, policy)
-        if args.command == "check": return emit("PASS", kit_version=KIT_VERSION, accepted_ref=facts["accepted_ref"], resolved_accepted_sha=facts["accepted_sha"], profile=facts["profile"], mandatory_by_adoption_contract=True, kernel_enforced=False)
+        if args.command == "check": return emit("PASS", kit_version=KIT_VERSION, accepted_ref=facts["accepted_ref"], resolved_accepted_sha=facts["accepted_sha"], profile=facts["profile"], side_effect_contract=facts["side_effect_contract"], mandatory_by_adoption_contract=True, kernel_enforced=False)
         if args.command == "bootstrap": return emit("PASS", kit_version=KIT_VERSION, **bootstrap(root, facts, args.mode, args.verify_gates))
         if args.command == "verify-gates": return emit("PASS", kit_version=KIT_VERSION, quality_gates=verify_gates_fn(root, facts["gates"]))
         if args.command == "reconcile": return emit("PASS", kit_version=KIT_VERSION, **reconcile(root, facts, args.candidate_sha))

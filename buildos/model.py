@@ -1,4 +1,4 @@
-"""Pure v1.22 lifecycle model.
+"""Pure lifecycle model for the v1.23 candidate.
 
 The model deliberately knows nothing about the filesystem or Git.  A
 transition receives a validated observation and returns a complete candidate
@@ -16,9 +16,13 @@ import uuid
 from typing import Any, Mapping
 
 
+# v1.23 adds only optional lineage/provenance fields.  Keeping the v1.22 state
+# schema is deliberate backward compatibility: existing immutable generations
+# remain readable without an in-place migration.  A future incompatible shape
+# must use the explicit migration contract documented by the lifecycle kit.
 SCHEMA = "buildos.state.v1.22"
 GENERATION_SCHEMA = "buildos.generation.v1"
-PHASES = {"ACTIVE", "PRODUCT_COMMITTED", "ASSURANCE_READY", "CLOSED", "ABORTED"}
+PHASES = {"ACTIVE", "PRODUCT_COMMITTED", "ASSURANCE_READY", "BLOCKED_SOURCE_FIX", "CLOSED", "ABORTED"}
 RISKS = {"R0", "R1", "R2", "R3"}
 AUTH_REQUIRED = {"R3"}
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
@@ -144,8 +148,45 @@ def _git_anchor(git: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def initial_state(request: Mapping[str, Any], git: Mapping[str, Any] | None, *, at: str | None = None) -> dict[str, Any]:
+def _validate_lineage(lineage: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if lineage is None:
+        return None
+    value = dict(lineage)
+    required = {
+        "kind", "source_task_id", "source_revision", "source_phase",
+        "source_generation", "source_generation_hash", "reason", "resolution_reference",
+    }
+    if set(value) != required or value.get("kind") != "CONTINUATION":
+        raise KernelError("continuation lineage has an invalid shape")
+    if not TASK_ID_RE.fullmatch(str(value.get("source_task_id", ""))):
+        raise KernelError("continuation lineage has an invalid source task")
+    if int(value.get("source_revision", 0)) < 1 or int(value.get("source_generation", 0)) < 1:
+        raise KernelError("continuation lineage has an invalid source revision or generation")
+    if value.get("source_phase") not in {"CLOSED", "ABORTED", "BLOCKED_SOURCE_FIX"}:
+        raise KernelError("continuation lineage must reference a released source")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(value.get("source_generation_hash", ""))):
+        raise KernelError("continuation lineage has an invalid source generation hash")
+    if not str(value.get("reason", "")).strip():
+        raise KernelError("continuation lineage requires a reason")
+    resolution = str(value.get("resolution_reference") or "").strip() or None
+    if value.get("source_phase") == "BLOCKED_SOURCE_FIX" and not resolution:
+        raise KernelError("continuation of a source-fix block requires a resolution reference")
+    value["source_revision"] = int(value["source_revision"])
+    value["source_generation"] = int(value["source_generation"])
+    value["reason"] = str(value["reason"]).strip()
+    value["resolution_reference"] = resolution
+    return value
+
+
+def initial_state(
+    request: Mapping[str, Any],
+    git: Mapping[str, Any] | None,
+    *,
+    lineage: Mapping[str, Any] | None = None,
+    at: str | None = None,
+) -> dict[str, Any]:
     req = validate_task_request(request)
+    normalized_lineage = _validate_lineage(lineage)
     stamp = at or req["created_at"]
     epoch_id = new_id("epoch")
     contract = {
@@ -165,6 +206,7 @@ def initial_state(request: Mapping[str, Any], git: Mapping[str, Any] | None, *, 
             "actor": req["authorization_actor"],
         },
         "skill": req["skill"],
+        "lineage": normalized_lineage,
     }
     state: dict[str, Any] = {
         "schema": SCHEMA,
@@ -187,6 +229,7 @@ def initial_state(request: Mapping[str, Any], git: Mapping[str, Any] | None, *, 
             "actor": req["authorization_actor"],
         },
         "skill": req["skill"],
+        "lineage": normalized_lineage,
         "contract_hash": sha256_json(contract),
         "lease": {"status": "CLAIMED", "holder": req["worker_id"]},
         "base_git": _git_anchor(git),
@@ -221,6 +264,7 @@ def validate_state(state: Mapping[str, Any]) -> None:
         raise KernelError("canonical state has invalid task_id")
     if int(state.get("revision", 0)) < 1:
         raise KernelError("canonical state has invalid revision")
+    _validate_lineage(state.get("lineage"))
     phase = state.get("phase")
     if phase not in PHASES:
         raise KernelError(f"invalid lifecycle phase: {phase}")
@@ -231,12 +275,18 @@ def validate_state(state: Mapping[str, Any]) -> None:
     if risk in AUTH_REQUIRED and (auth.get("status") != "APPROVED" or not auth.get("reference")):
         raise KernelError("canonical R3 state is missing owner authorization")
     lease = state.get("lease") or {}
-    if phase == "CLOSED" and lease.get("status") != "RELEASED":
-        raise KernelError("closed state must release its lease")
+    if phase in {"CLOSED", "ABORTED", "BLOCKED_SOURCE_FIX"} and lease.get("status") != "RELEASED":
+        raise KernelError("non-live state must release its lease")
     if phase in {"ACTIVE", "PRODUCT_COMMITTED", "ASSURANCE_READY"} and lease.get("status") != "CLAIMED":
         raise KernelError("live state must have a claimed lease")
     if phase == "PRODUCT_COMMITTED" and not (state.get("product_commit") or {}).get("sha"):
         raise KernelError("PRODUCT_COMMITTED requires a product commit anchor")
+    commit = state.get("product_commit") or {}
+    origin = commit.get("origin", "NATIVE")
+    if commit and origin not in {"NATIVE", "EXTERNAL_PREEXISTING"}:
+        raise KernelError("canonical product commit has an invalid provenance origin")
+    if origin == "EXTERNAL_PREEXISTING" and not str(commit.get("adoption_reason", "")).strip():
+        raise KernelError("externally adopted product commit requires an adoption reason")
     if phase == "ASSURANCE_READY" and not (state.get("assurance") or {}).get("evidence_sha"):
         raise KernelError("ASSURANCE_READY requires immutable evidence")
     if phase == "CLOSED" and not (state.get("assurance") or {}).get("evidence_sha"):
@@ -314,10 +364,37 @@ def transition_record_commit(prev: Mapping[str, Any], git: Mapping[str, Any], *,
         "branch": git.get("branch"),
         "recorded_at": result["updated_at"],
         "relation_to_base": relation,
+        "origin": "NATIVE",
     }
     result["next_action"] = "run validation and attach immutable evidence"
     validate_state(result)
     return result, {"kind": "PRODUCT_COMMIT", "sha": head, "tree": git.get("tree"), "relation_to_base": relation}
+
+
+def transition_adopt_existing_change(
+    prev: Mapping[str, Any],
+    git: Mapping[str, Any],
+    *,
+    reason: str,
+    at: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Record a pre-existing clean HEAD without claiming supervised creation."""
+    reason = str(reason).strip()
+    if not reason:
+        raise KernelError("adopt-existing-change requires a reason")
+    result, event = transition_record_commit(prev, git, at=at)
+    result["product_commit"]["origin"] = "EXTERNAL_PREEXISTING"
+    result["product_commit"]["adoption_reason"] = reason
+    result["next_action"] = "validate the externally pre-existing change and attach immutable evidence"
+    validate_state(result)
+    return result, {
+        "kind": "ADOPT_EXISTING_CHANGE",
+        "sha": event["sha"],
+        "tree": event.get("tree"),
+        "relation_to_base": event.get("relation_to_base"),
+        "origin": "EXTERNAL_PREEXISTING",
+        "reason": reason,
+    }
 
 
 def _relation_allowed(relation: str) -> bool:
@@ -442,6 +519,38 @@ def transition_abort(prev: Mapping[str, Any], *, reason: str, at: str | None = N
     result["abort_reason"] = str(reason).strip()
     validate_state(result)
     return result, {"kind": "ABORT", "reason": str(reason).strip()}
+
+
+def transition_block_for_source_fix(
+    prev: Mapping[str, Any],
+    *,
+    reason: str,
+    defect_reference: str,
+    at: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Release a live task without misclassifying a source defect as an abort."""
+    validate_state(prev)
+    if prev["phase"] not in {"ACTIVE", "PRODUCT_COMMITTED", "ASSURANCE_READY"}:
+        raise KernelError("block-for-source-fix requires a live task state")
+    reason = str(reason).strip()
+    defect_reference = str(defect_reference).strip()
+    if not reason or not defect_reference:
+        raise KernelError("block-for-source-fix requires a reason and defect reference")
+    result = _next(prev, phase="BLOCKED_SOURCE_FIX", at=at)
+    result["lease"] = {"status": "RELEASED", "holder": result.get("worker_id")}
+    result["lifecycle_ready"] = False
+    result["source_defect"] = {
+        "reason": reason,
+        "reference": defect_reference,
+        "blocked_at": result["updated_at"],
+    }
+    result["next_action"] = "complete a bounded source repair task, then continue via immutable lineage"
+    validate_state(result)
+    return result, {
+        "kind": "BLOCK_FOR_SOURCE_FIX",
+        "reason": reason,
+        "defect_reference": defect_reference,
+    }
 
 
 def transition_new_revision(

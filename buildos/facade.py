@@ -18,6 +18,8 @@ from .model import (
     now_iso,
     sha256_bytes,
     transition_abort,
+    transition_adopt_existing_change,
+    transition_block_for_source_fix,
     transition_close,
     transition_new_revision,
     transition_record_commit,
@@ -33,11 +35,13 @@ from .store import (
     commit_candidate,
     confirm_committed,
     failpoint,
+    find_task_revision,
     operation_id,
     paths,
     publish_immutable,
     read_current,
     recover as recover_store,
+    task_id_exists,
     validate_operation_id,
 )
 from .telemetry import auto_refresh, ingest as telemetry_ingest
@@ -45,6 +49,7 @@ from .telemetry import auto_refresh, ingest as telemetry_ingest
 
 SKILL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_EVIDENCE_OUTPUT = 16_000
+RELEASED_TASK_PHASES = {"CLOSED", "ABORTED", "BLOCKED_SOURCE_FIX"}
 
 
 def _normalized_commands(commands: Sequence[str], *, label: str) -> list[str]:
@@ -136,7 +141,7 @@ def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[
         elif governor.get("action") == "COMPACT_REQUIRED":
             next_action = "continue this outcome/chat; compact active context, re-measure latest prompt, then continue here if healthy"
     return {
-        "schema": "buildos.work_packet.v1.22",
+        "schema": "buildos.work_packet.v1.23",
         "task_id": state["task_id"],
         "revision": state["revision"],
         "lifecycle_state": state["phase"],
@@ -145,6 +150,8 @@ def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[
         "authorization_state": (state.get("authorization") or {}).get("status", "NONE"),
         "base_sha": (state.get("base_git") or {}).get("head"),
         "product_commit_sha": commit.get("sha"),
+        "product_commit_origin": commit.get("origin", "NATIVE") if commit else None,
+        "lineage": state.get("lineage"),
         "target_sha": assurance.get("target_sha"),
         "evidence_refs": [
             {"path": item.get("path"), "sha256": item.get("sha256"), "kind": item.get("kind")}
@@ -435,10 +442,12 @@ class BuildOS:
         if existing:
             if existing.state.get("contract_hash") == state.get("contract_hash"):
                 return self._idempotent(existing)
-            if existing.state.get("phase") not in {"CLOSED", "ABORTED"}:
+            if existing.state.get("phase") not in RELEASED_TASK_PHASES:
                 raise KernelError("a different live canonical task already exists")
             if existing.state.get("task_id") == state.get("task_id"):
                 raise KernelError("reuse of a terminal task id requires explicit new-revision semantics")
+            if task_id_exists(self.root, state["task_id"]):
+                raise KernelError("task_id was already used in canonical history; use a fresh task id with continuation lineage")
         failpoint("before_git_exclude", configured_failures)
         git_adapter.ensure_control_excluded(self.root)
         failpoint("after_git_exclude", configured_failures)
@@ -460,6 +469,158 @@ class BuildOS:
             configured_failures=configured_failures,
             projector=self.project,
             precommit_validator=lambda: _assert_git_unchanged(self.root, observed),
+        )
+
+    def continue_task(
+        self,
+        request: Mapping[str, Any],
+        *,
+        source_task_id: str,
+        source_revision: int | None,
+        reason: str,
+        resolution_reference: str | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        """Create a fresh canonical task linked to one terminal historical task."""
+        validated = validate_task_request(request)
+        reason = str(reason).strip()
+        if not reason:
+            raise KernelError("continue-task requires a reason")
+        if validated.get("skill"):
+            _skill_reference(self.root, self.package_root, validated["skill"])
+        current = self._snapshot()
+        source = find_task_revision(self.root, source_task_id, source_revision)
+        if source.state.get("phase") not in RELEASED_TASK_PHASES:
+            raise KernelError("continue-task source must have a released lease")
+        lineage = {
+            "kind": "CONTINUATION",
+            "source_task_id": source.state["task_id"],
+            "source_revision": int(source.state["revision"]),
+            "source_phase": source.state["phase"],
+            "source_generation": source.generation,
+            "source_generation_hash": source.generation_hash,
+            "reason": reason,
+            "resolution_reference": str(resolution_reference or "").strip() or None,
+        }
+        observed = git_adapter.snapshot(self.root)
+        state = initial_state(request, observed, lineage=lineage)
+        if (
+            current.state.get("task_id") == state["task_id"]
+            and current.state.get("contract_hash") == state["contract_hash"]
+            and current.state.get("lineage") == lineage
+        ):
+            return self._idempotent(current)
+        if current.state.get("phase") not in RELEASED_TASK_PHASES:
+            raise KernelError("continue-task requires the current canonical task to have a released lease")
+        if task_id_exists(self.root, state["task_id"]):
+            raise KernelError("continuation requires a fresh task_id")
+        if observed.get("tracked_control_paths") or observed.get("product_dirty"):
+            raise KernelError("continue-task requires a clean product tree with untracked Build OS control state")
+        if not observed.get("available") or Path(str(observed.get("root"))).resolve() != self.root:
+            raise KernelError("continue-task requires the Git worktree top-level")
+        operation = op_id or operation_id(
+            "CONTINUE_TASK", state["task_id"], state["contract_hash"], lineage,
+            observed.get("head"), observed.get("tree"),
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=current.generation_hash,
+            candidate_state=state,
+            event={"kind": "CONTINUE_TASK", "task_id": state["task_id"], "lineage": lineage, "base_sha": observed.get("head")},
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(self.root, observed),
+        )
+
+    def adopt_existing_change(
+        self,
+        request: Mapping[str, Any],
+        *,
+        base: str,
+        target: str,
+        reason: str,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        """Atomically adopt a pre-existing clean HEAD with explicit provenance."""
+        validated = validate_task_request(request)
+        if validated.get("side_effect") == "READ_ONLY":
+            raise KernelError("adopt-existing-change requires a write-capable task")
+        if validated.get("skill"):
+            _skill_reference(self.root, self.package_root, validated["skill"])
+        current = read_current(self.root, allow_uninitialized=True)
+        base_sha = git_adapter.resolve_commit(self.root, base)
+        target_sha = git_adapter.resolve_commit(self.root, target)
+        observed = git_adapter.snapshot(self.root, base_sha=base_sha)
+        base_anchor = git_adapter.commit_anchor(self.root, base_sha)
+        state = initial_state(request, base_anchor)
+        if current and (
+            current.state.get("task_id") == state["task_id"]
+            and current.state.get("contract_hash") == state["contract_hash"]
+            and (current.state.get("product_commit") or {}).get("origin") == "EXTERNAL_PREEXISTING"
+            and (current.state.get("product_commit") or {}).get("sha") == target_sha
+            and (current.state.get("product_commit") or {}).get("adoption_reason") == str(reason).strip()
+        ):
+            return self._idempotent(current)
+        if current and current.state.get("phase") not in RELEASED_TASK_PHASES:
+            raise KernelError("adopt-existing-change requires the current canonical task to have a released lease")
+        if task_id_exists(self.root, state["task_id"]):
+            raise KernelError("adopt-existing-change requires a fresh task_id")
+        if observed.get("head") != target_sha:
+            raise KernelError("adopt-existing-change target must equal the clean current HEAD")
+        if observed.get("tracked_control_paths") or observed.get("product_dirty"):
+            raise KernelError("adopt-existing-change requires a clean product tree with untracked Build OS control state")
+        if Path(str(observed.get("root"))).resolve() != self.root:
+            raise KernelError("adopt-existing-change requires the Git worktree top-level")
+        candidate, event = transition_adopt_existing_change(state, observed, reason=reason)
+        failpoint("before_git_exclude", configured_failures)
+        git_adapter.ensure_control_excluded(self.root)
+        failpoint("after_git_exclude", configured_failures)
+        operation = op_id or operation_id(
+            "ADOPT_EXISTING_CHANGE", candidate["task_id"], candidate["contract_hash"],
+            base_sha, target_sha, str(reason).strip(),
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=current.generation_hash if current else None,
+            candidate_state=candidate,
+            event=event,
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(self.root, observed, base_sha=base_sha),
+        )
+
+    def block_for_source_fix(
+        self,
+        *,
+        reason: str,
+        defect_reference: str,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        previous = self._snapshot()
+        if previous.event.get("kind") == "BLOCK_FOR_SOURCE_FIX":
+            prior = previous.state.get("source_defect") or {}
+            if prior.get("reason") == str(reason).strip() and prior.get("reference") == str(defect_reference).strip():
+                return self._idempotent(previous)
+        candidate, event = transition_block_for_source_fix(
+            previous.state, reason=reason, defect_reference=defect_reference,
+        )
+        operation = op_id or operation_id(
+            "BLOCK_FOR_SOURCE_FIX", previous.state["task_id"], previous.state["revision"],
+            str(reason).strip(), str(defect_reference).strip(),
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=previous.generation_hash,
+            candidate_state=candidate,
+            event=event,
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
         )
 
     def status(self, *, usage: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -500,7 +661,7 @@ class BuildOS:
             )
             packet = _packet(snapshot, telemetry, governor, self._skill(state))
             next_action = packet["next_action"]
-            if not observed.get("available") and state["phase"] not in {"CLOSED", "ABORTED"}:
+            if not observed.get("available") and state["phase"] not in RELEASED_TASK_PHASES:
                 next_action = "restore observable Git repository state before the next lifecycle action"
             elif read_only_violation:
                 next_action = "READ_ONLY baseline changed; restore it or abort without adopting product mutation"
