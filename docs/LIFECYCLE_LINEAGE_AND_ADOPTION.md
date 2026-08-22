@@ -34,6 +34,31 @@ observed the original external change. It rejects a target that is not current
 HEAD, dirty state, changed paths outside scope, prohibited paths, and unsafe
 change kinds.
 
+## Runtime-only continuation without a source delta
+
+A task that performs runtime work but must not alter the product repository is
+declared `NO_SOURCE_DELTA` (`--no-source-delta` in the facade). This is not a
+substitute for `PRODUCT_COMMITTED`: it is a separate, narrow assurance path:
+
+`ACTIVE -> ASSURANCE_READY -> CLOSED`
+
+The transition requires an observable baseline HEAD captured at task start,
+the exact same current HEAD, a clean product tree, no product commit anchor,
+deterministic acceptance checks, an assurance inspector, and a non-empty
+runtime acceptance reference. Any dirty path, real product delta, empty/no-op
+commit, synthetic commit anchor, or missing runtime evidence fails closed.
+Normal product-changing tasks continue to require
+`ACTIVE -> PRODUCT_COMMITTED -> ASSURANCE_READY -> CLOSED`.
+
+R3 remains full independent assurance. Its reviewer, reference, and distinct
+rollback/recovery check are mandatory, but its recorded scope is
+`NO_SOURCE_DELTA_RUNTIME_ASSURANCE`, not a fabricated product-delta review.
+
+A released `BLOCKED_SOURCE_FIX` task is never reopened for this path. Use
+`continue-task` with a fresh task ID and the required resolution reference;
+the new task carries immutable source generation/hash lineage and may declare
+`NO_SOURCE_DELTA`. The source task remains terminal and unchanged.
+
 ## State compatibility
 
 The immutable state schema remains `buildos.state.v1.22` because lineage,

@@ -24,6 +24,7 @@ SCHEMA = "buildos.state.v1.22"
 GENERATION_SCHEMA = "buildos.generation.v1"
 PHASES = {"ACTIVE", "PRODUCT_COMMITTED", "ASSURANCE_READY", "BLOCKED_SOURCE_FIX", "CLOSED", "ABORTED"}
 RISKS = {"R0", "R1", "R2", "R3"}
+PRODUCT_CHANGE_MODES = {"PRODUCT_DELTA", "NO_SOURCE_DELTA"}
 AUTH_REQUIRED = {"R3"}
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
 
@@ -107,15 +108,21 @@ def validate_task_request(request: Mapping[str, Any]) -> dict[str, Any]:
             raise KernelError("R3 requires explicit owner authorization APPROVED and a non-empty authorization reference")
         if auth_actor.casefold() == worker.casefold() or auth_actor.upper() in {"WORKER", "AUTO", "SELF"}:
             raise KernelError("worker cannot self-approve R3 work")
+    side_effect = str(request.get("side_effect", "READ_ONLY")).upper()
+    raw_change_mode = str(request.get("product_change_mode") or "").upper().strip()
+    product_change_mode = raw_change_mode or ("NO_SOURCE_DELTA" if side_effect == "READ_ONLY" else "PRODUCT_DELTA")
+    if product_change_mode not in PRODUCT_CHANGE_MODES:
+        raise KernelError("product_change_mode must be PRODUCT_DELTA or NO_SOURCE_DELTA")
     allowed = _clean_list(request.get("allowed_paths") or request.get("modify") or [])
     prohibited = _clean_list(request.get("prohibited_paths") or request.get("prohibited") or [])
-    side_effect = str(request.get("side_effect", "READ_ONLY")).upper()
     if side_effect == "READ_ONLY" and allowed:
         raise KernelError("READ_ONLY tasks cannot declare writable allowed paths")
-    if not allowed and side_effect != "READ_ONLY":
+    if product_change_mode == "NO_SOURCE_DELTA" and allowed:
+        raise KernelError("NO_SOURCE_DELTA tasks cannot declare writable product paths")
+    if not allowed and side_effect != "READ_ONLY" and product_change_mode == "PRODUCT_DELTA":
         raise KernelError("write-capable tasks require at least one allowed path")
     if not allowed:
-        allowed = ["<none-read-only>"]
+        allowed = ["<none-read-only>" if side_effect == "READ_ONLY" else "<none-no-source-delta>"]
     raw_skill = request.get("skill")
     return {
         "task_id": task_id,
@@ -123,6 +130,7 @@ def validate_task_request(request: Mapping[str, Any]) -> dict[str, Any]:
         "acceptance": acceptance,
         "risk": risk,
         "side_effect": side_effect,
+        "product_change_mode": product_change_mode,
         "allowed_paths": allowed,
         "prohibited_paths": prohibited,
         "worker_id": worker,
@@ -187,6 +195,8 @@ def initial_state(
 ) -> dict[str, Any]:
     req = validate_task_request(request)
     normalized_lineage = _validate_lineage(lineage)
+    if req["product_change_mode"] == "NO_SOURCE_DELTA" and req["side_effect"] != "READ_ONLY" and (not (git or {}).get("available") or not (git or {}).get("head")):
+        raise KernelError("NO_SOURCE_DELTA tasks require a known baseline product HEAD")
     stamp = at or req["created_at"]
     epoch_id = new_id("epoch")
     contract = {
@@ -196,6 +206,7 @@ def initial_state(
         "acceptance_commands": req["acceptance_commands"],
         "risk": req["risk"],
         "side_effect": req["side_effect"],
+        "product_change_mode": req["product_change_mode"],
         "allowed_paths": req["allowed_paths"],
         "prohibited_paths": req["prohibited_paths"],
         "worker_id": req["worker_id"],
@@ -219,6 +230,7 @@ def initial_state(
         "acceptance_commands": req["acceptance_commands"],
         "risk": req["risk"],
         "side_effect": req["side_effect"],
+        "product_change_mode": req["product_change_mode"],
         "allowed_paths": req["allowed_paths"],
         "prohibited_paths": req["prohibited_paths"],
         "worker_id": req["worker_id"],
@@ -249,7 +261,11 @@ def initial_state(
         "next_action": (
             "run deterministic read-only validation; product changes are forbidden"
             if req["side_effect"] == "READ_ONLY"
-            else "implement product change, then run record-commit"
+            else (
+                "complete runtime acceptance evidence, then validate the unchanged product baseline"
+                if req["product_change_mode"] == "NO_SOURCE_DELTA"
+                else "implement product change, then run record-commit"
+            )
         ),
         "history": [],
     }
@@ -271,6 +287,9 @@ def validate_state(state: Mapping[str, Any]) -> None:
     risk = state.get("risk")
     if risk not in RISKS:
         raise KernelError("canonical state has invalid risk")
+    change_mode = _product_change_mode(state)
+    if change_mode not in PRODUCT_CHANGE_MODES:
+        raise KernelError("canonical state has invalid product_change_mode")
     auth = state.get("authorization") or {}
     if risk in AUTH_REQUIRED and (auth.get("status") != "APPROVED" or not auth.get("reference")):
         raise KernelError("canonical R3 state is missing owner authorization")
@@ -282,6 +301,10 @@ def validate_state(state: Mapping[str, Any]) -> None:
     if phase == "PRODUCT_COMMITTED" and not (state.get("product_commit") or {}).get("sha"):
         raise KernelError("PRODUCT_COMMITTED requires a product commit anchor")
     commit = state.get("product_commit") or {}
+    if change_mode == "NO_SOURCE_DELTA" and commit:
+        raise KernelError("NO_SOURCE_DELTA state cannot contain a product commit anchor")
+    if phase == "PRODUCT_COMMITTED" and change_mode != "PRODUCT_DELTA":
+        raise KernelError("PRODUCT_COMMITTED is forbidden for NO_SOURCE_DELTA tasks")
     origin = commit.get("origin", "NATIVE")
     if commit and origin not in {"NATIVE", "EXTERNAL_PREEXISTING"}:
         raise KernelError("canonical product commit has an invalid provenance origin")
@@ -291,6 +314,18 @@ def validate_state(state: Mapping[str, Any]) -> None:
         raise KernelError("ASSURANCE_READY requires immutable evidence")
     if phase == "CLOSED" and not (state.get("assurance") or {}).get("evidence_sha"):
         raise KernelError("CLOSED requires immutable evidence")
+    assurance = state.get("assurance") or {}
+    if phase in {"ASSURANCE_READY", "CLOSED"} and assurance.get("mode", change_mode) != change_mode:
+        raise KernelError("assurance mode does not match the task product_change_mode")
+    if phase in {"ASSURANCE_READY", "CLOSED"} and change_mode == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY":
+        if not str(assurance.get("runtime_acceptance_reference") or "").strip():
+            raise KernelError("NO_SOURCE_DELTA runtime assurance requires a runtime acceptance reference")
+
+
+def _product_change_mode(state: Mapping[str, Any]) -> str:
+    """Read additive v1.23 mode while preserving legacy READ_ONLY generations."""
+    explicit = str(state.get("product_change_mode") or "").upper().strip()
+    return explicit or ("NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA")
 
 
 def _next(prev: Mapping[str, Any], *, phase: str | None = None, at: str | None = None) -> dict[str, Any]:
@@ -337,8 +372,9 @@ def transition_record_commit(prev: Mapping[str, Any], git: Mapping[str, Any], *,
         if prev["phase"] == "PRODUCT_COMMITTED" and (prev.get("product_commit") or {}).get("sha") == git.get("head"):
             return deepcopy(dict(prev)), {"kind": "COMMIT_ALREADY_RECORDED", "sha": git.get("head")}
         raise KernelError("record-commit requires ACTIVE lifecycle state")
-    if prev.get("side_effect") == "READ_ONLY":
-        raise KernelError("READ_ONLY tasks cannot record a product commit; validate the unchanged baseline directly")
+    if _product_change_mode(prev) == "NO_SOURCE_DELTA":
+        label = "READ_ONLY" if prev.get("side_effect") == "READ_ONLY" else "NO_SOURCE_DELTA"
+        raise KernelError(f"{label} tasks cannot record a product commit; validate the unchanged baseline directly")
     if not git.get("available") or not git.get("head"):
         raise KernelError("record-commit requires an observable Git HEAD (use --sha only with an explicit adapter)")
     if git.get("tracked_control_paths"):
@@ -437,40 +473,53 @@ def _validate_change_kinds(state: Mapping[str, Any], git: Mapping[str, Any]) -> 
 def transition_validate(prev: Mapping[str, Any], git: Mapping[str, Any], evidence: Mapping[str, Any], *, at: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     validate_state(prev)
     read_only = prev.get("side_effect") == "READ_ONLY"
-    if prev["phase"] != "PRODUCT_COMMITTED" and not (read_only and prev["phase"] == "ACTIVE"):
+    change_mode = _product_change_mode(prev)
+    no_source_delta = change_mode == "NO_SOURCE_DELTA"
+    runtime_no_source_delta = no_source_delta and not read_only
+    if prev["phase"] != "PRODUCT_COMMITTED" and not (no_source_delta and prev["phase"] == "ACTIVE"):
         raise KernelError("validate requires PRODUCT_COMMITTED lifecycle state")
-    target = ((prev.get("base_git") or {}).get("head") if read_only else (prev.get("product_commit") or {}).get("sha"))
-    relation = str(git.get("relation_to_base" if read_only else "relation_to_product", "UNKNOWN"))
+    target = ((prev.get("base_git") or {}).get("head") if no_source_delta else (prev.get("product_commit") or {}).get("sha"))
+    relation = str(git.get("relation_to_base" if no_source_delta else "relation_to_product", "UNKNOWN"))
     if not target or not git.get("head"):
         raise KernelError("validation requires a current Git HEAD and product anchor")
     if git.get("tracked_control_paths"):
         raise KernelError("validation refuses tracked .buildos control files")
     if git.get("product_dirty"):
         raise KernelError("validation requires a clean product tree")
-    if read_only and (git.get("head") != target or relation.upper() != "SAME" or git.get("changes_since_base")):
-        raise KernelError("READ_ONLY validation requires the unchanged bootstrap Git baseline")
+    if no_source_delta and (git.get("head") != target or relation.upper() != "SAME" or git.get("changes_since_base")):
+        label = "READ_ONLY" if read_only else "NO_SOURCE_DELTA"
+        raise KernelError(f"{label} validation requires the unchanged bootstrap Git baseline")
     if not _relation_allowed(relation):
         raise KernelError("current HEAD diverged from product anchor; create an explicit new revision")
     _validate_change_kinds(prev, git)
     _validate_scope(prev, git.get("changes_since_base") or [], case_insensitive=bool(git.get("case_insensitive_paths")))
     if not evidence.get("path") or not evidence.get("sha256"):
         raise KernelError("validation requires an immutable evidence reference and hash")
+    runtime_acceptance_reference = str(evidence.get("runtime_acceptance_reference") or "").strip() or None
+    if runtime_no_source_delta and not runtime_acceptance_reference:
+        raise KernelError("NO_SOURCE_DELTA runtime validation requires a runtime acceptance reference")
     if evidence.get("target_sha") and evidence.get("target_sha") != git.get("head"):
         raise KernelError("evidence target no longer matches current HEAD; preserve it and validate the new target")
     result = _next(prev, phase="ASSURANCE_READY", at=at)
     result["evidence"] = [*deepcopy(prev.get("evidence") or []), dict(evidence)]
     result["assurance"] = {
+        "mode": change_mode,
         "product_anchor_sha": target,
         "target_sha": git.get("head"),
         "validated_head": git.get("head"),
         "validated_tree": git.get("tree"),
         "relation_to_product": relation,
         "evidence_sha": evidence["sha256"],
+        "runtime_acceptance_reference": runtime_acceptance_reference,
         "validated_at": result["updated_at"],
     }
-    result["next_action"] = "close task; later descendant commits are refreshed, never reopened"
+    result["next_action"] = (
+        "close task while product HEAD remains exactly at the validated baseline"
+        if runtime_no_source_delta
+        else "close task; later descendant commits are refreshed, never reopened"
+    )
     validate_state(result)
-    return result, {"kind": "VALIDATION", "product_anchor_sha": target, "target_sha": git.get("head"), "relation": relation, "evidence": dict(evidence)}
+    return result, {"kind": "VALIDATION", "mode": change_mode, "product_anchor_sha": target, "target_sha": git.get("head"), "relation": relation, "evidence": dict(evidence)}
 
 
 def transition_close(prev: Mapping[str, Any], git: Mapping[str, Any] | None, *, at: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -487,6 +536,8 @@ def transition_close(prev: Mapping[str, Any], git: Mapping[str, Any] | None, *, 
         raise KernelError("close refuses tracked .buildos control files")
     if observed.get("available") and observed.get("head") and target:
         relation = str(observed.get("relation_to_validated", observed.get("relation_to_product", "UNKNOWN"))).upper()
+        if assurance.get("mode") == "NO_SOURCE_DELTA" and prev.get("side_effect") != "READ_ONLY" and (observed.get("head") != target or relation != "SAME"):
+            raise KernelError("NO_SOURCE_DELTA close requires HEAD to remain exactly equal to the validated baseline")
         if not _relation_allowed(relation):
             raise KernelError("close refuses a divergent HEAD; preserve evidence and create an explicit new revision")
         if observed.get("product_dirty"):
@@ -589,9 +640,11 @@ def transition_new_revision(
         result["risk"] = requested
     if allowed_paths is not None:
         revised_allowed = _clean_list(allowed_paths)
-        if not revised_allowed and result.get("side_effect") != "READ_ONLY":
+        if _product_change_mode(result) == "NO_SOURCE_DELTA" and revised_allowed:
+            raise KernelError("NO_SOURCE_DELTA revision cannot declare writable product paths")
+        if not revised_allowed and result.get("side_effect") != "READ_ONLY" and _product_change_mode(result) == "PRODUCT_DELTA":
             raise KernelError("write-capable revision requires at least one allowed path")
-        result["allowed_paths"] = revised_allowed or ["<declared-by-worker>"]
+        result["allowed_paths"] = revised_allowed or (["<none-no-source-delta>"] if _product_change_mode(result) == "NO_SOURCE_DELTA" else ["<declared-by-worker>"])
     if prohibited_paths is not None:
         result["prohibited_paths"] = _clean_list(prohibited_paths)
     if owner_authorization is not None or authorization_reference is not None or authorization_actor is not None:
@@ -616,7 +669,11 @@ def transition_new_revision(
         "projected_prompt_tokens": None,
         "last_signal": "NEW_REVISION",
     }
-    result["next_action"] = "implement the revised scope, then record-commit"
+    result["next_action"] = (
+        "complete runtime acceptance evidence, then validate the unchanged product baseline"
+        if _product_change_mode(result) == "NO_SOURCE_DELTA" and result.get("side_effect") != "READ_ONLY"
+        else "implement the revised scope, then record-commit"
+    )
     # Prior revision state/evidence is already immutable in the parent
     # generation chain.  Do not copy full history into every new snapshot.
     result["history"] = []
@@ -627,6 +684,7 @@ def transition_new_revision(
         "acceptance_commands": result.get("acceptance_commands") or [],
         "risk": result["risk"],
         "side_effect": result["side_effect"],
+        "product_change_mode": _product_change_mode(result),
         "allowed_paths": result["allowed_paths"],
         "prohibited_paths": result["prohibited_paths"],
         "worker_id": result["worker_id"],

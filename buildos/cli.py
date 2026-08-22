@@ -67,6 +67,7 @@ def _task_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--check", action="append", default=[])
     command.add_argument("--risk", default="auto", choices=["auto", "R0", "R1", "R2", "R3"])
     command.add_argument("--side-effect", default="WRITE", choices=["READ_ONLY", "WRITE", "CREATE_NEW_VERSION", "MUTATE_IN_PLACE", "OVERWRITE", "DELETE"])
+    command.add_argument("--no-source-delta", action="store_true", help="declare a runtime-only task whose product HEAD must remain exactly at baseline")
     command.add_argument("--allow", action="append", default=[])
     command.add_argument("--prohibit", action="append", default=[])
     command.add_argument("--worker-id", default="WORKER")
@@ -85,6 +86,7 @@ def _task_request(args: argparse.Namespace) -> dict[str, Any]:
         "acceptance_commands": args.check,
         "risk": args.risk,
         "side_effect": args.side_effect,
+        "product_change_mode": "NO_SOURCE_DELTA" if args.no_source_delta else None,
         "allowed_paths": args.allow,
         "prohibited_paths": args.prohibit,
         "worker_id": args.worker_id,
@@ -120,6 +122,7 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     validate.add_argument("--reviewer")
     validate.add_argument("--review-reference")
     validate.add_argument("--rollback-check")
+    validate.add_argument("--runtime-acceptance-reference", help="required durable acceptance reference for NO_SOURCE_DELTA runtime tasks")
     validate.add_argument("--timeout", type=int, default=120)
     _failure_arg(validate)
 
@@ -213,6 +216,7 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
                 reviewer=args.reviewer,
                 review_reference=args.review_reference,
                 rollback_check=args.rollback_check,
+                runtime_acceptance_reference=args.runtime_acceptance_reference,
                 timeout=args.timeout,
                 op_id=args.operation_id,
                 configured_failures=args.failure_at,

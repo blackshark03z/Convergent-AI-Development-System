@@ -37,6 +37,21 @@ Typical flow is:
    reviewer, reference, and a distinct rollback/recovery check.
 5. `close` after evidence is verified.
 
+An explicitly runtime-only task uses `--no-source-delta`. It captures the
+baseline product HEAD at bootstrap and may validate directly from `ACTIVE`
+only when that exact HEAD remains current, the product tree is clean, and
+`validate` receives a durable `--runtime-acceptance-reference`. Its canonical
+state and evidence say `NO_SOURCE_DELTA`; `product_commit` remains empty. Empty
+or synthetic commits, baseline-as-new-commit recording, and product drift all
+fail closed. Ordinary write-capable tasks still require `record-commit` and
+`PRODUCT_COMMITTED` before assurance.
+
+R3 rules are unchanged: owner authorization, an independent reviewer and
+reference, and a distinct rollback/recovery check remain mandatory. For a
+runtime-only task the immutable review scope is
+`NO_SOURCE_DELTA_RUNTIME_ASSURANCE`, so the review verifies runtime/lifecycle
+proof and does not claim a nonexistent product diff.
+
 There is no `reopen`.  A product change after assurance is preserved as proof
 of the prior revision and requires `new-revision`; a legitimate tree-equivalent
 descendant is simply recorded during close.

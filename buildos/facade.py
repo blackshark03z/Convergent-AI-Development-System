@@ -147,12 +147,14 @@ def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[
         "lifecycle_state": state["phase"],
         "next_action": next_action,
         "risk": state["risk"],
+        "product_change_mode": state.get("product_change_mode", "NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA"),
         "authorization_state": (state.get("authorization") or {}).get("status", "NONE"),
         "base_sha": (state.get("base_git") or {}).get("head"),
         "product_commit_sha": commit.get("sha"),
         "product_commit_origin": commit.get("origin", "NATIVE") if commit else None,
         "lineage": state.get("lineage"),
         "target_sha": assurance.get("target_sha"),
+        "runtime_acceptance_reference": assurance.get("runtime_acceptance_reference"),
         "evidence_refs": [
             {"path": item.get("path"), "sha256": item.get("sha256"), "kind": item.get("kind")}
             for item in state.get("evidence") or []
@@ -200,6 +202,7 @@ def _prepare_evidence(
     reviewer: str | None,
     review_reference: str | None,
     rollback_check: str | None,
+    runtime_acceptance_reference: str | None,
     timeout: int,
     configured_failures: str | None,
 ) -> dict[str, Any]:
@@ -213,10 +216,17 @@ def _prepare_evidence(
     review_reference = review_reference or None
     rollback_check = str(rollback_check).strip() if rollback_check is not None else None
     rollback_check = rollback_check or None
+    runtime_acceptance_reference = str(runtime_acceptance_reference).strip() if runtime_acceptance_reference is not None else None
+    runtime_acceptance_reference = runtime_acceptance_reference or None
+    change_mode = str(state.get("product_change_mode") or ("NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA"))
+    runtime_no_source_delta = change_mode == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY"
+    assurance_scope = "NO_SOURCE_DELTA_RUNTIME_ASSURANCE" if runtime_no_source_delta else ("READ_ONLY_ASSURANCE" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA_ASSURANCE")
     if not checks:
         raise KernelError("validation requires at least one deterministic check")
     if not inspected_by:
-        raise KernelError("validation requires output/diff inspection identity")
+        raise KernelError("validation requires an assurance inspection identity")
+    if runtime_no_source_delta and not runtime_acceptance_reference:
+        raise KernelError("NO_SOURCE_DELTA runtime validation requires a runtime acceptance reference")
     if state["risk"] == "R3":
         if not reviewer or not review_reference:
             raise KernelError("R3 validation requires an independent reviewer and review reference")
@@ -260,7 +270,10 @@ def _prepare_evidence(
             and prior.get("task_id") == state["task_id"]
             and prior_revision == int(state["revision"])
             and prior.get("risk") == state["risk"]
+            and prior.get("product_change_mode", change_mode) == change_mode
+            and (not runtime_no_source_delta or prior.get("assurance_scope") == assurance_scope)
             and prior.get("target_sha") == git.get("head")
+            and prior.get("runtime_acceptance_reference") == runtime_acceptance_reference
             and prior.get("acceptance") == (state.get("acceptance") or [])
             and prior.get("inspected_by") == inspected_by
             and prior_commands == commands
@@ -277,11 +290,19 @@ def _prepare_evidence(
                     and prior_rollback.get("role") == "ROLLBACK_RECOVERY"
                 )
             )
-            and (state["risk"] != "R3" or (prior_review.get("reviewer") == reviewer and prior_review.get("reference") == review_reference))
+            and (state["risk"] != "R3" or (
+                prior_review.get("reviewer") == reviewer
+                and prior_review.get("reference") == review_reference
+                and (not runtime_no_source_delta or prior_review.get("scope") == assurance_scope)
+            ))
         )
         if not structurally_valid:
             raise KernelError("existing immutable evidence path belongs to another transition")
-        return {"kind": "VALIDATION", "path": rel.as_posix(), "sha256": sha256_bytes(data), "target_sha": prior.get("target_sha")}
+        return {
+            "kind": "VALIDATION", "path": rel.as_posix(), "sha256": sha256_bytes(data),
+            "target_sha": prior.get("target_sha"),
+            "runtime_acceptance_reference": runtime_acceptance_reference,
+        }
     results = []
     for command in commands:
         result = _run_check(root, command, timeout)
@@ -307,14 +328,21 @@ def _prepare_evidence(
         "task_id": state["task_id"],
         "revision": state["revision"],
         "risk": state["risk"],
-        "product_anchor_sha": (state.get("product_commit") or {}).get("sha"),
+        "product_change_mode": change_mode,
+        "assurance_scope": assurance_scope,
+        "product_anchor_sha": ((state.get("base_git") or {}).get("head") if change_mode == "NO_SOURCE_DELTA" else (state.get("product_commit") or {}).get("sha")),
         "target_sha": after_checks.get("head"),
         "target_tree": after_checks.get("tree"),
         "acceptance": state.get("acceptance") or [],
+        "runtime_acceptance_reference": runtime_acceptance_reference,
         "checks": results,
         "rollback_check": rollback_result,
         "inspected_by": inspected_by,
-        "review": {"reviewer": reviewer, "reference": review_reference} if reviewer else None,
+        "review": {
+            "reviewer": reviewer,
+            "reference": review_reference,
+            "scope": assurance_scope,
+        } if reviewer else None,
         "created_at": now_iso(),
         "operation_id": operation,
     }
@@ -331,7 +359,11 @@ def _prepare_evidence(
     if published != data:
         raise KernelError("immutable evidence publication selected different bytes")
     digest = sha256_bytes(published)
-    return {"kind": "VALIDATION", "path": rel.as_posix(), "sha256": digest, "target_sha": after_checks.get("head")}
+    return {
+        "kind": "VALIDATION", "path": rel.as_posix(), "sha256": digest,
+        "target_sha": after_checks.get("head"),
+        "runtime_acceptance_reference": runtime_acceptance_reference,
+    }
 
 
 class BuildOS:
@@ -639,9 +671,12 @@ class BuildOS:
             )
             head_advanced = observed.get("head") != (state.get("base_git") or {}).get("head")
             read_only_violation = state["phase"] == "ACTIVE" and state.get("side_effect") == "READ_ONLY" and (head_advanced or observed.get("product_dirty"))
+            runtime_no_source = state.get("product_change_mode") == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY"
+            no_source_violation = state["phase"] == "ACTIVE" and runtime_no_source and (head_advanced or observed.get("product_dirty"))
             unadopted = (
                 state["phase"] == "ACTIVE"
                 and state.get("side_effect") != "READ_ONLY"
+                and not runtime_no_source
                 and head_advanced
                 and observed.get("relation_to_base") == "DESCENDANT"
             )
@@ -665,6 +700,8 @@ class BuildOS:
                 next_action = "restore observable Git repository state before the next lifecycle action"
             elif read_only_violation:
                 next_action = "READ_ONLY baseline changed; restore it or abort without adopting product mutation"
+            elif no_source_violation:
+                next_action = "NO_SOURCE_DELTA baseline changed or is dirty; restore the exact clean baseline or block without recording a product commit"
             elif _rollover_binding_blocked(state, telemetry) and state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
                 next_action = "stop model work; restore the expected rollover telemetry binding"
             elif state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"} and governor["action"] == "HARD_STOP":
@@ -694,6 +731,7 @@ class BuildOS:
                 "lifecycle_ready": state.get("lifecycle_ready", False),
                 "unadopted_product_commit": unadopted,
                 "read_only_baseline_violation": read_only_violation,
+                "no_source_delta_violation": no_source_violation,
                 "git_relation_problem": relation_problem,
                 "unvalidated_product_change": late_validated_change,
                 "git": observed,
@@ -735,6 +773,7 @@ class BuildOS:
         reviewer: str | None = None,
         review_reference: str | None = None,
         rollback_check: str | None = None,
+        runtime_acceptance_reference: str | None = None,
         timeout: int = 120,
         op_id: str | None = None,
         configured_failures: str | None = None,
@@ -752,6 +791,8 @@ class BuildOS:
         review_reference = review_reference or None
         rollback_check = str(rollback_check).strip() if rollback_check is not None else None
         rollback_check = rollback_check or None
+        runtime_acceptance_reference = str(runtime_acceptance_reference).strip() if runtime_acceptance_reference is not None else None
+        runtime_acceptance_reference = runtime_acceptance_reference or None
         if state.get("phase") == "ASSURANCE_READY" and previous.event.get("kind") == "VALIDATION":
             if op_id is not None and previous.operation_id != op_id:
                 raise KernelError("task is already assured under a different validation operation")
@@ -770,6 +811,7 @@ class BuildOS:
                 reviewer=reviewer,
                 review_reference=review_reference,
                 rollback_check=rollback_check,
+                runtime_acceptance_reference=runtime_acceptance_reference,
                 timeout=timeout,
                 configured_failures=configured_failures,
             )
@@ -785,11 +827,15 @@ class BuildOS:
         transition_validate(
             state,
             observed,
-            {"path": "PRECONDITION_ONLY", "sha256": "PRECONDITION_ONLY", "target_sha": observed.get("head")},
+            {
+                "path": "PRECONDITION_ONLY", "sha256": "PRECONDITION_ONLY",
+                "target_sha": observed.get("head"),
+                "runtime_acceptance_reference": runtime_acceptance_reference,
+            },
         )
         operation = op_id or operation_id(
             "VALIDATE", state["task_id"], state["revision"], observed.get("head"), combined,
-            inspected_by, reviewer, review_reference, rollback_check,
+            inspected_by, reviewer, review_reference, rollback_check, runtime_acceptance_reference,
         )
         evidence = _prepare_evidence(
             self.root,
@@ -801,6 +847,7 @@ class BuildOS:
             reviewer=reviewer,
             review_reference=review_reference,
             rollback_check=rollback_check,
+            runtime_acceptance_reference=runtime_acceptance_reference,
             timeout=timeout,
             configured_failures=configured_failures,
         )
@@ -837,11 +884,13 @@ class BuildOS:
                 validated_sha=assurance.get("target_sha"),
             )
             relation = str(observed_closed.get("relation_to_validated", "UNKNOWN")).upper()
+            runtime_no_source = assurance.get("mode") == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY"
             if (
                 not observed_closed.get("available")
                 or observed_closed.get("product_dirty")
                 or relation not in {"SAME", "DESCENDANT"}
                 or bool(observed_closed.get("changes_since_validated"))
+                or (runtime_no_source and (observed_closed.get("head") != assurance.get("target_sha") or relation != "SAME"))
             ):
                 raise KernelError("closed proof does not cover the current product state; start an explicit new revision")
             return self._idempotent(previous)
