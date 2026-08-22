@@ -19,7 +19,7 @@ OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.23_project_lifecycle_kit_v
 EXCLUDE = {"__pycache__", ".git", ".buildos", "_proof_tmp"}
 VALIDATION = ROOT / "PACKAGE_VALIDATION.json"
 CONTENTS = ROOT / "PACKAGE_CONTENTS.sha256"
-FROZEN_KERNEL_COMMIT = "80be38bf18c559c528477bf7cb7356d340b061a7"
+FROZEN_KERNEL_COMMIT = "01e68e86d67e974dd50573127baa78060bfcfafa"
 FROZEN_KERNEL = ROOT / "FROZEN_KERNEL.sha256"
 IDENTITY = ROOT / "scripts" / "package_identity.py"
 

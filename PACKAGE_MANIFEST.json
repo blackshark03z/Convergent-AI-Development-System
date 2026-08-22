@@ -1,7 +1,7 @@
 {
   "schema": "buildos.portable-package.v1",
   "package_id": "build-os-v1.23-project-lifecycle-kit.1.2.0-continuity-1.1.0-context-epoch-closeout-safety-1.0.3",
-  "frozen_kernel_commit": "80be38bf18c559c528477bf7cb7356d340b061a7",
+  "frozen_kernel_commit": "01e68e86d67e974dd50573127baa78060bfcfafa",
   "frozen_kernel_version": "1.23-candidate",
   "continuity_skill": {"name": "documentation-handoff-continuity", "version": "1.1.0", "mandatory_by_adoption_contract": true, "kernel_enforced": false},
   "project_lifecycle_kit": {"version": "1.2.0", "bootstrap_skill": {"name": "project-lifecycle-bootstrap", "version": "1.2.0"}, "mandatory_by_adoption_contract": true, "kernel_enforced": false},

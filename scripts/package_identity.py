@@ -10,7 +10,7 @@ import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.23"
-KERNEL_COMMIT = "80be38bf18c559c528477bf7cb7356d340b061a7"
+KERNEL_COMMIT = "01e68e86d67e974dd50573127baa78060bfcfafa"
 
 
 def invoke(path: Path) -> dict[str, object]:
