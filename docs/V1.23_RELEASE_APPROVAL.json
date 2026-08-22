@@ -1,0 +1,17 @@
+{
+  "schema": "buildos.release-approval.v1",
+  "canonical_task": "BUILDOS-RUNTIME-ONLY-NO-SOURCE-DELTA-ASSURANCE-CLOSEOUT",
+  "project": "SHARED_BUILD_OS",
+  "status": "APPROVED_R3",
+  "decision": "APPROVE_R3",
+  "reviewer": "STORY-AUTO-TECHLEAD",
+  "reference": "BUILDOS-RUNTIME-NO-SOURCE-DELTA-R3-APPROVED-2026-08-22",
+  "review_target": "d18a29e9232fc672b927720f7a3d6f34adc8e614",
+  "kernel_source_commit": "01e68e86d67e974dd50573127baa78060bfcfafa",
+  "r3_bundle_sha256": "71b15c8867eb554b2eb4a0573e0d9715fc813c0ce804367feab9118a97f23e0e",
+  "patch_sha256": "806c1e35c732bddb3e85cdc411009a3de2a10c2d26921eff40a380a0c5053d99",
+  "recorded_at": "2026-08-22",
+  "scope": "RELEASE_METADATA_AND_PACKAGE_FINALIZATION_ONLY",
+  "kernel_behavior_frozen": true,
+  "story_auto_is_compatibility_case_only": true
+}

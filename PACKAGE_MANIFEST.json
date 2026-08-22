@@ -3,6 +3,7 @@
   "package_id": "build-os-v1.23-project-lifecycle-kit.1.2.0-continuity-1.1.0-context-epoch-closeout-safety-1.0.3",
   "frozen_kernel_commit": "01e68e86d67e974dd50573127baa78060bfcfafa",
   "frozen_kernel_version": "1.23-candidate",
+  "release_evidence": {"path": "docs/V1.23_RELEASE_APPROVAL.json", "status": "APPROVED_R3", "reference": "BUILDOS-RUNTIME-NO-SOURCE-DELTA-R3-APPROVED-2026-08-22", "review_target": "d18a29e9232fc672b927720f7a3d6f34adc8e614"},
   "continuity_skill": {"name": "documentation-handoff-continuity", "version": "1.1.0", "mandatory_by_adoption_contract": true, "kernel_enforced": false},
   "project_lifecycle_kit": {"version": "1.2.0", "bootstrap_skill": {"name": "project-lifecycle-bootstrap", "version": "1.2.0"}, "mandatory_by_adoption_contract": true, "kernel_enforced": false},
   "runtime_context_epoch_capability": {"name": "codex-app-server-context-epoch", "version": "1.0.1", "identity": "codex-app-server-context-epoch.v1"},
