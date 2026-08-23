@@ -12,7 +12,7 @@ import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.24"
-KERNEL_COMMIT = "c5baf52e848483497150f6f8610b8082abbf9f20"
+KERNEL_COMMIT = "955d0710fe0913d1fc0c37496bc217298e5e2299"
 
 
 def invoke(path: Path) -> dict[str, object]:
@@ -47,7 +47,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
     if runtime.get("name") != "codex-app-server-context-epoch" or not expected["runtime_capability"] or not expected["runtime_version"]:
         errors.append("MANIFEST_RUNTIME_CONTEXT_EPOCH_IDENTITY_MISMATCH")
     execution_runtime = manifest.get("execution_runtime") or {}
-    if execution_runtime.get("version") != "1.0.2" or execution_runtime.get("spec_schema") != "buildos.execution-spec.v1" or execution_runtime.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION":
+    if execution_runtime.get("version") != "1.0.3" or execution_runtime.get("spec_schema") != "buildos.execution-spec.v1" or execution_runtime.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION":
         errors.append("MANIFEST_EXECUTION_RUNTIME_IDENTITY_MISMATCH")
     registries = manifest.get("trusted_command_registries")
     if not isinstance(registries, dict):
