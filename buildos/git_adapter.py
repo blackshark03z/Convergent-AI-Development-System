@@ -5,6 +5,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import fnmatch
+import hashlib
+import json
 from typing import Any
 
 
@@ -76,6 +79,28 @@ def changed_paths(root: Path | str, older: str | None, newer: str | None, *, dif
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or proc.stdout or "git diff observation failed").strip())
     return sorted({line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()})
+
+
+def dependency_fingerprint(root: Path | str, commit: str, patterns: list[str]) -> str:
+    """Hash exact Git blob identities selected by semantic claim patterns."""
+    sha = resolve_commit(root, commit)
+    proc = _run(Path(root), "ls-tree", "-r", "--full-tree", sha, check=True)
+    selected: list[dict[str, str]] = []
+    for line in proc.stdout.splitlines():
+        metadata, separator, raw_path = line.partition("\t")
+        if not separator:
+            continue
+        parts = metadata.split()
+        if len(parts) != 3:
+            continue
+        mode, kind, blob = parts
+        path = raw_path.replace("\\", "/")
+        if path.startswith(".buildos/"):
+            continue
+        if any(fnmatch.fnmatchcase(path, pattern) or path == pattern.rstrip("/") or path.startswith(pattern.rstrip("/") + "/") for pattern in patterns):
+            selected.append({"path": path, "mode": mode, "kind": kind, "blob": blob})
+    payload = {"commit_tree_claim_patterns": list(patterns), "selected": sorted(selected, key=lambda row: row["path"])}
+    return hashlib.sha256((json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")).hexdigest()
 
 
 def _dirty_paths(root: Path) -> list[str]:

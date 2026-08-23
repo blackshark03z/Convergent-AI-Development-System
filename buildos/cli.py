@@ -1,4 +1,4 @@
-"""Command-line interface for the thin v1.23 candidate facade."""
+"""Command-line interface for the thin v1.24 candidate facade."""
 from __future__ import annotations
 
 import argparse
@@ -67,6 +67,8 @@ def _task_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--check", action="append", default=[])
     command.add_argument("--risk", default="auto", choices=["auto", "R0", "R1", "R2", "R3"])
     command.add_argument("--side-effect", default="WRITE", choices=["READ_ONLY", "WRITE", "CREATE_NEW_VERSION", "MUTATE_IN_PLACE", "OVERWRITE", "DELETE"])
+    command.add_argument("--execution-class", default="LOCAL_REVERSIBLE", choices=["LOCAL_REVERSIBLE", "LOCAL_HIGH_COST", "EXTERNAL_EFFECT"])
+    command.add_argument("--execution-spec", type=Path, help="task execution spec compiled before implementation or dispatch")
     command.add_argument("--no-source-delta", action="store_true", help="declare a runtime-only task whose product HEAD must remain exactly at baseline")
     command.add_argument("--allow", action="append", default=[])
     command.add_argument("--prohibit", action="append", default=[])
@@ -86,6 +88,7 @@ def _task_request(args: argparse.Namespace) -> dict[str, Any]:
         "acceptance_commands": args.check,
         "risk": args.risk,
         "side_effect": args.side_effect,
+        "execution_class": args.execution_class,
         "product_change_mode": "NO_SOURCE_DELTA" if args.no_source_delta else None,
         "allowed_paths": args.allow,
         "prohibited_paths": args.prohibit,
@@ -99,9 +102,12 @@ def _task_request(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def parser(*, admin: bool = False) -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Build OS v1.23 candidate transactional facade")
+    p = argparse.ArgumentParser(description="Build OS v1.24 candidate transactional facade")
     p.add_argument("--root", type=Path, default=Path.cwd(), help="target repository")
     commands = p.add_subparsers(dest="command", required=True)
+
+    admit = commands.add_parser("admit", help="compile the pre-execution envelope without lifecycle mutation")
+    _task_args(admit)
 
     bootstrap = commands.add_parser("bootstrap", help="materialize one task atomically")
     _task_args(bootstrap)
@@ -152,6 +158,38 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     continuation.add_argument("--resolution-reference")
     _failure_arg(continuation)
 
+    blocker = commands.add_parser("report-blocker", help="classify a blocker and deterministically decide bounded correction or replan")
+    blocker.add_argument("--family", required=True)
+    blocker.add_argument("--evidence", required=True)
+    blocker.add_argument("--assumption-id")
+    _failure_arg(blocker)
+
+    replan = commands.add_parser("replan", help="replace an invalid pre-commit execution plan")
+    replan.add_argument("--execution-spec", type=Path, required=True)
+    _failure_arg(replan)
+
+    effect = commands.add_parser("effect", help="advance one external-effect transaction record")
+    effect.add_argument("--transition", required=True, choices=["PREPARE", "DISPATCH", "ACK", "RESULT", "COMMIT", "RECONCILE_NO_EFFECT", "RECONCILE_CONFIRMED", "TIMEOUT_NO_DISPATCH", "FAIL_BEFORE_DISPATCH", "AUTHORIZE_RETRY"])
+    effect.add_argument("--effect-id", required=True)
+    effect.add_argument("--action-id")
+    effect.add_argument("--reference")
+    effect.add_argument("--sha256")
+    effect.add_argument("--predicate")
+    _failure_arg(effect)
+
+    review = commands.add_parser("review", help="record content-bound PASS, SALVAGEABLE or REJECT review evidence")
+    review.add_argument("--review-id", required=True)
+    review.add_argument("--asset-id", required=True)
+    review.add_argument("--content-sha256", required=True)
+    review.add_argument("--outcome", required=True, choices=["PASS", "SALVAGEABLE", "REJECT"])
+    review.add_argument("--evidence", required=True)
+    review.add_argument("--supersedes")
+    review.add_argument("--derived-from-review")
+    review.add_argument("--transformation-reference")
+    _failure_arg(review)
+
+    commands.add_parser("assurance-plan", help="show exact claims to execute or reuse")
+
     if admin:
         adopt = commands.add_parser("adopt-existing-change", help="record a pre-existing clean HEAD without claiming supervised creation")
         _task_args(adopt)
@@ -188,10 +226,13 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
         if args.command == "bootstrap":
             value = os.bootstrap(
                 _task_request(args),
+                execution_spec=args.execution_spec,
                 op_id=args.operation_id,
                 configured_failures=args.failure_at,
             )
             _json(_result(value))
+        elif args.command == "admit":
+            _json(os.admit(_task_request(args), execution_spec=args.execution_spec))
         elif args.command in {"status", "next"}:
             usage = {
                 key: value for key, value in {
@@ -254,15 +295,44 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
                 source_revision=args.from_revision,
                 reason=args.reason,
                 resolution_reference=args.resolution_reference,
+                execution_spec=args.execution_spec,
                 op_id=args.operation_id,
                 configured_failures=args.failure_at,
             )))
+        elif args.command == "report-blocker":
+            _json(_result(os.report_blocker(
+                family=args.family, evidence=args.evidence, assumption_id=args.assumption_id,
+                op_id=args.operation_id, configured_failures=args.failure_at,
+            )))
+        elif args.command == "replan":
+            _json(_result(os.replan(
+                execution_spec=args.execution_spec, op_id=args.operation_id,
+                configured_failures=args.failure_at,
+            )))
+        elif args.command == "effect":
+            _json(_result(os.effect(
+                transition=args.transition, effect_id=args.effect_id, action_id=args.action_id,
+                reference=args.reference, sha256=args.sha256, predicate=args.predicate,
+                op_id=args.operation_id, configured_failures=args.failure_at,
+            )))
+        elif args.command == "review":
+            _json(_result(os.review(
+                review_id=args.review_id, asset_id=args.asset_id,
+                content_sha256=args.content_sha256, outcome=args.outcome,
+                evidence=args.evidence, supersedes=args.supersedes,
+                derived_from_review=args.derived_from_review,
+                transformation_reference=args.transformation_reference,
+                op_id=args.operation_id, configured_failures=args.failure_at,
+            )))
+        elif args.command == "assurance-plan":
+            _json(os.assurance_plan())
         elif args.command == "adopt-existing-change":
             _json(_result(os.adopt_existing_change(
                 _task_request(args),
                 base=args.base,
                 target=args.target,
                 reason=args.reason,
+                execution_spec=args.execution_spec,
                 op_id=args.operation_id,
                 configured_failures=args.failure_at,
             )))

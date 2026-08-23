@@ -1,4 +1,4 @@
-# Build OS v1.23 candidate
+# Build OS v1.24 candidate
 
 This is the isolated candidate produced for `BUILD-OS-FINAL-ULTRA-CANDIDATE`.
 It is a small, repository-independent control plane.  Point the external
@@ -6,7 +6,7 @@ facade at a product repository; do not copy generated control state into the
 product source tree:
 
 ```powershell
-python D:\path\to\build-os-v123-candidate\scripts\ai.py --root D:\path\to\product bootstrap `
+python D:\path\to\build-os-v124-candidate\scripts\ai.py --root D:\path\to\product bootstrap `
   --task-id TASK-001 --outcome "the change is correct" --allow src/app.py
 ```
 
@@ -18,10 +18,12 @@ policy uses the field-tested defaults.
 
 ## Worker flow
 
-The normal Worker facade exposes ten commands:
+The normal Worker facade preserves the original lifecycle commands and adds a
+compiled execution/effect runtime:
 
-`bootstrap`, `status`, `next`, `record-commit`, `validate`, `rollover`,
-`close`, `recover`, `block-for-source-fix`, and `continue-task`.
+`admit`, `bootstrap`, `status`, `next`, `record-commit`, `validate`, `rollover`,
+`close`, `recover`, `block-for-source-fix`, `continue-task`, `report-blocker`,
+`replan`, `effect`, `review`, and `assurance-plan`.
 
 The administrative facade additionally exposes `adopt-existing-change`,
 `new-revision`, `abort`, and `telemetry-ingest`. A rollover always names a fresh disposable
@@ -36,6 +38,26 @@ Typical flow is:
 4. Run deterministic checks through `validate`; R3 also needs an independent
    reviewer, reference, and a distinct rollback/recovery check.
 5. `close` after evidence is verified.
+
+For expensive local work, set `--execution-class LOCAL_HIGH_COST`; for any
+provider-side action, set `--execution-class EXTERNAL_EFFECT`. Both require an
+`--execution-spec` that compiles assumptions, capabilities, field authority,
+provider constraints, plan/recovery families, trusted argv commands and
+acceptance claims before canonical task creation. Preview it without mutation:
+
+```powershell
+python scripts/ai.py --root D:\path\to\product admit `
+  --task-id TASK-001 --outcome "the change is correct" --accept "behavior passes" `
+  --execution-class LOCAL_HIGH_COST --execution-spec .\EXECUTION_SPEC.json `
+  --allow src\app.py
+```
+
+The enhanced flow is `Prevent -> Bound -> Execute -> Reconcile -> Verify`.
+Repeated blocker families invalidate the plan, unresolved provider effects
+block assurance, and unchanged claim dependencies may reuse intact immutable
+evidence while FINAL claims still execute. See
+[docs/EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md) and
+[docs/VNEXT_ARCHITECTURE_AUDIT.md](docs/VNEXT_ARCHITECTURE_AUDIT.md).
 
 An explicitly runtime-only task uses `--no-source-delta`. It captures the
 baseline product HEAD at bootstrap and may validate directly from `ACTIVE`
@@ -173,6 +195,12 @@ lifecycle actions. Unenrolled projects retain the same kernel lifecycle rules,
 including the two new public release/continuation commands. Set
 `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
 one-off opt-in, or `=0` to override the policy for an isolated diagnostic run.
+
+New v1.24 policies also enable `execution_admission`: the same public facade
+composes package authority, project-policy compatibility and context ownership
+before lifecycle mutation. Use `-QualityGateArgvJson` during adoption so gates
+run without a shell. The legacy `-QualityGate` string remains a clearly labeled
+compatibility path for existing single-owner projects.
 
 See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md),
 [docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md](docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md),

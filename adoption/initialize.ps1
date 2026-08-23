@@ -8,13 +8,16 @@ param(
   [Parameter(Mandatory = $true)][string]$SuccessDefinition,
   [Parameter(Mandatory = $true)][string]$NonGoals,
   [Parameter(Mandatory = $true)][string]$Constraints,
-  [Parameter(Mandatory = $true)][string]$QualityGate,
+  [string]$QualityGate,
+  [string]$QualityGateArgvJson,
   [ValidateSet("small-tool", "library", "desktop-app", "production-app", "service", "custom")][string]$ProjectProfile = "small-tool",
   [ValidateSet("greenfield", "existing")][string]$Mode = "greenfield",
   [string]$PackageRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $QualityGate -and -not $QualityGateArgvJson) { throw "Provide -QualityGateArgvJson (preferred) or legacy -QualityGate." }
+if ($QualityGate -and $QualityGateArgvJson) { throw "Choose exactly one quality-gate representation." }
 $target = (Resolve-Path -LiteralPath $Root).Path
 & git -C $target rev-parse --show-toplevel *> $null
 if ($LASTEXITCODE -ne 0) { throw "Root must be a Git worktree." }
@@ -29,8 +32,20 @@ $example.project_lifecycle.project_intent.intended_use = $IntendedUse
 $example.project_lifecycle.project_intent.success_definition = $SuccessDefinition
 $example.project_lifecycle.project_intent.non_goals = $NonGoals
 $example.project_lifecycle.project_intent.constraints = $Constraints
-$example.project_lifecycle.quality_gates[0].id = "adoption-quality-gate"
-$example.project_lifecycle.quality_gates[0].command = $QualityGate
+if ($QualityGateArgvJson) {
+  $gateArgv = @($QualityGateArgvJson | ConvertFrom-Json)
+  if ($gateArgv.Count -eq 0) { throw "QualityGateArgvJson must contain a JSON array of arguments." }
+  $example.project_lifecycle.quality_gates = @([pscustomobject]@{
+    id = "adoption-quality-gate"
+    argv = $gateArgv
+    provenance = "OWNER_AUTHORED"
+  })
+} else {
+  $example.project_lifecycle.quality_gates = @([pscustomobject]@{
+    id = "adoption-quality-gate"
+    command = $QualityGate
+  })
+}
 $example | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $policyPath -Encoding utf8
 
 $lifecycle = Join-Path $PackageRoot "skills\project-lifecycle-bootstrap\scripts\project_lifecycle.py"

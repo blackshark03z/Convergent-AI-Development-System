@@ -1,7 +1,11 @@
 {
-  "schema": "buildos.project-policy.v1.22",
+  "schema": "buildos.project-policy.v1.24",
   "context_epoch": {
     "enabled": true
+  },
+  "execution_admission": {
+    "enabled": true,
+    "require_authority_record": true
   },
   "side_effect_contract": {
     "enabled": false,
@@ -41,7 +45,11 @@
       "changelog": "CHANGELOG.md"
     },
     "quality_gates": [
-      {"id": "replace-with-project-gate", "command": "replace with a safe executable project quality command"}
+      {
+        "id": "replace-with-project-gate",
+        "argv": ["python", "-m", "unittest", "discover"],
+        "provenance": "OWNER_AUTHORED"
+      }
     ],
     "testing_strategy": "Replace with the focused and regression testing strategy.",
     "engineering_conventions": "Replace with material code organization, dependency and error-handling expectations.",

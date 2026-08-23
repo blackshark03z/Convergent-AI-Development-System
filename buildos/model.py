@@ -1,4 +1,4 @@
-"""Pure lifecycle model for the v1.23 candidate.
+"""Pure lifecycle model for the v1.24 candidate.
 
 The model deliberately knows nothing about the filesystem or Git.  A
 transition receives a validated observation and returns a complete candidate
@@ -16,7 +16,7 @@ import uuid
 from typing import Any, Mapping
 
 
-# v1.23 adds only optional lineage/provenance fields.  Keeping the v1.22 state
+# v1.24 adds only optional lineage/provenance/execution fields. Keeping the v1.22 state
 # schema is deliberate backward compatibility: existing immutable generations
 # remain readable without an in-place migration.  A future incompatible shape
 # must use the explicit migration contract documented by the lifecycle kit.
@@ -25,6 +25,7 @@ GENERATION_SCHEMA = "buildos.generation.v1"
 PHASES = {"ACTIVE", "PRODUCT_COMMITTED", "ASSURANCE_READY", "BLOCKED_SOURCE_FIX", "CLOSED", "ABORTED"}
 RISKS = {"R0", "R1", "R2", "R3"}
 PRODUCT_CHANGE_MODES = {"PRODUCT_DELTA", "NO_SOURCE_DELTA"}
+EXECUTION_CLASSES = {"LOCAL_REVERSIBLE", "LOCAL_HIGH_COST", "EXTERNAL_EFFECT"}
 AUTH_REQUIRED = {"R3"}
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")
 
@@ -123,6 +124,9 @@ def validate_task_request(request: Mapping[str, Any]) -> dict[str, Any]:
         raise KernelError("write-capable tasks require at least one allowed path")
     if not allowed:
         allowed = ["<none-read-only>" if side_effect == "READ_ONLY" else "<none-no-source-delta>"]
+    execution_class = str(request.get("execution_class") or "LOCAL_REVERSIBLE").upper().strip()
+    if execution_class not in EXECUTION_CLASSES:
+        raise KernelError(f"execution_class must be one of {sorted(EXECUTION_CLASSES)}")
     raw_skill = request.get("skill")
     return {
         "task_id": task_id,
@@ -131,6 +135,7 @@ def validate_task_request(request: Mapping[str, Any]) -> dict[str, Any]:
         "risk": risk,
         "side_effect": side_effect,
         "product_change_mode": product_change_mode,
+        "execution_class": execution_class,
         "allowed_paths": allowed,
         "prohibited_paths": prohibited,
         "worker_id": worker,
@@ -191,6 +196,7 @@ def initial_state(
     git: Mapping[str, Any] | None,
     *,
     lineage: Mapping[str, Any] | None = None,
+    execution: Mapping[str, Any] | None = None,
     at: str | None = None,
 ) -> dict[str, Any]:
     req = validate_task_request(request)
@@ -207,6 +213,7 @@ def initial_state(
         "risk": req["risk"],
         "side_effect": req["side_effect"],
         "product_change_mode": req["product_change_mode"],
+        "execution_class": req["execution_class"],
         "allowed_paths": req["allowed_paths"],
         "prohibited_paths": req["prohibited_paths"],
         "worker_id": req["worker_id"],
@@ -218,6 +225,7 @@ def initial_state(
         },
         "skill": req["skill"],
         "lineage": normalized_lineage,
+        "execution_envelope_hash": (execution or {}).get("envelope_hash"),
     }
     state: dict[str, Any] = {
         "schema": SCHEMA,
@@ -231,6 +239,7 @@ def initial_state(
         "risk": req["risk"],
         "side_effect": req["side_effect"],
         "product_change_mode": req["product_change_mode"],
+        "execution_class": req["execution_class"],
         "allowed_paths": req["allowed_paths"],
         "prohibited_paths": req["prohibited_paths"],
         "worker_id": req["worker_id"],
@@ -242,6 +251,7 @@ def initial_state(
         },
         "skill": req["skill"],
         "lineage": normalized_lineage,
+        "execution": deepcopy(dict(execution)) if execution is not None else None,
         "contract_hash": sha256_json(contract),
         "lease": {"status": "CLAIMED", "holder": req["worker_id"]},
         "base_git": _git_anchor(git),
@@ -290,6 +300,12 @@ def validate_state(state: Mapping[str, Any]) -> None:
     change_mode = _product_change_mode(state)
     if change_mode not in PRODUCT_CHANGE_MODES:
         raise KernelError("canonical state has invalid product_change_mode")
+    execution_class = str(state.get("execution_class") or "LOCAL_REVERSIBLE").upper()
+    if execution_class not in EXECUTION_CLASSES:
+        raise KernelError("canonical state has invalid execution_class")
+    if state.get("execution") is not None:
+        from .execution import validate_runtime_state
+        validate_runtime_state(state["execution"])
     auth = state.get("authorization") or {}
     if risk in AUTH_REQUIRED and (auth.get("status") != "APPROVED" or not auth.get("reference")):
         raise KernelError("canonical R3 state is missing owner authorization")
@@ -323,7 +339,7 @@ def validate_state(state: Mapping[str, Any]) -> None:
 
 
 def _product_change_mode(state: Mapping[str, Any]) -> str:
-    """Read additive v1.23 mode while preserving legacy READ_ONLY generations."""
+    """Read additive v1.24 mode while preserving legacy READ_ONLY generations."""
     explicit = str(state.get("product_change_mode") or "").upper().strip()
     return explicit or ("NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA")
 
@@ -669,6 +685,9 @@ def transition_new_revision(
         "projected_prompt_tokens": None,
         "last_signal": "NEW_REVISION",
     }
+    if result.get("execution") is not None:
+        from .execution import reset_for_lifecycle_revision
+        result["execution"] = reset_for_lifecycle_revision(result["execution"])
     result["next_action"] = (
         "complete runtime acceptance evidence, then validate the unchanged product baseline"
         if _product_change_mode(result) == "NO_SOURCE_DELTA" and result.get("side_effect") != "READ_ONLY"
@@ -685,12 +704,14 @@ def transition_new_revision(
         "risk": result["risk"],
         "side_effect": result["side_effect"],
         "product_change_mode": _product_change_mode(result),
+        "execution_class": str(result.get("execution_class") or "LOCAL_REVERSIBLE"),
         "allowed_paths": result["allowed_paths"],
         "prohibited_paths": result["prohibited_paths"],
         "worker_id": result["worker_id"],
         "enforcement": result["enforcement"],
         "authorization": result["authorization"],
         "skill": result.get("skill"),
+        "execution_envelope_hash": ((result.get("execution") or {}).get("envelope_hash")),
     })
     validate_state(result)
     return result, {

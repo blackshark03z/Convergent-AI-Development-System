@@ -59,6 +59,15 @@ def policy(*, profile: str = "small-tool", custom_paths: bool = False, modules: 
     }
 
 
+def trusted_policy() -> dict:
+    value = policy()
+    value["project_lifecycle"]["quality_gates"] = [{
+        "id": "python-smoke", "argv": [sys.executable, "-c", "print('trusted quality gate')"],
+        "provenance": "OWNER_AUTHORED",
+    }]
+    return value
+
+
 @contextmanager
 def fixture(name: str = "lifecycle"):
     with tempfile.TemporaryDirectory(prefix=f"{name}-") as raw:
@@ -94,6 +103,14 @@ class ProjectLifecycleTests(unittest.TestCase):
             self.assertEqual(result["quality_gates"][0]["exit_code"], 0)
             self.assertEqual(invoke(root, "check")[1]["status"], "PASS")
 
+    def test_trusted_argv_gate_avoids_shell_and_preserves_provenance(self):
+        with fixture("trusted-gate") as root:
+            self.write_policy(root, trusted_policy())
+            gate = invoke(root, "bootstrap", "--mode", "greenfield", "--verify-gates")[1]["quality_gates"][0]
+            self.assertEqual(gate["execution"], "ARGV_NO_SHELL")
+            self.assertEqual(gate["provenance"], "OWNER_AUTHORED")
+            self.assertEqual(gate["argv"][0], sys.executable)
+
     def test_existing_adoption_preserves_docs_and_marks_unknown(self):
         with fixture("existing") as root:
             (root / "README.md").write_text("# Existing reality\n", encoding="utf-8")
@@ -119,6 +136,7 @@ class ProjectLifecycleTests(unittest.TestCase):
         no_study = policy(); no_study["documentation_handoff"]["continuity"]["field_study"] = "DISABLED"; cases.append((no_study, "Field Study"))
         no_map = policy(); del no_map["documentation_handoff"]["category_authorities"]["API_CONFIG_SCHEMA"]; cases.append((no_map, "category_authorities"))
         no_boundary = policy(); no_boundary["project_lifecycle"]["safety_boundaries"]["data"] = ""; cases.append((no_boundary, "safety_boundaries.data"))
+        weak_admission = policy(); weak_admission["execution_admission"] = {"enabled": True, "require_authority_record": False}; cases.append((weak_admission, "cannot weaken"))
         for value, expected in cases:
             with self.subTest(expected=expected), fixture("reject") as root:
                 self.write_policy(root, value)

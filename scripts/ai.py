@@ -13,7 +13,14 @@ if str(PACKAGE) not in sys.path:
 from buildos.cli import main
 
 
-MUTATING_COMMANDS = {"record-commit", "validate", "rollover", "close", "block-for-source-fix", "continue-task"}
+MUTATING_COMMANDS = {
+    "record-commit", "validate", "rollover", "close", "block-for-source-fix",
+    "continue-task", "report-blocker", "replan", "effect", "review",
+}
+ADMISSION_COMMANDS = {
+    "admit", "bootstrap", "record-commit", "validate", "rollover", "close",
+    "block-for-source-fix", "continue-task", "report-blocker", "replan", "effect", "review",
+}
 
 
 def _requested_root(argv: list[str]) -> Path:
@@ -24,7 +31,11 @@ def _requested_root(argv: list[str]) -> Path:
 
 
 def _requested_command(argv: list[str]) -> str | None:
-    known = {"bootstrap", "status", "next", "record-commit", "validate", "rollover", "close", "recover", "block-for-source-fix", "continue-task"}
+    known = {
+        "admit", "bootstrap", "status", "next", "record-commit", "validate",
+        "rollover", "close", "recover", "block-for-source-fix", "continue-task",
+        "report-blocker", "replan", "effect", "review", "assurance-plan",
+    }
     return next((value for value in argv if value in known), None)
 
 
@@ -43,6 +54,51 @@ def _context_epoch_preflight_enabled(root: Path) -> bool:
     return isinstance(context_epoch, dict) and context_epoch.get("enabled") is True
 
 
+def _policy(root: Path) -> dict:
+    try:
+        value = json.loads((root / ".buildos-policy.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _integrated_admission_enabled(root: Path) -> bool:
+    value = _policy(root).get("execution_admission")
+    return isinstance(value, dict) and value.get("enabled") is True
+
+
+def _run_preflight(command: list[str], *, root: Path) -> int:
+    proc = subprocess.run(command, cwd=root, text=True, encoding="utf-8", errors="replace", capture_output=True)
+    if proc.returncode:
+        print(proc.stdout.strip() or json.dumps({
+            "status": "ACTION_REQUIRED", "message": "integrated execution admission failed",
+        }, sort_keys=True))
+    return proc.returncode
+
+
+def _adoption_preflight(argv: list[str]) -> int:
+    """Compose opt-in adoption checks behind the one public facade."""
+    command = _requested_command(argv)
+    if command not in ADMISSION_COMMANDS:
+        return 0
+    root = _requested_root(argv)
+    if not _integrated_admission_enabled(root):
+        return 0
+    policy = _policy(root).get("execution_admission") or {}
+    if policy.get("require_authority_record") is not True:
+        print(json.dumps({
+            "status": "ACTION_REQUIRED",
+            "message": "execution_admission.require_authority_record must remain true",
+        }, sort_keys=True))
+        return 2
+    authority = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "execution_authority.py"
+    code = _run_preflight([sys.executable, str(authority), "--root", str(root), "check"], root=root)
+    if code:
+        return code
+    lifecycle = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "project_lifecycle.py"
+    return _run_preflight([sys.executable, str(lifecycle), "--root", str(root), "check"], root=root)
+
+
 def _epoch_preflight(argv: list[str]) -> int:
     if _requested_command(argv) not in MUTATING_COMMANDS:
         return 0
@@ -58,5 +114,5 @@ def _epoch_preflight(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    preflight = _epoch_preflight(sys.argv[1:])
+    preflight = _adoption_preflight(sys.argv[1:]) or _epoch_preflight(sys.argv[1:])
     raise SystemExit(preflight or main(admin=False))

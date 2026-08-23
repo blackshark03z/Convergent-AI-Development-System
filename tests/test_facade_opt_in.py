@@ -41,6 +41,27 @@ class FacadeOptInTests(unittest.TestCase):
             with patch.dict("os.environ", {"BUILDOS_CONTEXT_EPOCH_PREFLIGHT": "0"}):
                 self.assertFalse(FACADE._context_epoch_preflight_enabled(root))
 
+    def test_v124_policy_composes_authority_and_lifecycle_behind_one_facade(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {"enabled": True, "require_authority_record": True},
+            }), encoding="utf-8")
+            result = SimpleNamespace(returncode=0, stdout="")
+            with patch.object(FACADE.subprocess, "run", return_value=result) as run:
+                self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "bootstrap"]), 0)
+            commands = [str(call.args[0][1]) for call in run.call_args_list]
+            self.assertTrue(any("execution_authority.py" in item for item in commands))
+            self.assertTrue(any("project_lifecycle.py" in item for item in commands))
+
+    def test_legacy_policy_does_not_silently_opt_in_to_new_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({"context_epoch": {"enabled": True}}), encoding="utf-8")
+            with patch.object(FACADE.subprocess, "run") as run:
+                self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "bootstrap"]), 0)
+            run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
