@@ -9,8 +9,8 @@ import subprocess
 import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
-KERNEL_VERSION = "1.23"
-KERNEL_COMMIT = "01e68e86d67e974dd50573127baa78060bfcfafa"
+KERNEL_VERSION = "1.24"
+KERNEL_COMMIT = "c40367951df31e70cf67eb805190b4fa546b4f08"
 
 
 def invoke(path: Path) -> dict[str, object]:
@@ -37,13 +37,19 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         "lifecycle_version": lifecycle.get("version"), "continuity_version": continuity.get("version"),
         "runtime_capability": runtime.get("identity"), "runtime_version": runtime.get("version"),
     }
-    if manifest.get("frozen_kernel_version") != "1.23-candidate": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
+    if manifest.get("frozen_kernel_version") != "1.24-candidate": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
     if manifest.get("frozen_kernel_commit") != KERNEL_COMMIT: errors.append("MANIFEST_KERNEL_COMMIT_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("version") != expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_SKILL_MISMATCH")
     if continuity.get("name") != "documentation-handoff-continuity" or not expected["continuity_version"]: errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or not expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
     if runtime.get("name") != "codex-app-server-context-epoch" or not expected["runtime_capability"] or not expected["runtime_version"]:
         errors.append("MANIFEST_RUNTIME_CONTEXT_EPOCH_IDENTITY_MISMATCH")
+    execution_runtime = manifest.get("execution_runtime") or {}
+    if execution_runtime.get("version") != "1.0.0" or execution_runtime.get("spec_schema") != "buildos.execution-spec.v1" or execution_runtime.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION":
+        errors.append("MANIFEST_EXECUTION_RUNTIME_IDENTITY_MISMATCH")
+    release = manifest.get("release_evidence") or {}
+    if release.get("status") != "CANDIDATE_AWAITING_INDEPENDENT_R3" or release.get("review_target") != KERNEL_COMMIT:
+        errors.append("MANIFEST_RELEASE_STATUS_UNTRUTHFUL")
     scripts = {
         "lifecycle": root / "skills" / "project-lifecycle-bootstrap" / "scripts" / "project_lifecycle.py",
         "continuity": root / "skills" / "documentation-handoff-continuity" / "scripts" / "continuity.py",
