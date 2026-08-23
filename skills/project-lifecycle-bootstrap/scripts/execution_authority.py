@@ -10,7 +10,7 @@ import re
 import sys
 
 KERNEL_VERSION = "1.24"
-KERNEL_COMMIT = "2ce43a0946d6833ef5af24ce5edeacceede4cd90"
+KERNEL_COMMIT = "c5baf52e848483497150f6f8610b8082abbf9f20"
 LIFECYCLE_KIT_VERSION = "1.3.0"
 CONTINUITY_SKILL_VERSION = "1.1.0"
 RECORD = ".buildos-authority.json"
