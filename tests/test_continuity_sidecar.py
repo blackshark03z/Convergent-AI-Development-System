@@ -313,7 +313,7 @@ class ContinuitySidecarTests(unittest.TestCase):
 class PortablePackageContractTests(unittest.TestCase):
     def test_manifest_skill_policy_and_frozen_kernel_contract(self):
         manifest = json.loads((PACKAGE / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["frozen_kernel_commit"], "c40367951df31e70cf67eb805190b4fa546b4f08")
+        self.assertEqual(manifest["frozen_kernel_commit"], "2ce43a0946d6833ef5af24ce5edeacceede4cd90")
         self.assertTrue(manifest["continuity_skill"]["mandatory_by_adoption_contract"])
         self.assertFalse(manifest["continuity_skill"]["kernel_enforced"])
         self.assertTrue((PACKAGE / "adoption" / "initialize.ps1").is_file())

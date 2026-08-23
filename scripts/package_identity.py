@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.24"
-KERNEL_COMMIT = "c40367951df31e70cf67eb805190b4fa546b4f08"
+KERNEL_COMMIT = "2ce43a0946d6833ef5af24ce5edeacceede4cd90"
 
 
 def invoke(path: Path) -> dict[str, object]:
@@ -45,8 +47,22 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
     if runtime.get("name") != "codex-app-server-context-epoch" or not expected["runtime_capability"] or not expected["runtime_version"]:
         errors.append("MANIFEST_RUNTIME_CONTEXT_EPOCH_IDENTITY_MISMATCH")
     execution_runtime = manifest.get("execution_runtime") or {}
-    if execution_runtime.get("version") != "1.0.0" or execution_runtime.get("spec_schema") != "buildos.execution-spec.v1" or execution_runtime.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION":
+    if execution_runtime.get("version") != "1.0.1" or execution_runtime.get("spec_schema") != "buildos.execution-spec.v1" or execution_runtime.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION":
         errors.append("MANIFEST_EXECUTION_RUNTIME_IDENTITY_MISMATCH")
+    registries = manifest.get("trusted_command_registries")
+    if not isinstance(registries, dict):
+        errors.append("MANIFEST_TRUSTED_COMMAND_REGISTRIES_INVALID")
+    else:
+        for relative, digest in registries.items():
+            registry = root / str(relative)
+            if (
+                not isinstance(relative, str) or not relative
+                or Path(relative).is_absolute() or ".." in Path(relative).parts
+                or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or not registry.is_file()
+                or hashlib.sha256(registry.read_bytes()).hexdigest() != digest
+            ):
+                errors.append(f"MANIFEST_TRUSTED_COMMAND_REGISTRY_INVALID:{relative}")
     release = manifest.get("release_evidence") or {}
     if release.get("status") != "CANDIDATE_AWAITING_INDEPENDENT_R3" or release.get("review_target") != KERNEL_COMMIT:
         errors.append("MANIFEST_RELEASE_STATUS_UNTRUTHFUL")

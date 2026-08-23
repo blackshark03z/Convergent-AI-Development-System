@@ -1,12 +1,13 @@
 {
   "schema": "buildos.portable-package.v1",
-  "package_id": "build-os-v1.24-execution-runtime-1.0.0-project-lifecycle-kit-1.3.0-continuity-1.1.0-context-epoch-1.0.1",
-  "frozen_kernel_commit": "c40367951df31e70cf67eb805190b4fa546b4f08",
+  "package_id": "build-os-v1.24-execution-runtime-1.0.1-project-lifecycle-kit-1.3.0-continuity-1.1.0-context-epoch-1.0.1",
+  "frozen_kernel_commit": "2ce43a0946d6833ef5af24ce5edeacceede4cd90",
   "frozen_kernel_version": "1.24-candidate",
-  "release_evidence": {"path": "docs/V1.24_CANDIDATE_REPORT.md", "status": "CANDIDATE_AWAITING_INDEPENDENT_R3", "reference": "BUILDOS-V1.24-PREVENT-BOUND-EXECUTE-CANDIDATE", "review_target": "c40367951df31e70cf67eb805190b4fa546b4f08"},
+  "release_evidence": {"path": "docs/V1.24_CANDIDATE_REPORT.md", "status": "CANDIDATE_AWAITING_INDEPENDENT_R3", "reference": "BUILDOS-V1.24-PREVENT-BOUND-EXECUTE-CANDIDATE", "review_target": "2ce43a0946d6833ef5af24ce5edeacceede4cd90"},
   "continuity_skill": {"name": "documentation-handoff-continuity", "version": "1.1.0", "mandatory_by_adoption_contract": true, "kernel_enforced": false},
   "project_lifecycle_kit": {"version": "1.3.0", "bootstrap_skill": {"name": "project-lifecycle-bootstrap", "version": "1.3.0"}, "mandatory_by_adoption_contract": true, "kernel_enforced": false},
-  "execution_runtime": {"version": "1.0.0", "spec_schema": "buildos.execution-spec.v1", "runtime_schema": "buildos.execution-runtime.v1", "canonical_authority": "CURRENT_SELECTED_IMMUTABLE_GENERATION"},
+  "execution_runtime": {"version": "1.0.1", "spec_schema": "buildos.execution-spec.v1", "runtime_schema": "buildos.execution-runtime.v1", "canonical_authority": "CURRENT_SELECTED_IMMUTABLE_GENERATION"},
+  "trusted_command_registries": {},
   "runtime_context_epoch_capability": {"name": "codex-app-server-context-epoch", "version": "1.0.1", "identity": "codex-app-server-context-epoch.v1"},
   "field_study": {"version": "external-append-only", "authority": "NON_AUTHORITATIVE"},
   "included": ["buildos", "scripts", "skills", "schemas", "templates", "adoption", "config", "docs", "tests", "README.md", "VERSION"]
