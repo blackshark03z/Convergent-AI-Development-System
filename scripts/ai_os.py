@@ -8,7 +8,14 @@ if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
 from buildos.cli import main
+from scripts.ai import _adoption_preflight
+
+
+def _admin_preflight(argv: list[str]) -> int:
+    """Apply normal admission only to admin operations that create execution state."""
+    return _adoption_preflight(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(admin=True))
+    preflight = _admin_preflight(sys.argv[1:])
+    raise SystemExit(preflight or main(admin=True))

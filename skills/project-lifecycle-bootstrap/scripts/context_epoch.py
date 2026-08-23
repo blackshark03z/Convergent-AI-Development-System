@@ -27,7 +27,6 @@ RUNTIME_VERSION = "1.0.1"
 SAFE_CLOSEOUT_ELIGIBILITY = "CONTEXT_EPOCH_ELIGIBLE_FOR_SAFE_CLOSEOUT"
 MAX_RECEIPT_BYTES = 8192
 MAX_CAPSULE_BYTES = 8192
-MUTATING_COMMANDS = {"record-commit", "validate", "close", "rollover"}
 
 
 class ContextEpochError(RuntimeError):

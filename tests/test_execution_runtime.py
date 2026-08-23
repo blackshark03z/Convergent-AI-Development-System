@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import copy
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -11,8 +12,33 @@ import time
 import unittest
 
 from buildos.facade import BuildOS
-from buildos.model import KernelError
+from buildos.model import KernelError, sha256_json
 from buildos.store import InjectedFailure
+
+
+COMMAND_REGISTRY_PATH = ".buildos-command-registry.json"
+COMMAND_ROWS = [
+    {"id": "focused", "argv": [sys.executable, "-c", "print('focused')"]},
+    {"id": "final", "argv": [sys.executable, "-c", "print('final')"]},
+]
+COMMAND_REGISTRY_BYTES = (
+    json.dumps(
+        {"schema": "buildos.command-registry.v1", "commands": COMMAND_ROWS},
+        ensure_ascii=False, sort_keys=True, indent=2,
+    ) + "\n"
+).encode("utf-8")
+COMMAND_REGISTRY_SHA256 = hashlib.sha256(COMMAND_REGISTRY_BYTES).hexdigest()
+COMMAND_APPROVAL_REGISTRY_PATH = ".buildos-command-approvals.json"
+FOCUSED_COMMAND_SHA256 = sha256_json(COMMAND_ROWS[0])
+COMMAND_APPROVAL_REGISTRY_BYTES = (
+    json.dumps({
+        "schema": "buildos.command-approval-registry.v1",
+        "approvals": [{
+            "reference": "owner/approval-7", "command_sha256": FOCUSED_COMMAND_SHA256,
+        }],
+    }, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+).encode("utf-8")
+COMMAND_APPROVAL_REGISTRY_SHA256 = hashlib.sha256(COMMAND_APPROVAL_REGISTRY_BYTES).hexdigest()
 
 
 def git(root: Path, *args: str) -> str:
@@ -31,12 +57,17 @@ def repository(name: str):
         git(root, "config", "user.email", "execution@example.invalid")
         (root / "app.py").write_text("value = 1\n", encoding="utf-8")
         (root / "other.py").write_text("other = 1\n", encoding="utf-8")
+        (root / COMMAND_REGISTRY_PATH).write_bytes(COMMAND_REGISTRY_BYTES)
+        (root / COMMAND_APPROVAL_REGISTRY_PATH).write_bytes(COMMAND_APPROVAL_REGISTRY_BYTES)
         git(root, "add", ".")
         git(root, "commit", "-qm", "base")
         yield root
 
 
-def request(task_id: str, *, execution_class: str = "LOCAL_HIGH_COST", no_source: bool = False) -> dict:
+def request(
+    task_id: str, *, execution_class: str = "LOCAL_HIGH_COST", no_source: bool = False,
+    authorization: str = "NONE", authorization_reference: str | None = None,
+) -> dict:
     return {
         "task_id": task_id,
         "outcome": "safe admitted outcome",
@@ -49,9 +80,9 @@ def request(task_id: str, *, execution_class: str = "LOCAL_HIGH_COST", no_source
         "allowed_paths": [] if no_source else ["app.py", "other.py"],
         "prohibited_paths": ["secrets/**"],
         "worker_id": "WORKER",
-        "owner_authorization": "NONE",
-        "authorization_reference": None,
-        "authorization_actor": "NONE",
+        "owner_authorization": authorization,
+        "authorization_reference": authorization_reference,
+        "authorization_actor": "OWNER" if authorization == "APPROVED" else "NONE",
         "enforcement": "SUPERVISORY",
         "skill": None,
     }
@@ -59,8 +90,16 @@ def request(task_id: str, *, execution_class: str = "LOCAL_HIGH_COST", no_source
 
 def spec(*, external: bool = False, plan_id: str = "plan_one", idempotent: bool = True) -> dict:
     commands = [
-        {"id": "focused", "argv": [sys.executable, "-c", "print('focused')"], "provenance": "OWNER_AUTHORED"},
-        {"id": "final", "argv": [sys.executable, "-c", "print('final')"], "provenance": "OWNER_AUTHORED"},
+        {
+            "id": COMMAND_ROWS[0]["id"], "argv": list(COMMAND_ROWS[0]["argv"]),
+            "provenance": "OWNER_AUTHORED",
+            "source": {"kind": "PROJECT_BASELINE", "path": COMMAND_REGISTRY_PATH, "sha256": COMMAND_REGISTRY_SHA256},
+        },
+        {
+            "id": COMMAND_ROWS[1]["id"], "argv": list(COMMAND_ROWS[1]["argv"]),
+            "provenance": "OWNER_AUTHORED",
+            "source": {"kind": "PROJECT_BASELINE", "path": COMMAND_REGISTRY_PATH, "sha256": COMMAND_REGISTRY_SHA256},
+        },
     ]
     capabilities = [
         {"id": "local_python", "status": "AVAILABLE", "source": "DETERMINISTIC_PROBE", "evidence": "python-version", "constraints": {"major": 3}},
@@ -95,6 +134,8 @@ def spec(*, external: bool = False, plan_id: str = "plan_one", idempotent: bool 
             "idempotency_key": "stable-key" if idempotent else None,
             "no_effect_predicate": "canonical_no_effect", "provider_capability": "provider_api",
             "deadline_seconds": 60, "required": True,
+            "effect_input_sha256": "1" * 64,
+            "adapter_contract_sha256": "2" * 64,
         })
         steps.append({
             "id": "dispatch", "kind": "EXTERNAL_EFFECT", "after": ["implement"],
@@ -177,6 +218,101 @@ class AdmissionTests(unittest.TestCase):
                     execution_spec=spec(external=True),
                 )
 
+    def test_trusted_command_provenance_cannot_be_self_labelled(self):
+        with repository("self-labelled-owner") as root:
+            value = spec()
+            value["commands"][0]["source"] = {
+                "kind": "OWNER_APPROVAL", "reference": "owner/chat",
+                "command_sha256": sha256_json({"id": "focused", "argv": value["commands"][0]["argv"]}),
+            }
+            with self.assertRaisesRegex(KernelError, "registry path/hash binding"):
+                BuildOS(root).admit(request("PROVENANCE-OWNER"), execution_spec=value)
+
+        with repository("registry-mismatch") as root:
+            value = spec()
+            value["commands"][0]["argv"][-1] = "print('agent changed argv')"
+            with self.assertRaisesRegex(KernelError, "trusted registry entry"):
+                BuildOS(root).admit(request("PROVENANCE-ARGV"), execution_spec=value)
+
+        with repository("self-labelled-package") as root:
+            value = spec()
+            value["commands"][0].update({
+                "provenance": "PACKAGE_OWNED",
+                "source": {
+                    "kind": "PACKAGE_MANIFEST", "path": "templates/execution/COMMAND_REGISTRY.json.tmpl",
+                    "sha256": "0" * 64,
+                },
+            })
+            with self.assertRaisesRegex(KernelError, "not bound by the package manifest"):
+                BuildOS(root).admit(request("PROVENANCE-PACKAGE"), execution_spec=value)
+
+    def test_model_proposed_command_requires_exact_owner_approval_binding(self):
+        with repository("model-approval") as root:
+            value = spec()
+            command = value["commands"][0]
+            digest = sha256_json({"id": command["id"], "argv": command["argv"]})
+            command.update({
+                "provenance": "MODEL_PROPOSED_APPROVED",
+                "source": {
+                    "kind": "OWNER_APPROVAL", "path": COMMAND_APPROVAL_REGISTRY_PATH,
+                    "sha256": COMMAND_APPROVAL_REGISTRY_SHA256,
+                    "reference": "owner/approval-7", "command_sha256": digest,
+                },
+            })
+            with self.assertRaisesRegex(KernelError, "not bound to explicit owner approval"):
+                BuildOS(root).admit(request("MODEL-DENIED"), execution_spec=value)
+            admitted = BuildOS(root).admit(
+                request(
+                    "MODEL-APPROVED", authorization="APPROVED",
+                    authorization_reference="owner/approval-7",
+                ),
+                execution_spec=value,
+            )
+            self.assertEqual(admitted["status"], "READY")
+
+            changed = copy.deepcopy(value)
+            changed["commands"][0]["argv"][-1] = "print('changed after approval')"
+            with self.assertRaisesRegex(KernelError, "exact argv hash"):
+                BuildOS(root).admit(
+                    request(
+                        "MODEL-CHANGED", authorization="APPROVED",
+                        authorization_reference="owner/approval-7",
+                    ),
+                    execution_spec=changed,
+                )
+
+            forged = copy.deepcopy(value)
+            forged["commands"][0]["source"]["reference"] = "owner/self-labelled"
+            with self.assertRaisesRegex(KernelError, "baseline owner approval"):
+                BuildOS(root).admit(
+                    request(
+                        "MODEL-FORGED", authorization="APPROVED",
+                        authorization_reference="owner/self-labelled",
+                    ),
+                    execution_spec=forged,
+                )
+
+    def test_package_owned_command_requires_manifest_bound_registry(self):
+        with repository("package-registry") as root, tempfile.TemporaryDirectory() as raw_package:
+            package_root = Path(raw_package)
+            registry_path = "trusted-commands.json"
+            (package_root / registry_path).write_bytes(COMMAND_REGISTRY_BYTES)
+            (package_root / "PACKAGE_MANIFEST.json").write_text(json.dumps({
+                "trusted_command_registries": {registry_path: COMMAND_REGISTRY_SHA256},
+            }), encoding="utf-8")
+            value = spec()
+            value["commands"][0].update({
+                "provenance": "PACKAGE_OWNED",
+                "source": {
+                    "kind": "PACKAGE_MANIFEST", "path": registry_path,
+                    "sha256": COMMAND_REGISTRY_SHA256,
+                },
+            })
+            admitted = BuildOS(root, package_root=package_root).admit(
+                request("PACKAGE-TRUSTED"), execution_spec=value,
+            )
+            self.assertEqual(admitted["status"], "READY")
+
 
 class BlockerAndReplanTests(unittest.TestCase):
     def test_second_same_family_or_second_distinct_family_requires_replan(self):
@@ -210,8 +346,30 @@ class BlockerAndReplanTests(unittest.TestCase):
             self.assertEqual(replaced.state["execution"]["plan_revision"], 2)
             self.assertEqual(len(replaced.state["execution"]["envelope_history"]), 1)
 
+    def test_replan_cannot_adopt_a_new_head_as_command_trust_provenance(self):
+        with repository("replan-head-drift") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(request("REPLAN-HEAD"), execution_spec=spec())
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/critical",
+                assumption_id="input_complete",
+            )
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py")
+            git(root, "commit", "-qm", "unadopted product change")
+            with self.assertRaisesRegex(KernelError, "unchanged task baseline"):
+                osys.replan(execution_spec=spec(plan_id="plan_two"))
+
 
 class ExternalEffectTests(unittest.TestCase):
+    @staticmethod
+    def _commit_provider_effect(osys: BuildOS):
+        osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+        osys.effect(transition="DISPATCH", effect_id="attempt_one")
+        osys.effect(transition="ACK", effect_id="attempt_one", reference="provider/request-1")
+        osys.effect(transition="RESULT", effect_id="attempt_one", reference="artifact/result", sha256="a" * 64)
+        return osys.effect(transition="COMMIT", effect_id="attempt_one", reference="manifest/result-1").snapshot
+
     def test_pre_provider_failure_is_bounded_no_effect_and_effect_identity_is_unique(self):
         with repository("pre-provider") as root:
             osys = BuildOS(root)
@@ -295,6 +453,143 @@ class ExternalEffectTests(unittest.TestCase):
             self.assertEqual(revised.state["execution"]["effect_ledger"], {})
             with self.assertRaisesRegex(KernelError, "required external effect"):
                 osys.validate(checks=[], inspected_by="TEST", runtime_acceptance_reference="runtime/evidence-2")
+
+    def test_replan_carries_only_an_identical_committed_effect_contract(self):
+        with repository("effect-replan-identical") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-SAME", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True),
+            )
+            self._commit_provider_effect(osys)
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/plan-a-invalid",
+                assumption_id="input_complete",
+            )
+            replaced = osys.replan(execution_spec=spec(external=True, plan_id="plan_two")).snapshot
+            runtime = replaced.state["execution"]
+            self.assertEqual(replaced.event["effects_carried"], ["attempt_one"])
+            self.assertEqual(replaced.event["effects_retired"], [])
+            self.assertEqual(runtime["effect_ledger"]["attempt_one"]["state"], "COMMITTED")
+            self.assertEqual(
+                runtime["effect_ledger"]["attempt_one"]["effect_contract_hash"],
+                runtime["envelope"]["effects"]["submit_job"]["effect_contract_hash"],
+            )
+            with self.assertRaisesRegex(KernelError, "stable effect identity"):
+                osys.effect(transition="PREPARE", effect_id="attempt_two", action_id="submit_job")
+            assured = osys.validate(
+                checks=[], inspected_by="TEST", runtime_acceptance_reference="runtime/identical-replan",
+            ).snapshot
+            self.assertEqual(assured.state["phase"], "ASSURANCE_READY")
+
+    def test_replan_retires_same_action_id_when_semantics_change(self):
+        with repository("effect-replan-changed") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-CHANGED", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True),
+            )
+            committed = self._commit_provider_effect(osys)
+            prior_hash = committed.state["execution"]["effect_ledger"]["attempt_one"]["effect_contract_hash"]
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/plan-a-invalid",
+                assumption_id="input_complete",
+            )
+            changed = spec(external=True, plan_id="plan_two")
+            changed["capabilities"][1]["constraints"]["max_refs"] = 3
+            changed["steps"][1]["capability_constraints"]["provider_api"]["max_refs"] = 3
+            replaced = osys.replan(execution_spec=changed).snapshot
+            runtime = replaced.state["execution"]
+            self.assertEqual(replaced.event["effects_carried"], [])
+            self.assertEqual(replaced.event["effects_retired"], ["attempt_one"])
+            self.assertEqual(runtime["effect_ledger"], {})
+            self.assertEqual(runtime["effect_history"][-1]["effect_contract_hash"], prior_hash)
+            self.assertNotEqual(
+                prior_hash, runtime["envelope"]["effects"]["submit_job"]["effect_contract_hash"],
+            )
+            with self.assertRaisesRegex(KernelError, "required external effect"):
+                osys.validate(
+                    checks=[], inspected_by="TEST", runtime_acceptance_reference="runtime/changed-replan",
+                )
+            with self.assertRaisesRegex(KernelError, "immutable historical lineage"):
+                osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            prepared = osys.effect(
+                transition="PREPARE", effect_id="attempt_two", action_id="submit_job",
+            ).snapshot
+            self.assertEqual(prepared.state["execution"]["effect_ledger"]["attempt_two"]["state"], "INTENT_RECORDED")
+
+    def test_resolved_no_effect_carries_retry_authority_but_unresolved_effect_blocks_replan(self):
+        with repository("effect-replan-no-effect") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-NONE", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True, idempotent=False),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(
+                transition="FAIL_BEFORE_DISPATCH", effect_id="attempt_one",
+                reference="preflight/provider-not-called",
+            )
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/plan-a-invalid",
+                assumption_id="input_complete",
+            )
+            replaced = osys.replan(
+                execution_spec=spec(external=True, idempotent=False, plan_id="plan_two"),
+            ).snapshot
+            self.assertEqual(replaced.event["effects_carried"], ["attempt_one"])
+            retried = osys.effect(transition="AUTHORIZE_RETRY", effect_id="attempt_one").snapshot
+            self.assertEqual(
+                retried.state["execution"]["effect_ledger"]["attempt_one"]["retry_basis"],
+                "POSITIVE_NO_EFFECT_PROOF",
+            )
+
+        with repository("effect-replan-changed-no-effect") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-NONE-CHANGED", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True, idempotent=False),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(
+                transition="FAIL_BEFORE_DISPATCH", effect_id="attempt_one",
+                reference="preflight/provider-not-called",
+            )
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/plan-a-invalid",
+                assumption_id="input_complete",
+            )
+            changed = spec(external=True, idempotent=False, plan_id="plan_two")
+            changed["effects"][0]["effect_input_sha256"] = "3" * 64
+            replaced = osys.replan(execution_spec=changed).snapshot
+            self.assertEqual(replaced.event["effects_carried"], [])
+            self.assertEqual(replaced.event["effects_retired"], ["attempt_one"])
+            with self.assertRaisesRegex(KernelError, "effect intent is not recorded"):
+                osys.effect(transition="AUTHORIZE_RETRY", effect_id="attempt_one")
+            prepared = osys.effect(
+                transition="PREPARE", effect_id="attempt_two", action_id="submit_job",
+            ).snapshot
+            self.assertEqual(
+                prepared.state["execution"]["effect_ledger"]["attempt_two"]["state"],
+                "INTENT_RECORDED",
+            )
+
+        with repository("effect-replan-unresolved") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-UNRESOLVED", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True, idempotent=False),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(transition="DISPATCH", effect_id="attempt_one")
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/plan-a-invalid",
+                assumption_id="input_complete",
+            )
+            with self.assertRaisesRegex(KernelError, "cannot bypass an unresolved external effect"):
+                osys.replan(
+                    execution_spec=spec(external=True, idempotent=False, plan_id="plan_two"),
+                )
 
 
 class ProportionalAssuranceTests(unittest.TestCase):

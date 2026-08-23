@@ -33,6 +33,7 @@ CAPABILITY_STATES = {"AVAILABLE", "UNAVAILABLE", "UNKNOWN", "DISCOVERABLE", "RES
 AUTHORITY_MODES = {"CANONICAL", "ADVISORY", "DERIVED", "EXECUTOR"}
 OWNER_KINDS = {"PRODUCT", "LIFECYCLE", "DETERMINISTIC_COMPILER", "PROVIDER", "QC", "HUMAN", "LLM"}
 COMMAND_PROVENANCE = {"OWNER_AUTHORED", "PACKAGE_OWNED", "MODEL_PROPOSED_APPROVED"}
+COMMAND_SOURCE_KINDS = {"PROJECT_BASELINE", "PACKAGE_MANIFEST", "OWNER_APPROVAL"}
 CLAIM_ROLES = {"ACCEPTANCE", "ROLLBACK_RECOVERY", "SECURITY", "QC"}
 CLAIM_MODES = {"AFFECTED", "FINAL"}
 STEP_KINDS = {"LOCAL", "EXTERNAL_EFFECT", "REVIEW", "PERSIST"}
@@ -94,6 +95,145 @@ def _safe_patterns(value: Any, label: str) -> list[str]:
     return result
 
 
+def _safe_source_path(value: Any, label: str) -> str:
+    path = _text(value, label).replace("\\", "/")
+    parsed = Path(path)
+    if parsed.is_absolute() or parsed.drive or ".." in parsed.parts or path.startswith("/"):
+        raise KernelError(f"execution spec {label} must be a safe relative path")
+    return path
+
+
+def _registry_entry(data: bytes, *, command_id: str, argv: list[str], label: str) -> None:
+    try:
+        value = json.loads(data.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise KernelError(f"{label} is not a readable command registry") from exc
+    if not isinstance(value, dict) or set(value) != {"schema", "commands"} or value.get("schema") != "buildos.command-registry.v1":
+        raise KernelError(f"{label} has an invalid command-registry schema")
+    rows = value.get("commands")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) or set(row) != {"id", "argv"} for row in rows):
+        raise KernelError(f"{label} has invalid command entries")
+    matches = [row for row in rows if row.get("id") == command_id]
+    if len(matches) != 1 or matches[0].get("argv") != argv:
+        raise KernelError(f"command {command_id} does not match its trusted registry entry")
+
+
+def _approval_registry_entry(data: bytes, *, reference: str, command_hash: str, label: str) -> None:
+    try:
+        value = json.loads(data.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise KernelError(f"{label} is not a readable command approval registry") from exc
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema", "approvals"}
+        or value.get("schema") != "buildos.command-approval-registry.v1"
+    ):
+        raise KernelError(f"{label} has an invalid command-approval-registry schema")
+    rows = value.get("approvals")
+    if not isinstance(rows, list) or any(
+        not isinstance(row, dict) or set(row) != {"reference", "command_sha256"}
+        for row in rows
+    ):
+        raise KernelError(f"{label} has invalid command approval entries")
+    matches = [
+        row for row in rows
+        if row.get("reference") == reference and row.get("command_sha256") == command_hash
+    ]
+    if len(matches) != 1:
+        raise KernelError("model-proposed command does not match one exact baseline owner approval")
+
+
+def _baseline_source_bytes(
+    *, root: Path, git_head: str, path: str, expected: str, label: str,
+) -> bytes:
+    proc = subprocess.run(
+        ["git", "show", f"{git_head}:{path}"], cwd=root, capture_output=True,
+        timeout=30, check=False,
+    )
+    if proc.returncode or hashlib.sha256(proc.stdout).hexdigest() != expected:
+        raise KernelError(f"{label} is not bound to the current Git baseline")
+    current = root / path
+    if not current.is_file() or current.read_bytes() != proc.stdout:
+        raise KernelError(f"{label} differs from the current Git baseline")
+    return proc.stdout
+
+
+def _bind_command_source(
+    row: Mapping[str, Any], request: Mapping[str, Any], *,
+    root: Path, package_root: Path, git_head: str,
+) -> dict[str, Any]:
+    identifier = str(row["id"])
+    argv = list(row["argv"])
+    provenance = str(row["provenance"])
+    source = row.get("source")
+    if not isinstance(source, Mapping) or str(source.get("kind") or "").upper() not in COMMAND_SOURCE_KINDS:
+        raise KernelError(f"execution command {identifier} requires a deterministic provenance source")
+    kind = str(source["kind"]).upper()
+    command_hash = sha256_json({"id": identifier, "argv": argv})
+
+    if provenance == "MODEL_PROPOSED_APPROVED":
+        if set(source) != {"kind", "path", "sha256", "reference", "command_sha256"} or kind != "OWNER_APPROVAL":
+            raise KernelError(f"model-proposed command {identifier} requires exact baseline owner-approval binding")
+        approval = request.get("authorization") or {
+            "status": request.get("owner_authorization"),
+            "reference": request.get("authorization_reference"),
+            "actor": request.get("authorization_actor"),
+        }
+        path = _safe_source_path(source.get("path"), f"command {identifier}.source.path")
+        expected = str(source.get("sha256") or "").lower()
+        reference = _text(source.get("reference"), f"command {identifier}.source.reference")
+        if (
+            approval.get("status") != "APPROVED"
+            or approval.get("reference") != reference
+            or str(source.get("command_sha256") or "").lower() != command_hash
+            or not re.fullmatch(r"[0-9a-f]{64}", expected)
+        ):
+            raise KernelError(f"model-proposed command {identifier} is not bound to explicit owner approval and its exact argv hash")
+        data = _baseline_source_bytes(
+            root=root, git_head=git_head, path=path, expected=expected,
+            label=f"model-proposed command {identifier} approval registry",
+        )
+        _approval_registry_entry(data, reference=reference, command_hash=command_hash, label=path)
+        return {
+            "kind": kind, "path": path, "sha256": expected,
+            "reference": reference, "command_sha256": command_hash,
+        }
+
+    if set(source) != {"kind", "path", "sha256"}:
+        raise KernelError(f"trusted command {identifier} requires exact registry path/hash binding")
+    path = _safe_source_path(source.get("path"), f"command {identifier}.source.path")
+    expected = str(source.get("sha256") or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise KernelError(f"trusted command {identifier} registry SHA-256 is invalid")
+
+    if provenance == "OWNER_AUTHORED":
+        if kind != "PROJECT_BASELINE":
+            raise KernelError(f"owner-authored command {identifier} must come from the Git baseline")
+        data = _baseline_source_bytes(
+            root=root, git_head=git_head, path=path, expected=expected,
+            label=f"owner-authored command {identifier} registry",
+        )
+    elif provenance == "PACKAGE_OWNED":
+        if kind != "PACKAGE_MANIFEST":
+            raise KernelError(f"package-owned command {identifier} must come from a package-manifest registry")
+        registry = package_root / path
+        manifest_path = package_root / "PACKAGE_MANIFEST.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise KernelError("package-owned command registry requires a readable package manifest") from exc
+        declared = manifest.get("trusted_command_registries") or {}
+        if not isinstance(declared, Mapping):
+            raise KernelError("package manifest trusted command registries must be a path/hash object")
+        if declared.get(path) != expected or not registry.is_file() or hashlib.sha256(registry.read_bytes()).hexdigest() != expected:
+            raise KernelError(f"package-owned command {identifier} registry is not bound by the package manifest")
+        data = registry.read_bytes()
+    else:
+        raise KernelError(f"command {identifier} provenance/source combination is invalid")
+    _registry_entry(data, command_id=identifier, argv=argv, label=path)
+    return {"kind": kind, "path": path, "sha256": expected, "command_sha256": command_hash}
+
+
 def _acyclic(steps: Mapping[str, Mapping[str, Any]]) -> None:
     visiting: set[str] = set()
     visited: set[str] = set()
@@ -131,6 +271,7 @@ def legacy_runtime(request: Mapping[str, Any]) -> dict[str, Any]:
         "envelope": None,
         "blockers": [],
         "effect_ledger": {},
+        "effect_history": [],
         "reviews": [],
         "claim_results": {},
         "enhanced_guarantees": False,
@@ -148,7 +289,10 @@ def load_spec(path: Path | str) -> dict[str, Any]:
     return value
 
 
-def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_revision: int = 1) -> dict[str, Any]:
+def compile_spec(
+    value: Mapping[str, Any], request: Mapping[str, Any], *, plan_revision: int = 1,
+    root: Path, package_root: Path, git_head: str,
+) -> dict[str, Any]:
     """Compile one task plan into a deterministic fail-closed envelope."""
     if not isinstance(value, Mapping) or value.get("schema") != SPEC_SCHEMA:
         raise KernelError(f"execution spec schema must be {SPEC_SCHEMA}")
@@ -231,7 +375,7 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
 
     commands: dict[str, dict[str, Any]] = {}
     for row in _rows(value.get("commands"), "commands"):
-        if set(row) != {"id", "argv", "provenance"}:
+        if set(row) != {"id", "argv", "provenance", "source"}:
             raise KernelError("execution command has an invalid shape")
         identifier = _id(row.get("id"), "command id")
         argv = row.get("argv")
@@ -240,10 +384,13 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
             raise KernelError(f"execution command {identifier} requires a unique id and non-empty argv")
         if provenance not in COMMAND_PROVENANCE:
             raise KernelError(f"execution command {identifier} has invalid provenance")
-        approval = (request.get("authorization") or {}).get("status") or request.get("owner_authorization")
-        if provenance == "MODEL_PROPOSED_APPROVED" and str(approval or "").upper() != "APPROVED":
-            blockers.append({"code": "MODEL_COMMAND_NOT_OWNER_APPROVED", "subject": identifier})
-        commands[identifier] = {"id": identifier, "argv": list(argv), "provenance": provenance}
+        normalized_command = {"id": identifier, "argv": list(argv), "provenance": provenance}
+        normalized_command["source"] = _bind_command_source(
+            {**normalized_command, "source": row.get("source")}, request,
+            root=root, package_root=package_root, git_head=git_head,
+        )
+        normalized_command["command_hash"] = sha256_json({"id": identifier, "argv": list(argv)})
+        commands[identifier] = normalized_command
 
     claims: dict[str, dict[str, Any]] = {}
     for row in _rows(value.get("claims"), "claims"):
@@ -266,6 +413,7 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
             "command_id": command_id, "dependencies": _safe_patterns(row.get("dependencies"), f"claim {identifier}.dependencies"),
             "mode": mode, "role": role,
             "acceptance": list(dict.fromkeys(acceptance)),
+            "command_hash": commands[command_id]["command_hash"],
         }
         normalized["semantic_hash"] = sha256_json(normalized)
         claims[identifier] = normalized
@@ -279,7 +427,7 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
 
     effects: dict[str, dict[str, Any]] = {}
     for row in _rows(value.get("effects"), "effects", allow_empty=True):
-        if set(row) != {"id", "idempotency", "idempotency_key", "no_effect_predicate", "provider_capability", "deadline_seconds", "required"}:
+        if set(row) != {"id", "idempotency", "idempotency_key", "no_effect_predicate", "provider_capability", "deadline_seconds", "required", "effect_input_sha256", "adapter_contract_sha256"}:
             raise KernelError("execution effect has an invalid shape")
         identifier = _id(row.get("id"), "effect id")
         idempotency = str(row.get("idempotency") or "").upper()
@@ -294,6 +442,10 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
             raise KernelError(f"execution effect {identifier} has an invalid deadline or required flag")
         key = str(row.get("idempotency_key") or "").strip() or None
         proof = str(row.get("no_effect_predicate") or "").strip() or None
+        effect_input = str(row.get("effect_input_sha256") or "").lower()
+        adapter_contract = str(row.get("adapter_contract_sha256") or "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", effect_input) or not re.fullmatch(r"[0-9a-f]{64}", adapter_contract):
+            raise KernelError(f"execution effect {identifier} requires exact effect input and adapter contract SHA-256 bindings")
         if idempotency == "IDEMPOTENT_WITH_KEY" and not key:
             blockers.append({"code": "IDEMPOTENCY_KEY_MISSING", "subject": identifier})
         if idempotency == "NON_IDEMPOTENT" and not proof:
@@ -304,6 +456,7 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
             "id": identifier, "idempotency": idempotency, "idempotency_key": key,
             "no_effect_predicate": proof, "provider_capability": provider,
             "deadline_seconds": deadline, "required": row["required"],
+            "effect_input_sha256": effect_input, "adapter_contract_sha256": adapter_contract,
         }
 
     recoveries: dict[str, dict[str, Any]] = {}
@@ -384,6 +537,44 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
         capability = capabilities[effect["provider_capability"]]
         if capability["status"] not in {"AVAILABLE", "RESTRICTED"}:
             blockers.append({"code": "PROVIDER_CAPABILITY_NOT_READY", "subject": effect["provider_capability"]})
+        bound_steps = [step for step in steps.values() if step.get("effect_id") == effect["id"]]
+        if not bound_steps:
+            blockers.append({"code": "EFFECT_NOT_BOUND_TO_PLAN_STEP", "subject": effect["id"]})
+        semantic_steps = []
+        for step in bound_steps:
+            fields = sorted(set(step["reads"] + step["writes"]))
+            semantic_steps.append({
+                "kind": step["kind"], "after": step["after"],
+                "assumptions": {key: assumptions[key] for key in sorted(step["requires_assumptions"])},
+                "capabilities": {
+                    key: {
+                        "id": key, "constraints": capabilities[key]["constraints"],
+                        "required_constraints": step["capability_constraints"].get(key) or {},
+                    }
+                    for key in sorted(step["requires_capabilities"])
+                },
+                "reads": step["reads"], "writes": step["writes"],
+                "authorities": {key: authorities[key] for key in fields if key in authorities},
+                "failure_families": {
+                    key: recoveries[key] for key in sorted(step["failure_families"])
+                    if key in recoveries
+                },
+            })
+        provider_contract = {
+            "id": capability["id"], "source": capability["source"],
+            "constraints": capability["constraints"],
+        }
+        effect_semantics = {
+            "id": effect["id"], "idempotency": effect["idempotency"],
+            "idempotency_key": effect["idempotency_key"],
+            "no_effect_predicate": effect["no_effect_predicate"],
+            "provider_capability": provider_contract,
+            "deadline_seconds": effect["deadline_seconds"],
+            "effect_input_sha256": effect["effect_input_sha256"],
+            "adapter_contract_sha256": effect["adapter_contract_sha256"],
+            "steps": sorted(semantic_steps, key=sha256_json),
+        }
+        effect["effect_contract_hash"] = sha256_json(effect_semantics)
     execution_class = str(request.get("execution_class") or "LOCAL_REVERSIBLE").upper()
     has_external_work = bool(effects) or any(step["kind"] == "EXTERNAL_EFFECT" for step in steps.values())
     if has_external_work and execution_class != "EXTERNAL_EFFECT":
@@ -417,6 +608,7 @@ def compile_spec(value: Mapping[str, Any], request: Mapping[str, Any], *, plan_r
         "admission_blockers": blockers,
         "blockers": [],
         "effect_ledger": {},
+        "effect_history": [],
         "reviews": [],
         "claim_results": {},
         "envelope_history": [],
@@ -450,6 +642,15 @@ def validate_runtime_state(runtime: Mapping[str, Any]) -> None:
             raise KernelError("canonical effect ledger references an unknown admitted action")
         if record.get("idempotency") != action.get("idempotency") or int(record.get("attempt", 0)) < 1:
             raise KernelError("canonical effect ledger identity or attempt is invalid")
+        bound_hash = record.get("effect_contract_hash")
+        if bound_hash is not None and (
+            bound_hash != action.get("effect_contract_hash")
+            or record.get("effect_input_sha256") != action.get("effect_input_sha256")
+            or record.get("adapter_contract_sha256") != action.get("adapter_contract_sha256")
+            or record.get("idempotency_key") != action.get("idempotency_key")
+            or record.get("no_effect_predicate") != action.get("no_effect_predicate")
+        ):
+            raise KernelError("canonical active effect is not bound to the exact admitted semantic contract")
         state = record.get("state")
         if state in {"DISPATCH_UNCONFIRMED", "DISPATCH_CONFIRMED", "OUTPUT_CONFIRMED", "COMMITTED"} and not record.get("dispatch_boundary_at"):
             raise KernelError("canonical dispatched effect lacks a durable boundary marker")
@@ -463,6 +664,14 @@ def validate_runtime_state(runtime: Mapping[str, Any]) -> None:
             raise KernelError("canonical committed effect lacks local persistence proof")
         if state == "RESOLVED_NO_EFFECT" and (record.get("reconciliation") or {}).get("outcome") not in {"NO_EFFECT", "NO_DISPATCH_TIMEOUT", "PRE_PROVIDER_FAILURE"}:
             raise KernelError("canonical no-effect resolution lacks positive reconciliation evidence")
+    history = runtime.get("effect_history") or []
+    if not isinstance(history, list) or len(history) > 128 or any(
+        not isinstance(row, Mapping)
+        or row.get("state") not in TERMINAL_EFFECT_STATES
+        or not ID.fullmatch(str(row.get("effect_id") or ""))
+        for row in history
+    ):
+        raise KernelError("canonical historical effect lineage is invalid or exceeds its bound")
     if not isinstance(runtime.get("blockers") or [], list) or len(runtime.get("blockers") or []) > 32:
         raise KernelError("canonical blocker history exceeds its bound")
     if not isinstance(runtime.get("reviews") or [], list) or len(runtime.get("reviews") or []) > 64:
@@ -509,7 +718,12 @@ def assert_effects_resolved(state: Mapping[str, Any]) -> None:
     if unresolved:
         raise KernelError(f"external effects require reconciliation before assurance: {sorted(unresolved)}")
     for action_id, action in envelope["effects"].items():
-        if action.get("required") and not any(row.get("action_id") == action_id and row.get("state") == "COMMITTED" for row in ledger.values()):
+        if action.get("required") and not any(
+            row.get("action_id") == action_id
+            and row.get("state") == "COMMITTED"
+            and row.get("effect_contract_hash") == action.get("effect_contract_hash")
+            for row in ledger.values()
+        ):
             raise KernelError(f"required external effect is not durably committed: {action_id}")
 
 
@@ -577,7 +791,45 @@ def apply_replan(state: Mapping[str, Any], runtime: Mapping[str, Any]) -> tuple[
         *(prior.get("envelope_history") or []),
         {"plan_revision": prior.get("plan_revision"), "envelope_hash": prior.get("envelope_hash"), "blockers": prior.get("blockers") or []},
     ][-16:]
-    replacement["effect_ledger"] = deepcopy(prior.get("effect_ledger") or {})
+    active: dict[str, Any] = {}
+    retired: list[dict[str, Any]] = []
+    carried: list[str] = []
+    for effect_id, source_record in (prior.get("effect_ledger") or {}).items():
+        record = deepcopy(dict(source_record))
+        action = replacement["envelope"]["effects"].get(record.get("action_id"))
+        compatible = bool(
+            action
+            and record.get("effect_contract_hash")
+            and record.get("effect_contract_hash") == action.get("effect_contract_hash")
+            and record.get("effect_input_sha256") == action.get("effect_input_sha256")
+            and record.get("adapter_contract_sha256") == action.get("adapter_contract_sha256")
+        )
+        if compatible:
+            record["carry_forward"] = [
+                *(record.get("carry_forward") or []),
+                {
+                    "from_envelope_hash": prior.get("envelope_hash"),
+                    "from_plan_revision": prior.get("plan_revision"),
+                    "to_envelope_hash": replacement.get("envelope_hash"),
+                    "to_plan_revision": replacement["plan_revision"],
+                    "basis": record.get("effect_contract_hash"),
+                    "at": _now(),
+                },
+            ][-16:]
+            active[effect_id] = record
+            carried.append(effect_id)
+        else:
+            record.update({
+                "retired_from_envelope_hash": prior.get("envelope_hash"),
+                "retired_from_plan_revision": prior.get("plan_revision"),
+                "retired_at_replan": _now(),
+                "retired_reason": "EFFECT_CONTRACT_NOT_IDENTICAL",
+            })
+            retired.append(record)
+    replacement["effect_ledger"] = active
+    replacement["effect_history"] = [
+        *(deepcopy(prior.get("effect_history") or [])), *retired,
+    ][-128:]
     replacement["reviews"] = deepcopy(prior.get("reviews") or [])
     result["execution"] = replacement
     result["lifecycle_ready"] = True
@@ -586,6 +838,8 @@ def apply_replan(state: Mapping[str, Any], runtime: Mapping[str, Any]) -> tuple[
     return result, {
         "kind": "PLAN_REPLACED", "from_envelope_hash": prior.get("envelope_hash"),
         "to_envelope_hash": replacement.get("envelope_hash"), "plan_revision": replacement["plan_revision"],
+        "effects_carried": sorted(carried),
+        "effects_retired": sorted(row["effect_id"] for row in retired),
     }
 
 
@@ -608,11 +862,19 @@ def prepare_effect(state: Mapping[str, Any], *, action_id: str, effect_id: str) 
         if prior.get("action_id") == action_id:
             return result, {"kind": "EFFECT_INTENT_ALREADY_RECORDED", "effect_id": effect_id}
         raise KernelError("effect_id is already bound to another action")
+    if any(row.get("effect_id") == effect_id for row in runtime.get("effect_history") or []):
+        raise KernelError("effect_id is immutable historical lineage; use a fresh effect identity")
     action = runtime["envelope"]["effects"][action_id]
     record = {
         "effect_id": effect_id, "action_id": action_id, "state": "INTENT_RECORDED",
         "attempt": 1, "idempotency": action["idempotency"],
         "idempotency_key": action.get("idempotency_key"), "prepared_at": _now(),
+        "no_effect_predicate": action.get("no_effect_predicate"),
+        "effect_contract_hash": action["effect_contract_hash"],
+        "effect_input_sha256": action["effect_input_sha256"],
+        "adapter_contract_sha256": action["adapter_contract_sha256"],
+        "originating_envelope_hash": runtime.get("envelope_hash"),
+        "originating_plan_revision": runtime.get("plan_revision"),
         "deadline_seconds": action["deadline_seconds"], "deadline_at": _deadline(action["deadline_seconds"]),
         "provider_reference": None,
         "result_reference": None, "result_sha256": None, "reconciliation": None,
@@ -637,6 +899,8 @@ def transition_effect(state: Mapping[str, Any], *, effect_id: str, transition: s
         raise KernelError(f"effect intent is not recorded: {effect_id}")
     record = ledger[effect_id]
     action = runtime["envelope"]["effects"][record["action_id"]]
+    if transition in {"DISPATCH", "AUTHORIZE_RETRY"} and record.get("effect_contract_hash") != action.get("effect_contract_hash"):
+        raise KernelError("unbound or semantically stale effect cannot be dispatched or retried; reconcile existing provider uncertainty first")
     current = record["state"]
     event: dict[str, Any] = {"kind": "EFFECT_TRANSITION", "effect_id": effect_id, "from": current, "transition": transition}
     ref = str(reference or "").strip() or None

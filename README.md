@@ -196,11 +196,16 @@ including the two new public release/continuation commands. Set
 `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
 one-off opt-in, or `=0` to override the policy for an isolated diagnostic run.
 
-New v1.24 policies also enable `execution_admission`: the same public facade
-composes package authority, project-policy compatibility and context ownership
-before lifecycle mutation. Use `-QualityGateArgvJson` during adoption so gates
-run without a shell. The legacy `-QualityGate` string remains a clearly labeled
-compatibility path for existing single-owner projects.
+New v1.24 policies also enable `execution_admission`: the normal Worker facade
+composes package authority, project-policy compatibility, context ownership
+where an existing epoch is required, and kernel execution-envelope admission.
+These are separate checks behind one public workflow, not one interchangeable
+admission object. Administrative recovery stays separately scoped;
+`adopt-existing-change` uses the same adoption preflight while `abort` and
+`recover` remain available to repair a broken adoption. Use
+`-QualityGateArgvJson` during adoption so gates run without a shell. The legacy
+`-QualityGate` string remains a clearly labeled compatibility path for existing
+single-owner projects.
 
 See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md),
 [docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md](docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md),

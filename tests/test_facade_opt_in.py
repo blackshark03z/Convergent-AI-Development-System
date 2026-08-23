@@ -14,6 +14,10 @@ SPEC = importlib.util.spec_from_file_location("buildos_worker_facade", PACKAGE /
 assert SPEC is not None and SPEC.loader is not None
 FACADE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FACADE)
+ADMIN_SPEC = importlib.util.spec_from_file_location("buildos_admin_facade", PACKAGE / "scripts" / "ai_os.py")
+assert ADMIN_SPEC is not None and ADMIN_SPEC.loader is not None
+ADMIN_FACADE = importlib.util.module_from_spec(ADMIN_SPEC)
+ADMIN_SPEC.loader.exec_module(ADMIN_FACADE)
 
 
 class FacadeOptInTests(unittest.TestCase):
@@ -61,6 +65,26 @@ class FacadeOptInTests(unittest.TestCase):
             with patch.object(FACADE.subprocess, "run") as run:
                 self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "bootstrap"]), 0)
             run.assert_not_called()
+
+    def test_admin_facade_delegates_to_shared_admission_filter(self) -> None:
+        with patch.object(ADMIN_FACADE, "_adoption_preflight", return_value=7) as preflight:
+            self.assertEqual(
+                ADMIN_FACADE._admin_preflight(["--root", "project", "adopt-existing-change"]),
+                7,
+            )
+        preflight.assert_called_once()
+
+    def test_admin_adoption_is_guarded_but_break_glass_abort_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {"enabled": True, "require_authority_record": False},
+            }), encoding="utf-8")
+            self.assertEqual(
+                FACADE._adoption_preflight(["--root", str(root), "adopt-existing-change"]),
+                2,
+            )
+            self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "abort"]), 0)
 
 
 if __name__ == "__main__":

@@ -117,6 +117,12 @@ validation fails closed unless its configured file passes the contract
 validator. This is for systems whose externally visible or destructive actions
 need semantic proof beyond ordinary Git/task lifecycle checks.
 
+This static contract is not superseded by the v1.24 effect ledger. It proves
+source-level consumer agreement on the canonical no-effect predicate and
+retry/recovery rules; the runtime ledger proves the state and semantic identity
+of one admitted effect instance. Removing either would merge two distinct
+safety responsibilities.
+
 Normal adoption must have a resolving accepted ref/SHA, one or more executable
 quality-gate commands, all five documentation-impact mappings, canonical core
 document paths, defined production/data/runtime boundaries, enabled continuity,

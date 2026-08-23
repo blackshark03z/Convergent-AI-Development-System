@@ -55,17 +55,32 @@
     {
       "id": "focused_contract",
       "argv": ["python", "-c", "print('replace with focused contract test')"],
-      "provenance": "OWNER_AUTHORED"
+      "provenance": "OWNER_AUTHORED",
+      "source": {
+        "kind": "PROJECT_BASELINE",
+        "path": ".buildos-command-registry.json",
+        "sha256": "Replace with the SHA-256 of the tracked command registry."
+      }
     },
     {
       "id": "final_assurance",
       "argv": ["python", "-c", "print('replace with final assurance')"],
-      "provenance": "OWNER_AUTHORED"
+      "provenance": "OWNER_AUTHORED",
+      "source": {
+        "kind": "PROJECT_BASELINE",
+        "path": ".buildos-command-registry.json",
+        "sha256": "Replace with the SHA-256 of the tracked command registry."
+      }
     },
     {
       "id": "rollback_proof",
       "argv": ["python", "-c", "print('replace with rollback or recovery proof')"],
-      "provenance": "OWNER_AUTHORED"
+      "provenance": "OWNER_AUTHORED",
+      "source": {
+        "kind": "PROJECT_BASELINE",
+        "path": ".buildos-command-registry.json",
+        "sha256": "Replace with the SHA-256 of the tracked command registry."
+      }
     }
   ],
   "claims": [
@@ -105,7 +120,9 @@
       "no_effect_predicate": "canonical_no_effect",
       "provider_capability": "provider_api",
       "deadline_seconds": 300,
-      "required": true
+      "required": true,
+      "effect_input_sha256": "Replace with the SHA-256 of canonical provider input bytes.",
+      "adapter_contract_sha256": "Replace with the SHA-256 of the provider adapter contract."
     }
   ],
   "steps": [

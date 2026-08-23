@@ -13,14 +13,15 @@ Use `templates/execution/EXECUTION_SPEC.json.tmpl` as source and
 the semantic authority because it verifies cross-object references and
 constraints that JSON Schema alone cannot express.
 
-## One admission path
+## Composed public-facade admission
 
 `admit` performs a read-only preview. `bootstrap`, `continue-task` and
 `adopt-existing-change` compile the same envelope before creating canonical
 state. A blocked compilation leaves no `CURRENT` generation.
 
-For a newly enrolled policy v1.24 project, `scripts/ai.py` is the single public
-entry point and composes:
+For a newly enrolled policy v1.24 project, `scripts/ai.py` is the normal Worker
+entry point. It composes separate fail-closed responsibilities behind that one
+facade; there is deliberately no second monolithic admission engine:
 
 1. exact package/executor authority;
 2. project policy/package compatibility;
@@ -31,6 +32,16 @@ entry point and composes:
 
 Older policies are not silently opted in. `recover`, `status` and `next` stay
 available even if adoption configuration needs repair.
+
+The direct Python `BuildOS` API is the kernel API: it enforces task/Git and
+execution-envelope admission, but it does not impersonate the opt-in project
+adoption or context preflights. The administrative `scripts/ai_os.py` facade is
+break-glass lifecycle authority, not a Worker bypass. Its
+`adopt-existing-change` command now uses the same authority/project-policy
+preflight because it creates admitted execution state. `abort` and `recover`
+remain available when those adoption checks are what require repair. Bootstrap
+and external adoption create a first context and therefore do not require a
+pre-existing context-owner receipt.
 
 ## Compiled guarantees
 
@@ -66,11 +77,22 @@ Every step names admitted failure families and every family has one disposition:
 - A family declared `RECONCILE`: effect reconciliation, never speculative retry.
 - A family declared `STOP`: autonomous continuation is forbidden.
 
-`replan` atomically replaces the envelope only while lifecycle phase is ACTIVE
-and no unresolved effect exists. Product commit or assurance requires a new
-lifecycle revision instead. A new revision resets effects, blockers, reviews
+`replan` atomically replaces the envelope only while lifecycle phase is ACTIVE,
+the product HEAD still equals the clean task baseline, and no unresolved effect
+exists. A product commit or assurance requires lifecycle adoption/a new
+revision instead; it cannot become a new provenance source during replan. A new revision resets effects, blockers, reviews
 and current claim results; the immutable prior generation remains available
 only as evidence lineage.
+
+Every prepared effect binds an `effect_contract_hash` to its exact canonical
+input hash, adapter-contract hash, provider/idempotency/no-effect contract, and
+the capabilities, constraints, authorities and dependencies of its external
+step. Replan retains terminal records as history. A terminal record remains in
+the active ledger only when this semantic identity is byte-for-byte identical;
+that explicit carry-forward can satisfy identical required work. A changed or
+unbound record is retired to `effect_history`, cannot satisfy the replacement
+action and cannot reuse its historical `effect_id`. Unresolved effects still
+block replan and must be reconciled under their originating envelope.
 
 ## External-effect transaction
 
@@ -148,8 +170,18 @@ evidence records both executed and reused claims.
 ## Command trust boundary
 
 Enhanced claim commands and new project-policy quality gates use argv with
-`shell=False`. Accepted provenance is owner-authored, package-owned, or an
-explicitly approved model proposal. Legacy lifecycle `--check` strings and old
+`shell=False`. A provenance label is not trust evidence:
+
+- `OWNER_AUTHORED` must match one exact argv entry in a command registry whose
+  bytes and SHA-256 match the current Git baseline;
+- `PACKAGE_OWNED` must match a package registry whose path/hash is declared by
+  `PACKAGE_MANIFEST.json`;
+- `MODEL_PROPOSED_APPROVED` must bind the exact command hash and task approval
+  reference to one entry in a command-approval registry already present with
+  the same bytes/hash in the Git baseline.
+
+Changing argv after approval or merely self-labelling a model command as owner
+or package provenance is rejected. Legacy lifecycle `--check` strings and old
 `{"command": ...}` project gates remain readable for v1.22 compatibility and
 are labeled `LEGACY_SHELL`; they do not gain enhanced guarantees.
 
@@ -160,7 +192,11 @@ are labeled `LEGACY_SHELL`; they do not gain enhanced guarantees.
 - Existing CLI calls default to `LOCAL_REVERSIBLE`.
 - Choose `LOCAL_HIGH_COST` for expensive local model/media work and supply a
   spec; choose `EXTERNAL_EFFECT` whenever a provider-side action may occur.
-- Migrate project gates to `argv` plus `OWNER_AUTHORED` or `PACKAGE_OWNED`.
+- Migrate project gates to `argv` plus a deterministic registry source/hash;
+  `templates/execution/COMMAND_REGISTRY.json.tmpl` provides the portable shape.
+- For an approved model proposal, use the separate tracked
+  `COMMAND_APPROVAL_REGISTRY.json.tmpl`; a status/reference written only inside
+  the model request is not approval provenance.
 - Re-run `execution_authority.py write-record` when intentionally adopting a
   new package build, then commit the updated adoption record with the project.
 - Context epoch and continuity stay orthogonal; rollover never creates a

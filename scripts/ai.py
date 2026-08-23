@@ -20,6 +20,7 @@ MUTATING_COMMANDS = {
 ADMISSION_COMMANDS = {
     "admit", "bootstrap", "record-commit", "validate", "rollover", "close",
     "block-for-source-fix", "continue-task", "report-blocker", "replan", "effect", "review",
+    "adopt-existing-change",
 }
 
 
@@ -35,6 +36,7 @@ def _requested_command(argv: list[str]) -> str | None:
         "admit", "bootstrap", "status", "next", "record-commit", "validate",
         "rollover", "close", "recover", "block-for-source-fix", "continue-task",
         "report-blocker", "replan", "effect", "review", "assurance-plan",
+        "adopt-existing-change", "new-revision", "abort", "telemetry-ingest",
     }
     return next((value for value in argv if value in known), None)
 
@@ -46,11 +48,7 @@ def _context_epoch_preflight_enabled(root: Path) -> bool:
         return True
     if override in {"0", "false", "no", "off"}:
         return False
-    try:
-        policy = json.loads((root / ".buildos-policy.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    context_epoch = policy.get("context_epoch") if isinstance(policy, dict) else None
+    context_epoch = _policy(root).get("context_epoch")
     return isinstance(context_epoch, dict) and context_epoch.get("enabled") is True
 
 

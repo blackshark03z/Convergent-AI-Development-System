@@ -52,13 +52,19 @@ MAX_EVIDENCE_OUTPUT = 16_000
 RELEASED_TASK_PHASES = {"CLOSED", "ABORTED", "BLOCKED_SOURCE_FIX"}
 
 
-def _compile_execution_runtime(request: Mapping[str, Any], execution_spec: Path | str | Mapping[str, Any] | None, *, plan_revision: int = 1) -> dict[str, Any]:
+def _compile_execution_runtime(
+    request: Mapping[str, Any], execution_spec: Path | str | Mapping[str, Any] | None, *,
+    root: Path, package_root: Path, git_head: str, plan_revision: int = 1,
+) -> dict[str, Any]:
     if execution_spec is None:
         if execution.execution_required(request):
             raise KernelError("this task class requires an admitted --execution-spec before implementation or external effects")
         return execution.legacy_runtime(request)
     value = dict(execution_spec) if isinstance(execution_spec, Mapping) else execution.load_spec(execution_spec)
-    runtime = execution.compile_spec(value, request, plan_revision=plan_revision)
+    runtime = execution.compile_spec(
+        value, request, plan_revision=plan_revision,
+        root=root, package_root=package_root, git_head=git_head,
+    )
     if runtime.get("plan_validity") != "VALID":
         details = ", ".join(f"{row['code']}:{row['subject']}" for row in runtime.get("admission_blockers") or [])
         raise KernelError(f"execution admission blocked before implementation: {details}")
@@ -497,8 +503,11 @@ class BuildOS:
     def admit(self, request: Mapping[str, Any], *, execution_spec: Path | str | Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Compile the single pre-execution envelope without changing lifecycle state."""
         validated = validate_task_request(request)
-        runtime = _compile_execution_runtime(validated, execution_spec)
         observed = git_adapter.snapshot(self.root)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            git_head=str(observed.get("head") or ""),
+        )
         problems: list[str] = []
         if not observed.get("available") or Path(str(observed.get("root"))).resolve() != self.root:
             problems.append("GIT_TOP_LEVEL_REQUIRED")
@@ -524,11 +533,14 @@ class BuildOS:
     ) -> CommitResult:
         # Validate authorization/risk before touching runtime or Git excludes.
         validated = validate_task_request(request)
-        runtime = _compile_execution_runtime(validated, execution_spec)
         if validated.get("skill"):
             _skill_reference(self.root, self.package_root, validated["skill"])
         existing = read_current(self.root, allow_uninitialized=True)
         observed = git_adapter.snapshot(self.root)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            git_head=str(observed.get("head") or ""),
+        )
         if observed.get("tracked_control_paths"):
             raise KernelError("bootstrap refuses a tracked .buildos control path; migrate or untrack that reserved path first")
         if observed.get("product_dirty"):
@@ -585,7 +597,6 @@ class BuildOS:
     ) -> CommitResult:
         """Create a fresh canonical task linked to one terminal historical task."""
         validated = validate_task_request(request)
-        runtime = _compile_execution_runtime(validated, execution_spec)
         reason = str(reason).strip()
         if not reason:
             raise KernelError("continue-task requires a reason")
@@ -606,6 +617,10 @@ class BuildOS:
             "resolution_reference": str(resolution_reference or "").strip() or None,
         }
         observed = git_adapter.snapshot(self.root)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            git_head=str(observed.get("head") or ""),
+        )
         state = initial_state(request, observed, lineage=lineage, execution=runtime)
         if (
             current.state.get("task_id") == state["task_id"]
@@ -649,7 +664,6 @@ class BuildOS:
     ) -> CommitResult:
         """Atomically adopt a pre-existing clean HEAD with explicit provenance."""
         validated = validate_task_request(request)
-        runtime = _compile_execution_runtime(validated, execution_spec)
         if validated.get("side_effect") == "READ_ONLY":
             raise KernelError("adopt-existing-change requires a write-capable task")
         if validated.get("skill"):
@@ -658,6 +672,10 @@ class BuildOS:
         base_sha = git_adapter.resolve_commit(self.root, base)
         target_sha = git_adapter.resolve_commit(self.root, target)
         observed = git_adapter.snapshot(self.root, base_sha=base_sha)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            git_head=str(observed.get("head") or ""),
+        )
         base_anchor = git_adapter.commit_anchor(self.root, base_sha)
         state = initial_state(request, base_anchor, execution=runtime)
         if current and (
@@ -768,8 +786,22 @@ class BuildOS:
     ) -> CommitResult:
         previous = self._snapshot()
         state = previous.state
+        observed = git_adapter.snapshot(
+            self.root,
+            base_sha=(state.get("base_git") or {}).get("head"),
+            product_sha=(state.get("product_commit") or {}).get("sha"),
+        )
+        if (
+            not observed.get("available")
+            or observed.get("head") != (state.get("base_git") or {}).get("head")
+            or observed.get("product_dirty")
+            or observed.get("tracked_control_paths")
+        ):
+            raise KernelError("replan requires the clean unchanged task baseline; a product commit needs lifecycle adoption first")
         runtime = _compile_execution_runtime(
-            state, execution_spec, plan_revision=int((state.get("execution") or {}).get("plan_revision", 1)) + 1,
+            state, execution_spec, root=self.root, package_root=self.package_root,
+            git_head=str(observed.get("head") or ""),
+            plan_revision=int((state.get("execution") or {}).get("plan_revision", 1)) + 1,
         )
         prior_event = previous.event or {}
         if (
@@ -786,6 +818,11 @@ class BuildOS:
             self.root, expected_hash=previous.generation_hash, candidate_state=candidate,
             event=event, operation_id=operation, configured_failures=configured_failures,
             projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(
+                self.root, observed,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            ),
         )
 
     def effect(
