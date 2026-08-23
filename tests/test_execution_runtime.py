@@ -98,6 +98,38 @@ def git(root: Path, *args: str) -> str:
     return proc.stdout.strip()
 
 
+def install_command_registry(root: Path, rows: list[dict]) -> str:
+    data = (
+        json.dumps(
+            {"schema": "buildos.command-registry.v1", "commands": rows},
+            ensure_ascii=False, sort_keys=True, indent=2,
+        ) + "\n"
+    ).encode("utf-8")
+    (root / COMMAND_REGISTRY_PATH).write_bytes(data)
+    git(root, "add", COMMAND_REGISTRY_PATH)
+    git(root, "commit", "-qm", "install adversarial trusted commands")
+    return hashlib.sha256(data).hexdigest()
+
+
+def trusted_command(row: dict, registry_sha256: str) -> dict:
+    return {
+        "id": row["id"], "argv": list(row["argv"]),
+        "provenance": "PROJECT_POLICY_TRUSTED",
+        "source": {
+            "kind": "PROJECT_BASELINE", "path": COMMAND_REGISTRY_PATH,
+            "sha256": registry_sha256,
+        },
+    }
+
+
+def spec_with_commands(root: Path, rows: list[dict], claims: list[dict]) -> dict:
+    registry_sha = install_command_registry(root, rows)
+    value = spec()
+    value["commands"] = [trusted_command(row, registry_sha) for row in rows]
+    value["claims"] = claims
+    return value
+
+
 @contextmanager
 def repository(name: str):
     with tempfile.TemporaryDirectory(prefix=f"buildos-execution-{name}-") as raw:
@@ -946,27 +978,291 @@ class ExternalEffectTests(unittest.TestCase):
 
 
 class ProportionalAssuranceTests(unittest.TestCase):
-    def test_unchanged_claim_is_reused_while_final_claim_runs(self):
-        with repository("claims") as root:
+    def test_validation_cannot_assure_descendant_committed_by_a_claim(self):
+        with repository("claim-mutates-head") as root:
+            mutating = {
+                "id": "mutating_final",
+                "argv": [
+                    sys.executable, "-c",
+                    "from pathlib import Path; import subprocess; "
+                    "p=Path('app.py'); assert p.read_text(encoding='utf-8') == 'value = 2\\n'; "
+                    "p.write_text('value = 999\\n', encoding='utf-8'); "
+                    "subprocess.run(['git','add','app.py'], check=True); "
+                    "subprocess.run(['git','commit','-qm','unvalidated descendant'], check=True)",
+                ],
+            }
+            registry_sha = install_command_registry(root, [mutating])
+            value = spec()
+            value["commands"] = [trusted_command(mutating, registry_sha)]
+            value["claims"] = [{
+                "id": "final_assurance", "description": "assert then mutate",
+                "command_id": "mutating_final", "dependencies": ["app.py"],
+                "mode": "FINAL", "role": "ACCEPTANCE",
+                "acceptance": ["behavior is correct"],
+            }]
             osys = BuildOS(root)
-            osys.bootstrap(request("CLAIMS-1"), execution_spec=spec())
+            osys.bootstrap(request("CLAIM-MUTATES-HEAD"), execution_spec=value)
             (root / "app.py").write_text("value = 2\n", encoding="utf-8")
-            git(root, "add", "app.py"); git(root, "commit", "-qm", "first")
-            osys.record_commit()
-            first = osys.validate(checks=[], inspected_by="TEST").snapshot
-            self.assertEqual(first.state["execution"]["last_assurance_plan"]["executed"], ["final_assurance", "focused_behavior"])
-            osys.close()
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "recorded candidate")
+            recorded = osys.record_commit().snapshot.state["product_commit"]["sha"]
+            with self.assertRaisesRegex(KernelError, "validation command changed product identity"):
+                osys.validate(checks=[], inspected_by="TEST")
+            self.assertNotEqual(git(root, "rev-parse", "HEAD"), recorded)
 
-            osys.revise(reason="small unrelated correction")
+    def test_validation_rejects_every_product_identity_mutation_family(self):
+        mutations = {
+            "tracked_edit": (
+                "from pathlib import Path; Path('app.py').write_text('dirty edit\\n', encoding='utf-8')"
+            ),
+            "tracked_delete": "from pathlib import Path; Path('app.py').unlink()",
+            "type_change": (
+                "import subprocess; "
+                "b=subprocess.run(['git','hash-object','-w','--stdin'],input='other.py\\n',text=True,capture_output=True,check=True).stdout.strip(); "
+                "subprocess.run(['git','update-index','--cacheinfo',f'120000,{b},app.py'],check=True); "
+                "subprocess.run(['git','commit','-qm','validation type change'],check=True)"
+            ),
+            "tree_equivalent_head_move": (
+                "import subprocess; subprocess.run(['git','commit','--allow-empty','-qm','validation empty commit'],check=True)"
+            ),
+        }
+        for name, code in mutations.items():
+            with self.subTest(name=name), repository(f"validation-{name}") as root:
+                command = {"id": "mutator", "argv": [sys.executable, "-c", code]}
+                value = spec_with_commands(root, [command], [{
+                    "id": "final_assurance", "description": name,
+                    "command_id": "mutator", "dependencies": ["app.py"],
+                    "mode": "FINAL", "role": "ACCEPTANCE",
+                    "acceptance": ["behavior is correct"],
+                }])
+                osys = BuildOS(root)
+                osys.bootstrap(request(f"VALIDATION-{name.upper()}"), execution_spec=value)
+                (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+                git(root, "add", "app.py"); git(root, "commit", "-qm", "recorded candidate")
+                osys.record_commit()
+                with self.assertRaisesRegex(KernelError, "validation command changed product identity"):
+                    osys.validate(checks=[], inspected_by="TEST")
+
+    def test_validation_allows_ignored_output_and_binds_one_exact_target(self):
+        with repository("validation-ignored-output") as root:
+            command = {
+                "id": "ignored_output",
+                "argv": [
+                    sys.executable, "-c",
+                    "from pathlib import Path; Path('.buildos/validation-output.tmp').write_text('ok')",
+                ],
+            }
+            value = spec_with_commands(root, [command], [{
+                "id": "final_assurance", "description": "ignored temporary output",
+                "command_id": "ignored_output", "dependencies": ["app.py"],
+                "mode": "FINAL", "role": "ACCEPTANCE",
+                "acceptance": ["behavior is correct"],
+            }])
+            osys = BuildOS(root)
+            osys.bootstrap(request("VALIDATION-IGNORED"), execution_spec=value)
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "recorded candidate")
+            recorded = osys.record_commit().snapshot.state["product_commit"]
+            assured = osys.validate(checks=[], inspected_by="TEST").snapshot
+            evidence_ref = assured.state["evidence"][-1]
+            evidence = json.loads((root / evidence_ref["path"]).read_text(encoding="utf-8"))
+            plan = assured.state["execution"]["last_assurance_plan"]
+            self.assertEqual(
+                (recorded["sha"], recorded["tree"]),
+                (plan["target_sha"], plan["target_tree"]),
+            )
+            self.assertEqual(
+                (plan["target_sha"], plan["target_tree"]),
+                (evidence["target_sha"], evidence["target_tree"]),
+            )
+            self.assertEqual(
+                (evidence["target_sha"], evidence["target_tree"]),
+                (assured.state["assurance"]["target_sha"], assured.state["assurance"]["validated_tree"]),
+            )
+            self.assertTrue((root / ".buildos" / "validation-output.tmp").is_file())
+
+    def test_early_mutating_claim_stops_before_later_claim(self):
+        with repository("validation-multi-claim") as root:
+            early = {
+                "id": "early_mutator",
+                "argv": [sys.executable, "-c", "from pathlib import Path; Path('app.py').write_text('mutated\\n')"],
+            }
+            later = {
+                "id": "later_claim",
+                "argv": [sys.executable, "-c", "from pathlib import Path; Path('.buildos/later-ran').write_text('yes')"],
+            }
+            value = spec_with_commands(root, [early, later], [
+                {
+                    "id": "a_early", "description": "early mutation", "command_id": "early_mutator",
+                    "dependencies": ["app.py"], "mode": "FINAL", "role": "ACCEPTANCE",
+                    "acceptance": ["behavior is correct"],
+                },
+                {
+                    "id": "z_later", "description": "later claim", "command_id": "later_claim",
+                    "dependencies": ["app.py"], "mode": "FINAL", "role": "SECURITY",
+                    "acceptance": ["behavior is correct"],
+                },
+            ])
+            osys = BuildOS(root)
+            osys.bootstrap(request("VALIDATION-MULTI"), execution_spec=value)
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "recorded candidate")
+            osys.record_commit()
+            with self.assertRaisesRegex(KernelError, "validation command changed product identity"):
+                osys.validate(checks=[], inspected_by="TEST")
+            self.assertFalse((root / ".buildos" / "later-ran").exists())
+
+    def test_enhanced_validation_retry_after_evidence_publication_keeps_target_identity(self):
+        with repository("validation-evidence-retry") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(request("VALIDATION-EVIDENCE-RETRY"), execution_spec=spec())
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "recorded candidate")
+            recorded = osys.record_commit().snapshot.state["product_commit"]
+            kwargs = {"checks": [], "inspected_by": "TEST", "op_id": "validation-evidence-retry"}
+            with self.assertRaises(InjectedFailure):
+                osys.validate(configured_failures="after_evidence_publish", **kwargs)
+            retried = osys.validate(**kwargs)
+            self.assertEqual(retried.snapshot.state["phase"], "ASSURANCE_READY")
+            plan = retried.snapshot.state["execution"]["last_assurance_plan"]
+            self.assertEqual((plan["target_sha"], plan["target_tree"]), (recorded["sha"], recorded["tree"]))
+
+    def test_r3_rollback_recovery_claim_executes_fresh_in_each_revision(self):
+        with repository("r3-rollback-fresh") as root:
+            rollback = {
+                "id": "rollback",
+                "argv": [
+                    sys.executable, "-c",
+                    "from pathlib import Path; p=Path('.buildos/rollback-count.txt'); "
+                    "n=int(p.read_text() if p.exists() else '0')+1; "
+                    "p.write_text(str(n)); print(n)",
+                ],
+            }
+            rows = [*COMMAND_ROWS, rollback]
+            registry_sha = install_command_registry(root, rows)
+            value = spec()
+            value["commands"] = [trusted_command(row, registry_sha) for row in rows]
+            value["claims"].append({
+                "id": "rollback_current", "description": "current rollback proof",
+                "command_id": "rollback", "dependencies": ["app.py"],
+                "mode": "AFFECTED", "role": "ROLLBACK_RECOVERY",
+                "acceptance": ["behavior is correct"],
+            })
+            value["claims"].extend([
+                {
+                    "id": "security_affected", "description": "security evidence",
+                    "command_id": "focused", "dependencies": ["app.py"],
+                    "mode": "AFFECTED", "role": "SECURITY",
+                    "acceptance": ["behavior is correct"],
+                },
+                {
+                    "id": "qc_affected", "description": "QC evidence",
+                    "command_id": "focused", "dependencies": ["app.py"],
+                    "mode": "AFFECTED", "role": "QC",
+                    "acceptance": ["behavior is correct"],
+                },
+            ])
+            req = request(
+                "R3-ROLLBACK-FRESH", authorization="APPROVED",
+                authorization_reference="owner/r3-rollback-fresh",
+            )
+            req["risk"] = "R3"
+            req["authorization_actor"] = "OWNER"
+            osys = BuildOS(root)
+            osys.bootstrap(req, execution_spec=value)
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "revision one")
+            osys.record_commit()
+            osys.validate(
+                checks=[], inspected_by="TEST", reviewer="REVIEWER-ONE",
+                review_reference="review/r1",
+            )
+            osys.close()
+            osys.revise(reason="unrelated revision")
             (root / "other.py").write_text("other = 2\n", encoding="utf-8")
-            git(root, "add", "other.py"); git(root, "commit", "-qm", "second")
+            git(root, "add", "other.py"); git(root, "commit", "-qm", "revision two")
             osys.record_commit()
             plan = osys.assurance_plan()
-            self.assertEqual(plan["reuse"], ["focused_behavior"])
-            self.assertEqual(plan["execute"], ["final_assurance"])
-            second = osys.validate(checks=[], inspected_by="TEST").snapshot
-            self.assertTrue(second.state["execution"]["claim_results"]["focused_behavior"]["reused"])
-            self.assertFalse(second.state["execution"]["claim_results"]["final_assurance"]["reused"])
+            self.assertIn("focused_behavior", plan["reuse"])
+            self.assertIn("security_affected", plan["reuse"])
+            self.assertIn("qc_affected", plan["reuse"])
+            self.assertIn("rollback_current", plan["execute"])
+            second = osys.validate(
+                checks=[], inspected_by="TEST", reviewer="REVIEWER-TWO",
+                review_reference="review/r2",
+            ).snapshot
+            self.assertEqual((root / ".buildos" / "rollback-count.txt").read_text(), "2")
+            self.assertIn("rollback_current", second.state["execution"]["last_assurance_plan"]["executed"])
+            self.assertFalse(second.state["execution"]["claim_results"]["rollback_current"]["reused"])
+            osys.close()
+            osys.revise(reason="rollback dependency changed")
+            (root / "app.py").write_text("value = 3\n", encoding="utf-8")
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "revision three")
+            osys.record_commit()
+            third_plan = osys.assurance_plan()
+            self.assertIn("rollback_current", third_plan["execute"])
+            osys.validate(
+                checks=[], inspected_by="TEST", reviewer="REVIEWER-THREE",
+                review_reference="review/r3",
+            )
+            self.assertEqual((root / ".buildos" / "rollback-count.txt").read_text(), "3")
+
+    def test_r3_reused_rollback_marker_cannot_satisfy_current_evidence(self):
+        with repository("r3-forged-reuse") as root:
+            req = request(
+                "R3-FORGED-REUSE", authorization="APPROVED",
+                authorization_reference="owner/r3-forged-reuse",
+            )
+            req["risk"] = "R3"; req["authorization_actor"] = "OWNER"
+            value = spec()
+            value["claims"].append({
+                "id": "rollback_current", "description": "rollback",
+                "command_id": "focused", "dependencies": ["app.py"],
+                "mode": "AFFECTED", "role": "ROLLBACK_RECOVERY",
+                "acceptance": ["behavior is correct"],
+            })
+            osys = BuildOS(root)
+            osys.bootstrap(req, execution_spec=value)
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py"); git(root, "commit", "-qm", "candidate")
+            osys.record_commit()
+            real_plan = osys.assurance_plan()
+            forged = copy.deepcopy(real_plan)
+            rollback_row = next(row for row in forged["claims"] if row["claim_id"] == "rollback_current")
+            rollback_row["disposition"] = "REUSE"
+            rollback_row["previous_evidence"] = {"path": ".buildos/forged.json", "sha256": "0" * 64}
+            forged["execute"] = [item for item in forged["execute"] if item != "rollback_current"]
+            forged["reuse"] = [*forged["reuse"], "rollback_current"]
+            with patch("buildos.facade.execution.claim_plan", return_value=forged):
+                with self.assertRaisesRegex(KernelError, "R3 validation requires a rollback/recovery check"):
+                    osys.validate(
+                        checks=[], inspected_by="TEST", reviewer="REVIEWER",
+                        review_reference="review/forged",
+                    )
+
+    def test_r1_and_r2_unchanged_claim_is_reused_while_final_claim_runs(self):
+        for risk in ("R1", "R2"):
+            with self.subTest(risk=risk), repository(f"claims-{risk.lower()}") as root:
+                osys = BuildOS(root)
+                req = request(f"CLAIMS-{risk}")
+                req["risk"] = risk
+                osys.bootstrap(req, execution_spec=spec())
+                (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+                git(root, "add", "app.py"); git(root, "commit", "-qm", "first")
+                osys.record_commit()
+                first = osys.validate(checks=[], inspected_by="TEST").snapshot
+                self.assertEqual(first.state["execution"]["last_assurance_plan"]["executed"], ["final_assurance", "focused_behavior"])
+                osys.close()
+
+                osys.revise(reason="small unrelated correction")
+                (root / "other.py").write_text("other = 2\n", encoding="utf-8")
+                git(root, "add", "other.py"); git(root, "commit", "-qm", "second")
+                osys.record_commit()
+                plan = osys.assurance_plan()
+                self.assertEqual(plan["reuse"], ["focused_behavior"])
+                self.assertEqual(plan["execute"], ["final_assurance"])
+                second = osys.validate(checks=[], inspected_by="TEST").snapshot
+                self.assertTrue(second.state["execution"]["claim_results"]["focused_behavior"]["reused"])
+                self.assertFalse(second.state["execution"]["claim_results"]["final_assurance"]["reused"])
 
     def test_missing_prior_evidence_forces_execution_instead_of_unsafe_reuse(self):
         with repository("claim-proof") as root:

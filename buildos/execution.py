@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from .model import KernelError, sha256_json
 
@@ -1300,9 +1300,10 @@ def claim_plan(root: Path, state: Mapping[str, Any], *, target_sha: str, previou
     runtime = state.get("execution") or {}
     if runtime.get("mode") != "ENHANCED":
         return {"mode": "LEGACY", "claims": []}
-    from .git_adapter import dependency_fingerprint
+    from .git_adapter import commit_anchor, dependency_fingerprint
 
     envelope = runtime["envelope"]
+    target_tree = commit_anchor(root, target_sha)["tree"]
     prior_results = ((previous_state or {}).get("execution") or {}).get("claim_results") or {}
     rows: list[dict[str, Any]] = []
     for claim_id in sorted(envelope["claims"]):
@@ -1319,6 +1320,7 @@ def claim_plan(root: Path, state: Mapping[str, Any], *, target_sha: str, previou
         )
         reusable = (
             claim["mode"] == "AFFECTED"
+            and claim["role"] != "ROLLBACK_RECOVERY"
             and prior.get("status") == "PASS"
             and prior.get("semantic_hash") == claim["semantic_hash"]
             and prior.get("dependency_digest") == digest
@@ -1331,13 +1333,21 @@ def claim_plan(root: Path, state: Mapping[str, Any], *, target_sha: str, previou
             "previous_evidence": deepcopy(prior_evidence) if reusable else None,
         })
     return {
-        "mode": "DEPENDENCY_AWARE", "target_sha": target_sha, "claims": rows,
+        "mode": "DEPENDENCY_AWARE", "target_sha": target_sha, "target_tree": target_tree,
+        "claims": rows,
         "execute": [row["claim_id"] for row in rows if row["disposition"] == "EXECUTE"],
         "reuse": [row["claim_id"] for row in rows if row["disposition"] == "REUSE"],
     }
 
 
-def execute_claim_plan(root: Path, state: Mapping[str, Any], plan: Mapping[str, Any], *, timeout: int) -> list[dict[str, Any]]:
+def execute_claim_plan(
+    root: Path,
+    state: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    *,
+    timeout: int,
+    command_guard: Callable[[], None] | None = None,
+) -> list[dict[str, Any]]:
     runtime = state["execution"]
     envelope = runtime["envelope"]
     results: list[dict[str, Any]] = []
@@ -1350,7 +1360,11 @@ def execute_claim_plan(root: Path, state: Mapping[str, Any], plan: Mapping[str, 
                 "dependency_digest": row["dependency_digest"], "semantic_hash": row["semantic_hash"],
             })
             continue
+        if command_guard is not None:
+            command_guard()
         result = _run_argv(root, envelope["commands"][row["command_id"]], timeout)
+        if command_guard is not None:
+            command_guard()
         result.update({
             "claim_id": row["claim_id"], "role": row["role"], "reused": False,
             "dependency_digest": row["dependency_digest"], "semantic_hash": row["semantic_hash"],
@@ -1371,11 +1385,14 @@ def attach_claim_results(state: Mapping[str, Any], plan: Mapping[str, Any], resu
             "status": "PASS", "semantic_hash": row["semantic_hash"],
             "dependency_digest": row["dependency_digest"],
             "evidence": evidence_ref,
-            "last_assured_target": plan.get("target_sha"), "reused": bool(row.get("reused")),
+            "last_assured_target": plan.get("target_sha"),
+            "last_assured_target_tree": plan.get("target_tree"),
+            "reused": bool(row.get("reused")),
         }
     runtime["claim_results"] = bound
     runtime["last_assurance_plan"] = {
-        "target_sha": plan.get("target_sha"), "executed": list(plan.get("execute") or []),
+        "target_sha": plan.get("target_sha"), "target_tree": plan.get("target_tree"),
+        "executed": list(plan.get("execute") or []),
         "reused": list(plan.get("reuse") or []), "evidence": {"path": evidence.get("path"), "sha256": evidence.get("sha256")},
     }
     result["execution"] = runtime

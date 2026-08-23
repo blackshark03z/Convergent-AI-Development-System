@@ -104,6 +104,23 @@ def _assert_git_unchanged(
         raise KernelError("Git product observation changed before canonical commit; retry from fresh status")
 
 
+def _assert_validation_target_unchanged(
+    root: Path,
+    expected: Mapping[str, Any],
+    *,
+    base_sha: str | None,
+    product_sha: str | None,
+) -> None:
+    try:
+        _assert_git_unchanged(
+            root, expected, base_sha=base_sha, product_sha=product_sha,
+        )
+    except KernelError as exc:
+        raise KernelError(
+            "validation command changed product identity; discard its result and validate the frozen target again"
+        ) from exc
+
+
 def _relative(root: Path, path: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
@@ -272,7 +289,13 @@ def _prepare_evidence(
             raise KernelError("R3 reviewer must be independent from the Worker")
         if reviewer.upper() in {"WORKER", "AUTO", "SELF"}:
             raise KernelError("R3 reviewer identity cannot be WORKER, AUTO, or SELF")
-        prepared_has_rollback = any(str(item.get("role")) == "ROLLBACK_RECOVERY" for item in (prepared_checks or []))
+        prepared_has_rollback = any(
+            str(item.get("role")) == "ROLLBACK_RECOVERY"
+            and item.get("reused") is not True
+            and item.get("returncode") == 0
+            for item in (prepared_checks or [])
+            if isinstance(item, Mapping)
+        )
         if not rollback_check and not prepared_has_rollback:
             raise KernelError("R3 validation requires a rollback/recovery check")
     commands = (
@@ -306,6 +329,13 @@ def _prepare_evidence(
             prior_revision = int(prior.get("revision", 0))
         except (TypeError, ValueError) as exc:
             raise KernelError("existing immutable evidence has invalid revision") from exc
+        prior_has_fresh_rollback = any(
+            isinstance(item, dict)
+            and item.get("role") == "ROLLBACK_RECOVERY"
+            and item.get("reused") is not True
+            and item.get("returncode") == 0
+            for item in prior_checks
+        )
         structurally_valid = (
             prior.get("schema") == "buildos.evidence.v1.22"
             and prior.get("operation_id") == operation
@@ -315,6 +345,7 @@ def _prepare_evidence(
             and prior.get("product_change_mode", change_mode) == change_mode
             and (not runtime_no_source_delta or prior.get("assurance_scope") == assurance_scope)
             and prior.get("target_sha") == git.get("head")
+            and prior.get("target_tree", git.get("tree")) == git.get("tree")
             and prior.get("runtime_acceptance_reference") == runtime_acceptance_reference
             and prior.get("acceptance") == (state.get("acceptance") or [])
             and prior.get("inspected_by") == inspected_by
@@ -339,6 +370,7 @@ def _prepare_evidence(
                 prior_review.get("reviewer") == reviewer
                 and prior_review.get("reference") == review_reference
                 and (not runtime_no_source_delta or prior_review.get("scope") == assurance_scope)
+                and (rollback_check is not None or prior_has_fresh_rollback)
             ))
         )
         if not structurally_valid:
@@ -346,12 +378,18 @@ def _prepare_evidence(
         return {
             "kind": "VALIDATION", "path": rel.as_posix(), "sha256": sha256_bytes(data),
             "target_sha": prior.get("target_sha"),
+            "target_tree": prior.get("target_tree"),
             "runtime_acceptance_reference": runtime_acceptance_reference,
         }
     results = [dict(item) for item in (prepared_checks or [])]
     if not enhanced_validation:
         for command in commands:
             result = _run_check(root, command, timeout)
+            _assert_validation_target_unchanged(
+                root, git,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            )
             result["role"] = "ACCEPTANCE"
             results.append(result)
     rollback_result = None
@@ -361,6 +399,11 @@ def _prepare_evidence(
     failures = [item for item in [*results, *([rollback_result] if rollback_result else [])] if item["returncode"] != 0]
     if failures:
         raise KernelError(f"validation command failed: {failures[0]['command']} (rc={failures[0]['returncode']})")
+    _assert_validation_target_unchanged(
+        root, git,
+        base_sha=(state.get("base_git") or {}).get("head"),
+        product_sha=(state.get("product_commit") or {}).get("sha"),
+    )
     after_checks = git_adapter.snapshot(
         root,
         base_sha=(state.get("base_git") or {}).get("head"),
@@ -377,8 +420,8 @@ def _prepare_evidence(
         "product_change_mode": change_mode,
         "assurance_scope": assurance_scope,
         "product_anchor_sha": ((state.get("base_git") or {}).get("head") if change_mode == "NO_SOURCE_DELTA" else (state.get("product_commit") or {}).get("sha")),
-        "target_sha": after_checks.get("head"),
-        "target_tree": after_checks.get("tree"),
+        "target_sha": git.get("head"),
+        "target_tree": git.get("tree"),
         "acceptance": state.get("acceptance") or [],
         "runtime_acceptance_reference": runtime_acceptance_reference,
         "checks": results,
@@ -408,7 +451,8 @@ def _prepare_evidence(
     digest = sha256_bytes(published)
     return {
         "kind": "VALIDATION", "path": rel.as_posix(), "sha256": digest,
-        "target_sha": after_checks.get("head"),
+        "target_sha": git.get("head"),
+        "target_tree": git.get("tree"),
         "runtime_acceptance_reference": runtime_acceptance_reference,
     }
 
@@ -1171,6 +1215,7 @@ class BuildOS:
             {
                 "path": "PRECONDITION_ONLY", "sha256": "PRECONDITION_ONLY",
                 "target_sha": observed.get("head"),
+                "target_tree": observed.get("tree"),
                 "runtime_acceptance_reference": runtime_acceptance_reference,
             },
         )
@@ -1183,7 +1228,15 @@ class BuildOS:
             validation_plan = execution.claim_plan(
                 self.root, state, target_sha=str(observed.get("head")), previous_state=prior_state,
             )
-            prepared = execution.execute_claim_plan(self.root, state, validation_plan, timeout=timeout)
+            guard = lambda: _assert_validation_target_unchanged(
+                self.root, observed,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            )
+            prepared = execution.execute_claim_plan(
+                self.root, state, validation_plan, timeout=timeout,
+                command_guard=guard,
+            )
         operation = op_id or operation_id(
             "VALIDATE", state["task_id"], state["revision"], observed.get("head"), combined, validation_plan,
             inspected_by, reviewer, review_reference, rollback_check, runtime_acceptance_reference,

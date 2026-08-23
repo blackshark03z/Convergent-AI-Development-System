@@ -13,14 +13,19 @@ if str(PACKAGE) not in sys.path:
 from buildos.cli import main
 
 
-MUTATING_COMMANDS = {
-    "record-commit", "validate", "rollover", "close", "block-for-source-fix",
-    "continue-task", "report-blocker", "replan", "effect", "review",
+EXECUTION_AUTHORITY_CREATORS = {
+    "admit", "bootstrap", "continue-task", "adopt-existing-change",
 }
-ADMISSION_COMMANDS = {
-    "admit", "bootstrap", "record-commit", "validate", "rollover", "close",
-    "block-for-source-fix", "continue-task", "report-blocker", "replan", "effect", "review",
-    "adopt-existing-change",
+EXECUTION_AUTHORITY_MUTATORS = {
+    "record-commit", "validate", "rollover", "close", "block-for-source-fix",
+    "report-blocker", "replan", "effect", "review", "new-revision",
+}
+BREAK_GLASS_COMMANDS = {"abort", "recover"}
+DIAGNOSTIC_TELEMETRY_COMMANDS = {"status", "next", "assurance-plan", "telemetry-ingest"}
+ADMISSION_COMMANDS = EXECUTION_AUTHORITY_CREATORS | EXECUTION_AUTHORITY_MUTATORS
+MUTATING_COMMANDS = {
+    *EXECUTION_AUTHORITY_MUTATORS,
+    "continue-task",
 }
 
 

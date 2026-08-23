@@ -86,6 +86,96 @@ class FacadeOptInTests(unittest.TestCase):
             )
             self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "abort"]), 0)
 
+    def test_admin_new_revision_is_guarded_by_integrated_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {"enabled": True, "require_authority_record": False},
+            }), encoding="utf-8")
+            self.assertEqual(
+                FACADE._adoption_preflight(["--root", str(root), "new-revision"]),
+                2,
+            )
+
+    def test_admin_command_semantics_keep_only_true_break_glass_unguarded(self) -> None:
+        self.assertIn("new-revision", FACADE.EXECUTION_AUTHORITY_MUTATORS)
+        self.assertIn("adopt-existing-change", FACADE.EXECUTION_AUTHORITY_CREATORS)
+        self.assertEqual(FACADE.BREAK_GLASS_COMMANDS, {"abort", "recover"})
+        self.assertEqual(
+            FACADE.DIAGNOSTIC_TELEMETRY_COMMANDS,
+            {"status", "next", "assurance-plan", "telemetry-ingest"},
+        )
+        self.assertNotIn("abort", FACADE.ADMISSION_COMMANDS)
+        self.assertNotIn("recover", FACADE.ADMISSION_COMMANDS)
+
+    def test_valid_enrolled_admin_new_revision_composes_all_preflights(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {"enabled": True, "require_authority_record": True},
+                "context_epoch": {"enabled": True},
+            }), encoding="utf-8")
+            result = SimpleNamespace(returncode=0, stdout="")
+            with patch.object(FACADE.subprocess, "run", return_value=result) as run:
+                self.assertEqual(
+                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    0,
+                )
+            commands = [str(call.args[0][1]) for call in run.call_args_list]
+            self.assertEqual(len(commands), 3)
+            self.assertIn("execution_authority.py", commands[0])
+            self.assertIn("project_lifecycle.py", commands[1])
+            self.assertIn("context_epoch.py", commands[2])
+
+    def test_invalid_authority_or_policy_blocks_before_context_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {"enabled": True, "require_authority_record": True},
+                "context_epoch": {"enabled": True},
+            }), encoding="utf-8")
+            failed = SimpleNamespace(returncode=2, stdout='{"status":"FAIL"}')
+            with patch.object(FACADE.subprocess, "run", return_value=failed) as run:
+                self.assertEqual(
+                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    2,
+                )
+            self.assertEqual(run.call_count, 1)
+
+            invalid_policy = {"execution_admission": {"enabled": True, "require_authority_record": False}}
+            (root / ".buildos-policy.json").write_text(json.dumps(invalid_policy), encoding="utf-8")
+            with patch.object(FACADE.subprocess, "run") as run:
+                self.assertEqual(
+                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    2,
+                )
+            run.assert_not_called()
+
+    def test_admin_break_glass_and_telemetry_remain_available(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {"enabled": True, "require_authority_record": False},
+                "context_epoch": {"enabled": True},
+            }), encoding="utf-8")
+            with patch.object(FACADE.subprocess, "run") as run:
+                for command in ("abort", "recover", "telemetry-ingest"):
+                    self.assertEqual(
+                        ADMIN_FACADE._admin_preflight(["--root", str(root), command]),
+                        0,
+                    )
+            run.assert_not_called()
+
+    def test_legacy_unenrolled_admin_new_revision_remains_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            with patch.object(FACADE.subprocess, "run") as run:
+                self.assertEqual(
+                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    0,
+                )
+            run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

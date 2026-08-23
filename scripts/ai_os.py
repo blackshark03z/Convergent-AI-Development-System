@@ -8,12 +8,12 @@ if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
 from buildos.cli import main
-from scripts.ai import _adoption_preflight
+from scripts.ai import _adoption_preflight, _epoch_preflight
 
 
 def _admin_preflight(argv: list[str]) -> int:
-    """Apply normal admission only to admin operations that create execution state."""
-    return _adoption_preflight(argv)
+    """Guard active-authority creation/mutation while preserving break glass."""
+    return _adoption_preflight(argv) or _epoch_preflight(argv)
 
 
 if __name__ == "__main__":

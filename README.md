@@ -59,6 +59,13 @@ evidence while FINAL claims still execute. See
 [docs/EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md) and
 [docs/VNEXT_ARCHITECTURE_AUDIT.md](docs/VNEXT_ARCHITECTURE_AUDIT.md).
 
+Validation freezes one exact product HEAD/tree before any check runs. Every
+executed check must leave that product identity unchanged; ignored `.buildos/`
+test output remains permitted. Evidence and assurance bind the frozen identity,
+and close may refresh only to a clean tree-equivalent descendant. In R3,
+ordinary unchanged `AFFECTED` acceptance/security/QC claims remain reusable,
+but `ROLLBACK_RECOVERY` always executes in the current revision.
+
 Replan keeps the immutable task-base commit as its trust source while recording
 the current allowed descendant/dirty product bytes separately as
 `IN_PROGRESS_UNADOPTED`. It can therefore preserve valid work in place without
@@ -83,7 +90,11 @@ proof and does not claim a nonexistent product diff.
 
 There is no `reopen`.  A product change after assurance is preserved as proof
 of the prior revision and requires `new-revision`; a legitimate tree-equivalent
-descendant is simply recorded during close.
+descendant is simply recorded during close. For enrolled projects,
+`new-revision` passes the same execution-authority and project-policy admission
+as other authority mutations, plus context ownership when enabled. `abort` and
+`recover` remain break-glass operations; status/next/assurance-plan and
+telemetry ingestion remain diagnostic or observational.
 
 A live task blocked by a defect in its source system uses
 `block-for-source-fix`. This releases its lease without rewriting the event as

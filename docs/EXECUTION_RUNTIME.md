@@ -36,12 +36,15 @@ available even if adoption configuration needs repair.
 The direct Python `BuildOS` API is the kernel API: it enforces task/Git and
 execution-envelope admission, but it does not impersonate the opt-in project
 adoption or context preflights. The administrative `scripts/ai_os.py` facade is
-break-glass lifecycle authority, not a Worker bypass. Its
-`adopt-existing-change` command now uses the same authority/project-policy
-preflight because it creates admitted execution state. `abort` and `recover`
-remain available when those adoption checks are what require repair. Bootstrap
-and external adoption create a first context and therefore do not require a
-pre-existing context-owner receipt.
+not a Worker bypass. Commands are classified by semantics: `admit`, `bootstrap`,
+`continue-task` and `adopt-existing-change` create execution authority;
+lifecycle writes including `new-revision` mutate it; `abort` and `recover` are
+break-glass repair; and status/next/assurance-plan/telemetry are observational.
+Enrolled authority creation or mutation passes exact-executor authority and
+project-policy checks, plus context ownership when the operation needs an
+existing context. Break glass remains available when those checks are what
+require repair. Bootstrap and external adoption create a first context and
+therefore do not require a pre-existing context-owner receipt.
 
 ## Compiled guarantees
 
@@ -189,12 +192,24 @@ Each claim binds:
 - Git path dependency patterns;
 - `AFFECTED` or `FINAL` mode and evidence role.
 
-At validation, Build OS hashes the exact Git blob identities selected by each
-claim. A prior `AFFECTED` PASS is reused only when claim semantics, dependency
-fingerprint and immutable prior evidence bytes are identical. Missing or
-modified evidence forces execution. `FINAL` claims always execute. R3 still
-requires independent reviewer/reference, and its rollback/recovery claim is
-always part of the admitted command set.
+At validation, Build OS freezes the exact pre-check product HEAD and tree, then
+hashes the Git blob identities selected by each claim. A prior `AFFECTED` PASS
+is reused only when claim semantics, dependency fingerprint and immutable prior
+evidence bytes are identical. Missing or modified evidence forces execution.
+`FINAL` claims always execute. Every executed command is surrounded by product
+identity checks, and a final check precedes immutable evidence publication;
+tracked edits, deletes, type changes, commits and even tree-equivalent HEAD
+moves all invalidate that run. Control/test output ignored under `.buildos/`
+does not change product identity and remains allowed. The claim plan, evidence
+and assurance all bind the same frozen SHA/tree. Close permits a later commit
+only when it is a clean descendant with the exact validated tree.
+
+R3 still requires an independent reviewer/reference. Its
+`ROLLBACK_RECOVERY` role is never reusable: a current-revision, successful,
+non-reused execution must be present in enhanced evidence. This role-specific
+rule leaves ordinary unchanged `AFFECTED` acceptance, security and QC claims
+eligible for proportional reuse; explicit legacy rollback checks continue to
+execute through the legacy validation path.
 
 This is claim-level evidence reuse, not test skipping by intuition. The final
 evidence records both executed and reused claims.

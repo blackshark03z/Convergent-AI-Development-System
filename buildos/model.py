@@ -545,6 +545,13 @@ def transition_validate(prev: Mapping[str, Any], git: Mapping[str, Any], evidenc
         raise KernelError("NO_SOURCE_DELTA runtime validation requires a runtime acceptance reference")
     if evidence.get("target_sha") and evidence.get("target_sha") != git.get("head"):
         raise KernelError("evidence target no longer matches current HEAD; preserve it and validate the new target")
+    if evidence.get("target_tree") and evidence.get("target_tree") != git.get("tree"):
+        raise KernelError("evidence target tree no longer matches current product bytes; validate the frozen target again")
+    if (
+        ((prev.get("execution") or {}).get("mode") == "ENHANCED")
+        and not evidence.get("target_tree")
+    ):
+        raise KernelError("enhanced validation evidence must bind the exact target tree")
     result = _next(prev, phase="ASSURANCE_READY", at=at)
     result["evidence"] = [*deepcopy(prev.get("evidence") or []), dict(evidence)]
     result["assurance"] = {
@@ -589,6 +596,8 @@ def transition_close(prev: Mapping[str, Any], git: Mapping[str, Any] | None, *, 
             raise KernelError("close requires a clean product tree")
         if relation == "DESCENDANT" and observed.get("changes_since_validated"):
             raise KernelError("product files changed after validation; preserve evidence and validate a new revision")
+        if relation == "DESCENDANT" and observed.get("tree") != assurance.get("validated_tree"):
+            raise KernelError("close permits only a tree-equivalent descendant of the validated target")
         assurance["close_head"] = observed.get("head")
         assurance["close_tree"] = observed.get("tree")
         assurance["close_relation"] = relation
