@@ -72,7 +72,7 @@ impact mappings, defined runtime/data/production safety boundaries, enabled
 continuity, or default-on external Field Study. Tech Lead decisions must be
 made in that policy, explicitly and durably.
 
-Prefer quality gates as a trusted `argv` list with `OWNER_AUTHORED` or
+Prefer quality gates as a trusted `argv` list with `PROJECT_POLICY_TRUSTED` or
 `PACKAGE_OWNED` provenance. The exact legacy shell-command shape remains a
 labeled migration path only; an autonomous model must not silently author it.
 

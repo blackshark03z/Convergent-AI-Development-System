@@ -63,7 +63,7 @@ def trusted_policy() -> dict:
     value = policy()
     value["project_lifecycle"]["quality_gates"] = [{
         "id": "python-smoke", "argv": [sys.executable, "-c", "print('trusted quality gate')"],
-        "provenance": "OWNER_AUTHORED",
+        "provenance": "PROJECT_POLICY_TRUSTED",
     }]
     return value
 
@@ -108,8 +108,16 @@ class ProjectLifecycleTests(unittest.TestCase):
             self.write_policy(root, trusted_policy())
             gate = invoke(root, "bootstrap", "--mode", "greenfield", "--verify-gates")[1]["quality_gates"][0]
             self.assertEqual(gate["execution"], "ARGV_NO_SHELL")
-            self.assertEqual(gate["provenance"], "OWNER_AUTHORED")
+            self.assertEqual(gate["provenance"], "PROJECT_POLICY_TRUSTED")
             self.assertEqual(gate["argv"][0], sys.executable)
+
+    def test_legacy_owner_authored_gate_normalizes_to_project_policy_trust(self):
+        with fixture("legacy-owner-gate") as root:
+            value = trusted_policy()
+            value["project_lifecycle"]["quality_gates"][0]["provenance"] = "OWNER_AUTHORED"
+            self.write_policy(root, value)
+            gate = invoke(root, "bootstrap", "--mode", "greenfield", "--verify-gates")[1]["quality_gates"][0]
+            self.assertEqual(gate["provenance"], "PROJECT_POLICY_TRUSTED")
 
     def test_existing_adoption_preserves_docs_and_marks_unknown(self):
         with fixture("existing") as root:

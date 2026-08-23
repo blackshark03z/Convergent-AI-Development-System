@@ -59,6 +59,13 @@ evidence while FINAL claims still execute. See
 [docs/EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md) and
 [docs/VNEXT_ARCHITECTURE_AUDIT.md](docs/VNEXT_ARCHITECTURE_AUDIT.md).
 
+Replan keeps the immutable task-base commit as its trust source while recording
+the current allowed descendant/dirty product bytes separately as
+`IN_PROGRESS_UNADOPTED`. It can therefore preserve valid work in place without
+pretending that WIP is a trusted registry or adopted product commit. External
+effects bind real provider-request, canonical-input and adapter implementation
+artifacts; those bytes are rechecked before provider authority changes.
+
 An explicitly runtime-only task uses `--no-source-delta`. It captures the
 baseline product HEAD at bootstrap and may validate directly from `ACTIVE`
 only when that exact HEAD remains current, the product tree is clean, and
@@ -107,8 +114,10 @@ atomicity.  POSIX directory flush is best effort; the Windows build does not
 claim sudden power-loss durability.
 
 Git proves commit/tree identity, ancestry, cleanliness, and changed paths.  It
-does not prove authorization, lifecycle, reviewer independence, telemetry, or
-context interception.  The Desktop governor is therefore explicitly
+does not prove human authorship, authorization, lifecycle, reviewer
+independence, telemetry, or context interception. Project Git-bound commands
+are therefore labelled `PROJECT_POLICY_TRUSTED`; historical `OWNER_AUTHORED`
+input is only a compatibility alias. The Desktop governor is explicitly
 SUPERVISORY/BOUNDARY: it makes the next action cheap and truthful, but cannot
 intercept an already-issued model request.
 

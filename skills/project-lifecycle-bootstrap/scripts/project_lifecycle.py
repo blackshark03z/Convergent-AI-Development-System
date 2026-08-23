@@ -170,9 +170,10 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
             provenance = str(gate.get("provenance") or "").upper()
             if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) or not arg or "\x00" in arg for arg in argv):
                 raise LifecycleError(f"quality gate {gate_id}.argv must be a non-empty argument list")
-            if provenance not in {"OWNER_AUTHORED", "PACKAGE_OWNED"}:
+            if provenance not in {"PROJECT_POLICY_TRUSTED", "OWNER_AUTHORED", "PACKAGE_OWNED"}:
                 raise LifecycleError(f"quality gate {gate_id} has untrusted command provenance")
-            normalized_gates.append({"id": gate_id, "argv": list(argv), "provenance": provenance, "execution": "ARGV_NO_SHELL"})
+            normalized = "PROJECT_POLICY_TRUSTED" if provenance == "OWNER_AUTHORED" else provenance
+            normalized_gates.append({"id": gate_id, "argv": list(argv), "provenance": normalized, "execution": "ARGV_NO_SHELL"})
         elif set(gate) == {"id", "command"}:
             command = required_string(gate.get("command"), f"quality gate {gate_id}.command")
             if any(token in command for token in ("\n", "\r")): raise LifecycleError("quality gate commands must be one line")

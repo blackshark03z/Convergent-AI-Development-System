@@ -38,7 +38,7 @@ if ($QualityGateArgvJson) {
   $example.project_lifecycle.quality_gates = @([pscustomobject]@{
     id = "adoption-quality-gate"
     argv = $gateArgv
-    provenance = "OWNER_AUTHORED"
+    provenance = "PROJECT_POLICY_TRUSTED"
   })
 } else {
   $example.project_lifecycle.quality_gates = @([pscustomobject]@{

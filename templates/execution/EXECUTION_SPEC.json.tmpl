@@ -55,7 +55,7 @@
     {
       "id": "focused_contract",
       "argv": ["python", "-c", "print('replace with focused contract test')"],
-      "provenance": "OWNER_AUTHORED",
+      "provenance": "PROJECT_POLICY_TRUSTED",
       "source": {
         "kind": "PROJECT_BASELINE",
         "path": ".buildos-command-registry.json",
@@ -65,7 +65,7 @@
     {
       "id": "final_assurance",
       "argv": ["python", "-c", "print('replace with final assurance')"],
-      "provenance": "OWNER_AUTHORED",
+      "provenance": "PROJECT_POLICY_TRUSTED",
       "source": {
         "kind": "PROJECT_BASELINE",
         "path": ".buildos-command-registry.json",
@@ -75,7 +75,7 @@
     {
       "id": "rollback_proof",
       "argv": ["python", "-c", "print('replace with rollback or recovery proof')"],
-      "provenance": "OWNER_AUTHORED",
+      "provenance": "PROJECT_POLICY_TRUSTED",
       "source": {
         "kind": "PROJECT_BASELINE",
         "path": ".buildos-command-registry.json",
@@ -121,8 +121,16 @@
       "provider_capability": "provider_api",
       "deadline_seconds": 300,
       "required": true,
-      "effect_input_sha256": "Replace with the SHA-256 of canonical provider input bytes.",
-      "adapter_contract_sha256": "Replace with the SHA-256 of the provider adapter contract."
+      "effect_input": {
+        "kind": "PROJECT_ARTIFACT",
+        "path": "effect-input.json",
+        "sha256": "Replace with the SHA-256 of the canonical request artifact."
+      },
+      "adapter_contract": {
+        "kind": "PROJECT_BASELINE",
+        "path": "effect-adapter-contract.json",
+        "sha256": "Replace with the SHA-256 of the baseline adapter contract."
+      }
     }
   ],
   "steps": [

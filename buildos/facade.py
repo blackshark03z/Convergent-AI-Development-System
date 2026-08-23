@@ -25,6 +25,7 @@ from .model import (
     transition_record_commit,
     transition_rollover,
     transition_validate,
+    validate_in_progress_product_state,
     validate_task_request,
 )
 from .store import (
@@ -54,7 +55,7 @@ RELEASED_TASK_PHASES = {"CLOSED", "ABORTED", "BLOCKED_SOURCE_FIX"}
 
 def _compile_execution_runtime(
     request: Mapping[str, Any], execution_spec: Path | str | Mapping[str, Any] | None, *,
-    root: Path, package_root: Path, git_head: str, plan_revision: int = 1,
+    root: Path, package_root: Path, trust_git_head: str, plan_revision: int = 1,
 ) -> dict[str, Any]:
     if execution_spec is None:
         if execution.execution_required(request):
@@ -63,7 +64,7 @@ def _compile_execution_runtime(
     value = dict(execution_spec) if isinstance(execution_spec, Mapping) else execution.load_spec(execution_spec)
     runtime = execution.compile_spec(
         value, request, plan_revision=plan_revision,
-        root=root, package_root=package_root, git_head=git_head,
+        root=root, package_root=package_root, trust_git_head=trust_git_head,
     )
     if runtime.get("plan_validity") != "VALID":
         details = ", ".join(f"{row['code']}:{row['subject']}" for row in runtime.get("admission_blockers") or [])
@@ -96,7 +97,8 @@ def _assert_git_unchanged(
         "tracked_control_paths", "relation_to_base", "relation_to_product",
         "relation_to_validated", "changes_since_base", "changes_since_product",
         "changes_since_validated", "deletions_since_base", "type_changes_since_base",
-        "case_insensitive_paths",
+        "worktree_deletions", "worktree_type_changes", "product_worktree_fingerprint",
+        "product_state_digest", "case_insensitive_paths",
     )
     if any(actual.get(field) != expected.get(field) for field in fields):
         raise KernelError("Git product observation changed before canonical commit; retry from fresh status")
@@ -506,7 +508,7 @@ class BuildOS:
         observed = git_adapter.snapshot(self.root)
         runtime = _compile_execution_runtime(
             validated, execution_spec, root=self.root, package_root=self.package_root,
-            git_head=str(observed.get("head") or ""),
+            trust_git_head=str(observed.get("head") or ""),
         )
         problems: list[str] = []
         if not observed.get("available") or Path(str(observed.get("root"))).resolve() != self.root:
@@ -539,7 +541,7 @@ class BuildOS:
         observed = git_adapter.snapshot(self.root)
         runtime = _compile_execution_runtime(
             validated, execution_spec, root=self.root, package_root=self.package_root,
-            git_head=str(observed.get("head") or ""),
+            trust_git_head=str(observed.get("head") or ""),
         )
         if observed.get("tracked_control_paths"):
             raise KernelError("bootstrap refuses a tracked .buildos control path; migrate or untrack that reserved path first")
@@ -619,7 +621,7 @@ class BuildOS:
         observed = git_adapter.snapshot(self.root)
         runtime = _compile_execution_runtime(
             validated, execution_spec, root=self.root, package_root=self.package_root,
-            git_head=str(observed.get("head") or ""),
+            trust_git_head=str(observed.get("head") or ""),
         )
         state = initial_state(request, observed, lineage=lineage, execution=runtime)
         if (
@@ -674,7 +676,7 @@ class BuildOS:
         observed = git_adapter.snapshot(self.root, base_sha=base_sha)
         runtime = _compile_execution_runtime(
             validated, execution_spec, root=self.root, package_root=self.package_root,
-            git_head=str(observed.get("head") or ""),
+            trust_git_head=base_sha,
         )
         base_anchor = git_adapter.commit_anchor(self.root, base_sha)
         state = initial_state(request, base_anchor, execution=runtime)
@@ -791,28 +793,32 @@ class BuildOS:
             base_sha=(state.get("base_git") or {}).get("head"),
             product_sha=(state.get("product_commit") or {}).get("sha"),
         )
-        if (
-            not observed.get("available")
-            or observed.get("head") != (state.get("base_git") or {}).get("head")
-            or observed.get("product_dirty")
-            or observed.get("tracked_control_paths")
-        ):
-            raise KernelError("replan requires the clean unchanged task baseline; a product commit needs lifecycle adoption first")
+        trust_head = str((state.get("base_git") or {}).get("head") or "")
+        if Path(str(observed.get("root") or "")).resolve() != self.root:
+            raise KernelError("replan requires the Git worktree top-level")
+        validate_in_progress_product_state(state, observed)
+        product_binding = execution.bind_replan_product_state(
+            observed, trust_baseline_head=trust_head,
+        )
         runtime = _compile_execution_runtime(
             state, execution_spec, root=self.root, package_root=self.package_root,
-            git_head=str(observed.get("head") or ""),
+            trust_git_head=trust_head,
             plan_revision=int((state.get("execution") or {}).get("plan_revision", 1)) + 1,
         )
         prior_event = previous.event or {}
         if (
             prior_event.get("kind") == "PLAN_REPLACED"
             and prior_event.get("to_envelope_hash") == runtime.get("envelope_hash")
+            and prior_event.get("product_state_binding_digest") == product_binding.get("binding_digest")
             and (op_id is None or previous.operation_id == op_id)
         ):
             return self._idempotent(previous)
-        candidate, event = execution.apply_replan(state, runtime)
+        candidate, event = execution.apply_replan(
+            state, runtime, product_state_binding=product_binding,
+        )
         operation = op_id or operation_id(
             "REPLAN", state["task_id"], state["revision"], runtime.get("envelope_hash"),
+            product_binding.get("binding_digest"),
         )
         return commit_candidate(
             self.root, expected_hash=previous.generation_hash, candidate_state=candidate,
@@ -858,15 +864,37 @@ class BuildOS:
             base_sha=(state.get("base_git") or {}).get("head"),
             product_sha=(state.get("product_commit") or {}).get("sha"),
         )
-        if not observed.get("available") or observed.get("product_dirty") or observed.get("tracked_control_paths"):
-            raise KernelError("external effect transitions require a clean observable product worktree")
+        if not observed.get("available") or observed.get("tracked_control_paths"):
+            raise KernelError("external effect transitions require an observable product worktree with untracked control state")
         if transition == "PREPARE":
             if not action_id:
                 raise KernelError("effect PREPARE requires --action-id")
+            if state.get("phase") == "ACTIVE":
+                validate_in_progress_product_state(state, observed)
+            elif state.get("phase") == "PRODUCT_COMMITTED":
+                if observed.get("product_dirty"):
+                    raise KernelError("effect PREPARE after product adoption requires a clean product worktree")
+            else:
+                raise KernelError("effect PREPARE requires ACTIVE or PRODUCT_COMMITTED lifecycle state")
+            execution.verify_effect_sources(
+                root=self.root, package_root=self.package_root,
+                runtime=state.get("execution") or {}, action_id=action_id,
+            )
             candidate, event = execution.prepare_effect(state, action_id=action_id, effect_id=effect_id)
         else:
-            if transition == "DISPATCH" and state.get("product_change_mode") == "PRODUCT_DELTA" and state.get("phase") != "PRODUCT_COMMITTED":
-                raise KernelError("product-delta external dispatch requires the product commit to be recorded first")
+            if transition in {"DISPATCH", "AUTHORIZE_RETRY"}:
+                if state.get("phase") == "ACTIVE":
+                    validate_in_progress_product_state(state, observed)
+                elif observed.get("product_dirty"):
+                    raise KernelError(f"effect {transition} after product adoption requires a clean product worktree")
+                record = (((state.get("execution") or {}).get("effect_ledger") or {}).get(effect_id) or {})
+                if not record:
+                    raise KernelError(f"effect intent is not recorded: {effect_id}")
+                admitted_action = str(record.get("action_id") or "")
+                execution.verify_effect_sources(
+                    root=self.root, package_root=self.package_root,
+                    runtime=state.get("execution") or {}, action_id=admitted_action,
+                )
             candidate, event = execution.transition_effect(
                 state, effect_id=effect_id, transition=transition,
                 reference=reference, sha256=sha256, predicate=predicate,

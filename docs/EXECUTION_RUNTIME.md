@@ -26,7 +26,7 @@ facade; there is deliberately no second monolithic admission engine:
 1. exact package/executor authority;
 2. project policy/package compatibility;
 3. context ownership when the action needs it;
-4. task risk/authorization and clean Git baseline;
+4. task risk/authorization and the immutable Git trust baseline;
 5. capability, authority, plan and effect admission;
 6. immutable canonical bootstrap.
 
@@ -77,27 +77,59 @@ Every step names admitted failure families and every family has one disposition:
 - A family declared `RECONCILE`: effect reconciliation, never speculative retry.
 - A family declared `STOP`: autonomous continuation is forbidden.
 
-`replan` atomically replaces the envelope only while lifecycle phase is ACTIVE,
-the product HEAD still equals the clean task baseline, and no unresolved effect
-exists. A product commit or assurance requires lifecycle adoption/a new
-revision instead; it cannot become a new provenance source during replan. A new revision resets effects, blockers, reviews
-and current claim results; the immutable prior generation remains available
-only as evidence lineage.
+`replan` atomically replaces the envelope only while lifecycle phase is ACTIVE
+and no unresolved effect exists. It deliberately separates two objects:
 
-Every prepared effect binds an `effect_contract_hash` to its exact canonical
-input hash, adapter-contract hash, provider/idempotency/no-effect contract, and
-the capabilities, constraints, authorities and dependencies of its external
-step. Replan retains terminal records as history. A terminal record remains in
-the active ledger only when this semantic identity is byte-for-byte identical;
-that explicit carry-forward can satisfy identical required work. A changed or
-unbound record is retired to `effect_history`, cannot satisfy the replacement
-action and cannot reuse its historical `effect_id`. Unresolved effects still
-block replan and must be reconciled under their originating envelope.
+- `trust_baseline` is the immutable task-base Git commit used to compile command
+  registries, approvals and project adapter contracts;
+- `product_state_binding` is a content-hashed observation of the current
+  descendant HEAD plus allowed dirty paths/bytes. Its status is always
+  `IN_PROGRESS_UNADOPTED`.
+
+This allows a replacement plan to preserve valid partially committed or dirty
+product work without calling that work trusted, supervised, accepted or a
+`product_commit`. The current observation must remain the same through the
+atomic generation swap. Scope, prohibited-path, deletion and type-change rules
+apply to the union of descendant commits and dirty worktree changes. A modified
+trust registry or baseline-bound adapter is rejected even when its path is in
+the task's allowed product scope. A diverged HEAD, a NO_SOURCE_DELTA mutation,
+or tracked `.buildos` content is also rejected.
+
+A product commit or assurance still requires normal lifecycle adoption/a new
+revision; replan itself never supplies adoption authority. A new revision
+resets effects, blockers, reviews and current claim results; the immutable
+prior generation remains available only as evidence lineage.
+
+Every prepared effect binds an `effect_contract_hash` to the exact provider
+request artifact, canonical input files, adapter contract/implementation,
+provider/idempotency/no-effect contract, and the capabilities, constraints,
+authorities and dependencies of its external step. Replan retains terminal
+records as history. A terminal record remains in the active ledger only when
+this semantic identity is byte-for-byte identical; that explicit carry-forward
+can satisfy identical required work. A changed or unbound record is retired to
+`effect_history`, cannot satisfy the replacement action and cannot reuse its
+historical `effect_id`. Unresolved effects still block replan and must be
+reconciled under their originating envelope.
+
+The spec therefore does not accept free-standing SHA-shaped claims for effect
+meaning. `effect_input` points to a content-addressed
+`buildos.effect-input.v1` JSON artifact containing the actual provider payload
+and hashes of every canonical input. `adapter_contract` points either to the
+task Git baseline or a package-manifest entry and names every implementation
+artifact/hash that can affect provider behavior. Build OS verifies those bytes
+at admission and again immediately before PREPARE, DISPATCH or retry authority.
+Changing a payload, canonical input, wrapper dependency or adapter source while
+leaving an action id/path unchanged invalidates authority.
 
 ## External-effect transaction
 
 An effect action is declared once in the envelope. An effect identity is stable
 within a lifecycle revision; a second identity for the same action is rejected.
+ACTIVE product work may coexist with effect preparation/dispatch only when its
+current changes remain in scope and the independently content-bound request and
+adapter sources still verify. This is provider-call authority, not product-state
+adoption. Reconciliation remains available while product work is dirty so an
+ambiguous provider boundary can be resolved without rewriting local work.
 
 ```text
 PREPARE
@@ -172,16 +204,20 @@ evidence records both executed and reused claims.
 Enhanced claim commands and new project-policy quality gates use argv with
 `shell=False`. A provenance label is not trust evidence:
 
-- `OWNER_AUTHORED` must match one exact argv entry in a command registry whose
-  bytes and SHA-256 match the current Git baseline;
+- `PROJECT_POLICY_TRUSTED` must match one exact argv entry in a command registry
+  whose bytes and SHA-256 match the immutable task Git baseline and still match
+  the current file;
 - `PACKAGE_OWNED` must match a package registry whose path/hash is declared by
   `PACKAGE_MANIFEST.json`;
 - `MODEL_PROPOSED_APPROVED` must bind the exact command hash and task approval
   reference to one entry in a command-approval registry already present with
   the same bytes/hash in the Git baseline.
 
-Changing argv after approval or merely self-labelling a model command as owner
-or package provenance is rejected. Legacy lifecycle `--check` strings and old
+`OWNER_AUTHORED` remains readable only as a compatibility alias and normalizes
+to `PROJECT_POLICY_TRUSTED`; Git proves byte/history identity, not that a human
+personally authored the command. Changing argv after approval or merely
+self-labelling a model command as trusted or package provenance is rejected.
+Legacy lifecycle `--check` strings and old
 `{"command": ...}` project gates remain readable for v1.22 compatibility and
 are labeled `LEGACY_SHELL`; they do not gain enhanced guarantees.
 
@@ -194,6 +230,9 @@ are labeled `LEGACY_SHELL`; they do not gain enhanced guarantees.
   spec; choose `EXTERNAL_EFFECT` whenever a provider-side action may occur.
 - Migrate project gates to `argv` plus a deterministic registry source/hash;
   `templates/execution/COMMAND_REGISTRY.json.tmpl` provides the portable shape.
+- Bind external work to `EFFECT_INPUT.json.tmpl` and
+  `EFFECT_ADAPTER_CONTRACT.json.tmpl`; regenerate their SHA-256 references
+  whenever request/canonical-input or adapter implementation bytes change.
 - For an approved model proposal, use the separate tracked
   `COMMAND_APPROVAL_REGISTRY.json.tmpl`; a status/reference written only inside
   the model request is not approval provenance.

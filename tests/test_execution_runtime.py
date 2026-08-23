@@ -39,6 +39,55 @@ COMMAND_APPROVAL_REGISTRY_BYTES = (
     }, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 ).encode("utf-8")
 COMMAND_APPROVAL_REGISTRY_SHA256 = hashlib.sha256(COMMAND_APPROVAL_REGISTRY_BYTES).hexdigest()
+CANONICAL_INPUT_PATH = "provider-input.json"
+CANONICAL_INPUT_BYTES = (
+    json.dumps({"prompt": "baseline"}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+).encode("utf-8")
+CANONICAL_INPUT_SHA256 = hashlib.sha256(CANONICAL_INPUT_BYTES).hexdigest()
+EFFECT_INPUT_PATH = "effect-input.json"
+EFFECT_INPUT_BYTES = (
+    json.dumps({
+        "schema": "buildos.effect-input.v1",
+        "action_id": "submit_job",
+        "provider_capability": "provider_api",
+        "payload": {"prompt": "baseline"},
+        "canonical_inputs": [{"path": CANONICAL_INPUT_PATH, "sha256": CANONICAL_INPUT_SHA256}],
+    }, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+).encode("utf-8")
+EFFECT_INPUT_SHA256 = hashlib.sha256(EFFECT_INPUT_BYTES).hexdigest()
+ALT_EFFECT_INPUT_PATH = "effect-input-alt.json"
+ALT_EFFECT_INPUT_BYTES = (
+    json.dumps({
+        "schema": "buildos.effect-input.v1",
+        "action_id": "submit_job",
+        "provider_capability": "provider_api",
+        "payload": {"prompt": "materially changed"},
+        "canonical_inputs": [{"path": CANONICAL_INPUT_PATH, "sha256": CANONICAL_INPUT_SHA256}],
+    }, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+).encode("utf-8")
+ALT_EFFECT_INPUT_SHA256 = hashlib.sha256(ALT_EFFECT_INPUT_BYTES).hexdigest()
+ADAPTER_IMPLEMENTATION_PATH = "provider_adapter.py"
+ADAPTER_IMPLEMENTATION_BYTES = b"def submit(payload):\n    return payload\n"
+ADAPTER_IMPLEMENTATION_SHA256 = hashlib.sha256(ADAPTER_IMPLEMENTATION_BYTES).hexdigest()
+ADAPTER_RULES_PATH = "provider-adapter-rules.json"
+ADAPTER_RULES_BYTES = b'{"endpoint":"fixture-v1","mode":"submit"}\n'
+ADAPTER_RULES_SHA256 = hashlib.sha256(ADAPTER_RULES_BYTES).hexdigest()
+ADAPTER_CONTRACT_PATH = "effect-adapter-contract.json"
+ADAPTER_CONTRACT_BYTES = (
+    json.dumps({
+        "schema": "buildos.effect-adapter-contract.v1",
+        "adapter_id": "provider_adapter",
+        "provider_capability": "provider_api",
+        "implementation": [{
+            "path": ADAPTER_IMPLEMENTATION_PATH,
+            "sha256": ADAPTER_IMPLEMENTATION_SHA256,
+        }, {
+            "path": ADAPTER_RULES_PATH,
+            "sha256": ADAPTER_RULES_SHA256,
+        }],
+    }, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+).encode("utf-8")
+ADAPTER_CONTRACT_SHA256 = hashlib.sha256(ADAPTER_CONTRACT_BYTES).hexdigest()
 
 
 def git(root: Path, *args: str) -> str:
@@ -59,6 +108,12 @@ def repository(name: str):
         (root / "other.py").write_text("other = 1\n", encoding="utf-8")
         (root / COMMAND_REGISTRY_PATH).write_bytes(COMMAND_REGISTRY_BYTES)
         (root / COMMAND_APPROVAL_REGISTRY_PATH).write_bytes(COMMAND_APPROVAL_REGISTRY_BYTES)
+        (root / CANONICAL_INPUT_PATH).write_bytes(CANONICAL_INPUT_BYTES)
+        (root / EFFECT_INPUT_PATH).write_bytes(EFFECT_INPUT_BYTES)
+        (root / ALT_EFFECT_INPUT_PATH).write_bytes(ALT_EFFECT_INPUT_BYTES)
+        (root / ADAPTER_IMPLEMENTATION_PATH).write_bytes(ADAPTER_IMPLEMENTATION_BYTES)
+        (root / ADAPTER_RULES_PATH).write_bytes(ADAPTER_RULES_BYTES)
+        (root / ADAPTER_CONTRACT_PATH).write_bytes(ADAPTER_CONTRACT_BYTES)
         git(root, "add", ".")
         git(root, "commit", "-qm", "base")
         yield root
@@ -92,12 +147,12 @@ def spec(*, external: bool = False, plan_id: str = "plan_one", idempotent: bool 
     commands = [
         {
             "id": COMMAND_ROWS[0]["id"], "argv": list(COMMAND_ROWS[0]["argv"]),
-            "provenance": "OWNER_AUTHORED",
+            "provenance": "PROJECT_POLICY_TRUSTED",
             "source": {"kind": "PROJECT_BASELINE", "path": COMMAND_REGISTRY_PATH, "sha256": COMMAND_REGISTRY_SHA256},
         },
         {
             "id": COMMAND_ROWS[1]["id"], "argv": list(COMMAND_ROWS[1]["argv"]),
-            "provenance": "OWNER_AUTHORED",
+            "provenance": "PROJECT_POLICY_TRUSTED",
             "source": {"kind": "PROJECT_BASELINE", "path": COMMAND_REGISTRY_PATH, "sha256": COMMAND_REGISTRY_SHA256},
         },
     ]
@@ -134,8 +189,14 @@ def spec(*, external: bool = False, plan_id: str = "plan_one", idempotent: bool 
             "idempotency_key": "stable-key" if idempotent else None,
             "no_effect_predicate": "canonical_no_effect", "provider_capability": "provider_api",
             "deadline_seconds": 60, "required": True,
-            "effect_input_sha256": "1" * 64,
-            "adapter_contract_sha256": "2" * 64,
+            "effect_input": {
+                "kind": "PROJECT_ARTIFACT", "path": EFFECT_INPUT_PATH,
+                "sha256": EFFECT_INPUT_SHA256,
+            },
+            "adapter_contract": {
+                "kind": "PROJECT_BASELINE", "path": ADAPTER_CONTRACT_PATH,
+                "sha256": ADAPTER_CONTRACT_SHA256,
+            },
         })
         steps.append({
             "id": "dispatch", "kind": "EXTERNAL_EFFECT", "after": ["implement"],
@@ -246,6 +307,15 @@ class AdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(KernelError, "not bound by the package manifest"):
                 BuildOS(root).admit(request("PROVENANCE-PACKAGE"), execution_spec=value)
 
+    def test_legacy_owner_authored_is_only_a_compatibility_alias(self):
+        with repository("legacy-owner-vocabulary") as root:
+            value = spec()
+            value["commands"][0]["provenance"] = "OWNER_AUTHORED"
+            admitted = BuildOS(root).admit(request("PROVENANCE-LEGACY"), execution_spec=value)
+            compiled = admitted["runtime"]["envelope"]["commands"]["focused"]
+            self.assertEqual(compiled["provenance"], "PROJECT_POLICY_TRUSTED")
+            self.assertEqual(compiled["compatibility_provenance"], "OWNER_AUTHORED")
+
     def test_model_proposed_command_requires_exact_owner_approval_binding(self):
         with repository("model-approval") as root:
             value = spec()
@@ -346,10 +416,30 @@ class BlockerAndReplanTests(unittest.TestCase):
             self.assertEqual(replaced.state["execution"]["plan_revision"], 2)
             self.assertEqual(len(replaced.state["execution"]["envelope_history"]), 1)
 
-    def test_replan_cannot_adopt_a_new_head_as_command_trust_provenance(self):
-        with repository("replan-head-drift") as root:
+    def test_replan_preserves_dirty_allowed_work_without_adopting_it(self):
+        with repository("replan-dirty-wip") as root:
             osys = BuildOS(root)
-            osys.bootstrap(request("REPLAN-HEAD"), execution_spec=spec())
+            bootstrapped = osys.bootstrap(request("REPLAN-DIRTY"), execution_spec=spec()).snapshot
+            base = bootstrapped.state["base_git"]["head"]
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/critical",
+                assumption_id="input_complete",
+            )
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            replaced = osys.replan(execution_spec=spec(plan_id="plan_two")).snapshot
+            binding = replaced.state["execution"]["product_state_binding"]
+            self.assertEqual((root / "app.py").read_text(encoding="utf-8"), "value = 2\n")
+            self.assertEqual(replaced.state["base_git"]["head"], base)
+            self.assertIsNone(replaced.state["product_commit"])
+            self.assertEqual(binding["status"], "IN_PROGRESS_UNADOPTED")
+            self.assertEqual(binding["trust_baseline_head"], base)
+            self.assertEqual(binding["dirty_paths"], ["app.py"])
+
+    def test_replan_preserves_partially_committed_work_without_using_it_as_trust(self):
+        with repository("replan-committed-wip") as root:
+            osys = BuildOS(root)
+            bootstrapped = osys.bootstrap(request("REPLAN-COMMITTED"), execution_spec=spec()).snapshot
+            base = bootstrapped.state["base_git"]["head"]
             osys.report_blocker(
                 family="local_defect", evidence="evidence/critical",
                 assumption_id="input_complete",
@@ -357,7 +447,73 @@ class BlockerAndReplanTests(unittest.TestCase):
             (root / "app.py").write_text("value = 2\n", encoding="utf-8")
             git(root, "add", "app.py")
             git(root, "commit", "-qm", "unadopted product change")
-            with self.assertRaisesRegex(KernelError, "unchanged task baseline"):
+            wip_head = git(root, "rev-parse", "HEAD")
+            replaced = osys.replan(execution_spec=spec(plan_id="plan_two")).snapshot
+            binding = replaced.state["execution"]["product_state_binding"]
+            self.assertEqual(git(root, "rev-parse", "HEAD"), wip_head)
+            self.assertEqual(replaced.state["base_git"]["head"], base)
+            self.assertIsNone(replaced.state["product_commit"])
+            self.assertEqual(binding["observed_head"], wip_head)
+            self.assertEqual(binding["committed_paths"], ["app.py"])
+            self.assertEqual(replaced.state["execution"]["trust_baseline"]["head"], base)
+
+    def test_replan_rejects_dirty_or_committed_trust_registry_mutation(self):
+        for committed in (False, True):
+            with self.subTest(committed=committed), repository("replan-registry") as root:
+                req = request("REPLAN-REGISTRY")
+                req["allowed_paths"].append(COMMAND_REGISTRY_PATH)
+                osys = BuildOS(root)
+                osys.bootstrap(req, execution_spec=spec())
+                osys.report_blocker(
+                    family="local_defect", evidence="evidence/critical",
+                    assumption_id="input_complete",
+                )
+                changed = json.loads(COMMAND_REGISTRY_BYTES)
+                changed["commands"][0]["argv"][-1] = "print('mutated registry')"
+                (root / COMMAND_REGISTRY_PATH).write_text(
+                    json.dumps(changed, sort_keys=True, indent=2) + "\n", encoding="utf-8",
+                )
+                if committed:
+                    git(root, "add", COMMAND_REGISTRY_PATH)
+                    git(root, "commit", "-qm", "untrusted registry mutation")
+                with self.assertRaisesRegex(KernelError, "differs from the current Git baseline"):
+                    osys.replan(execution_spec=spec(plan_id="plan_two"))
+
+    def test_replan_rejects_prohibited_deleted_and_type_changed_wip(self):
+        with repository("replan-prohibited") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(request("REPLAN-PROHIBITED"), execution_spec=spec())
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/critical", assumption_id="input_complete",
+            )
+            (root / "secrets").mkdir()
+            (root / "secrets" / "key.txt").write_text("not-a-secret-fixture\n", encoding="utf-8")
+            with self.assertRaisesRegex(KernelError, "prohibited paths"):
+                osys.replan(execution_spec=spec(plan_id="plan_two"))
+
+        with repository("replan-deleted") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(request("REPLAN-DELETED"), execution_spec=spec())
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/critical", assumption_id="input_complete",
+            )
+            (root / "app.py").unlink()
+            with self.assertRaisesRegex(KernelError, "deletion requires"):
+                osys.replan(execution_spec=spec(plan_id="plan_two"))
+
+        with repository("replan-type-change") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(request("REPLAN-TYPE"), execution_spec=spec())
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/critical", assumption_id="input_complete",
+            )
+            target = root / "link-target.txt"
+            target.write_text("other.py\n", encoding="utf-8")
+            blob = git(root, "hash-object", "-w", "link-target.txt")
+            target.unlink()
+            git(root, "update-index", "--cacheinfo", f"120000,{blob},app.py")
+            git(root, "commit", "-qm", "unadopted type change")
+            with self.assertRaisesRegex(KernelError, "file type changes require"):
                 osys.replan(execution_spec=spec(plan_id="plan_two"))
 
 
@@ -369,6 +525,101 @@ class ExternalEffectTests(unittest.TestCase):
         osys.effect(transition="ACK", effect_id="attempt_one", reference="provider/request-1")
         osys.effect(transition="RESULT", effect_id="attempt_one", reference="artifact/result", sha256="a" * 64)
         return osys.effect(transition="COMMIT", effect_id="attempt_one", reference="manifest/result-1").snapshot
+
+    def test_effect_request_canonical_input_and_adapter_are_real_source_bindings(self):
+        with repository("effect-input-stale") as root:
+            changed = json.loads(EFFECT_INPUT_BYTES)
+            changed["payload"]["prompt"] = "changed without rebinding"
+            (root / EFFECT_INPUT_PATH).write_text(
+                json.dumps(changed, sort_keys=True, indent=2) + "\n", encoding="utf-8",
+            )
+            with self.assertRaisesRegex(KernelError, "content-addressed SHA-256"):
+                BuildOS(root).admit(
+                    request("EFFECT-INPUT-STALE", execution_class="EXTERNAL_EFFECT", no_source=True),
+                    execution_spec=spec(external=True),
+                )
+
+        with repository("canonical-input-stale") as root:
+            (root / CANONICAL_INPUT_PATH).write_text('{"prompt":"changed"}\n', encoding="utf-8")
+            with self.assertRaisesRegex(KernelError, "canonical input.*content-addressed SHA-256"):
+                BuildOS(root).admit(
+                    request("CANONICAL-INPUT-STALE", execution_class="EXTERNAL_EFFECT", no_source=True),
+                    execution_spec=spec(external=True),
+                )
+
+        with repository("adapter-behavior-dependency-stale") as root:
+            (root / ADAPTER_RULES_PATH).write_text(
+                '{"endpoint":"fixture-v2","mode":"submit"}\n', encoding="utf-8",
+            )
+            with self.assertRaisesRegex(KernelError, "differs from the current Git baseline"):
+                BuildOS(root).admit(
+                    request("ADAPTER-STALE", execution_class="EXTERNAL_EFFECT", no_source=True),
+                    execution_spec=spec(external=True),
+                )
+
+    def test_effect_sources_are_reverified_at_prepare_and_dispatch(self):
+        with repository("effect-source-recheck") as root:
+            req = request("EFFECT-RECHECK", execution_class="EXTERNAL_EFFECT")
+            req["allowed_paths"].extend([
+                EFFECT_INPUT_PATH, CANONICAL_INPUT_PATH, ADAPTER_RULES_PATH,
+            ])
+            osys = BuildOS(root)
+            osys.bootstrap(req, execution_spec=spec(external=True))
+
+            changed_request = json.loads(EFFECT_INPUT_BYTES)
+            changed_request["payload"]["prompt"] = "changed after admission"
+            (root / EFFECT_INPUT_PATH).write_text(
+                json.dumps(changed_request, sort_keys=True, indent=2) + "\n", encoding="utf-8",
+            )
+            with self.assertRaisesRegex(KernelError, "content-addressed SHA-256"):
+                osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            (root / EFFECT_INPUT_PATH).write_bytes(EFFECT_INPUT_BYTES)
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+
+            (root / CANONICAL_INPUT_PATH).write_text('{"prompt":"changed"}\n', encoding="utf-8")
+            with self.assertRaisesRegex(KernelError, "canonical input.*content-addressed SHA-256"):
+                osys.effect(transition="DISPATCH", effect_id="attempt_one")
+            (root / CANONICAL_INPUT_PATH).write_bytes(CANONICAL_INPUT_BYTES)
+
+            (root / ADAPTER_RULES_PATH).write_text(
+                '{"endpoint":"fixture-v2","mode":"submit"}\n', encoding="utf-8",
+            )
+            with self.assertRaisesRegex(KernelError, "differs from the current Git baseline"):
+                osys.effect(transition="DISPATCH", effect_id="attempt_one")
+            (root / ADAPTER_RULES_PATH).write_bytes(ADAPTER_RULES_BYTES)
+            dispatched = osys.effect(transition="DISPATCH", effect_id="attempt_one").snapshot
+            self.assertEqual(
+                dispatched.state["execution"]["effect_ledger"]["attempt_one"]["state"],
+                "DISPATCH_UNCONFIRMED",
+            )
+
+    def test_package_adapter_requires_manifest_and_implementation_hashes(self):
+        with repository("package-adapter") as root, tempfile.TemporaryDirectory() as raw_package:
+            package_root = Path(raw_package)
+            (package_root / ADAPTER_IMPLEMENTATION_PATH).write_bytes(ADAPTER_IMPLEMENTATION_BYTES)
+            (package_root / ADAPTER_RULES_PATH).write_bytes(ADAPTER_RULES_BYTES)
+            (package_root / ADAPTER_CONTRACT_PATH).write_bytes(ADAPTER_CONTRACT_BYTES)
+            (package_root / "PACKAGE_MANIFEST.json").write_text(json.dumps({
+                "trusted_effect_adapter_contracts": {
+                    ADAPTER_CONTRACT_PATH: ADAPTER_CONTRACT_SHA256,
+                },
+            }), encoding="utf-8")
+            value = spec(external=True)
+            value["effects"][0]["adapter_contract"]["kind"] = "PACKAGE_MANIFEST"
+            admitted = BuildOS(root, package_root=package_root).admit(
+                request("PACKAGE-ADAPTER", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=value,
+            )
+            self.assertEqual(admitted["status"], "READY")
+
+            (package_root / ADAPTER_RULES_PATH).write_text(
+                '{"endpoint":"fixture-v2","mode":"submit"}\n', encoding="utf-8",
+            )
+            with self.assertRaisesRegex(KernelError, "content-addressed SHA-256"):
+                BuildOS(root, package_root=package_root).admit(
+                    request("PACKAGE-ADAPTER-STALE", execution_class="EXTERNAL_EFFECT", no_source=True),
+                    execution_spec=value,
+                )
 
     def test_pre_provider_failure_is_bounded_no_effect_and_effect_identity_is_unique(self):
         with repository("pre-provider") as root:
@@ -383,6 +634,25 @@ class ExternalEffectTests(unittest.TestCase):
             record = resolved.state["execution"]["effect_ledger"]["attempt_one"]
             self.assertEqual(record["state"], "RESOLVED_NO_EFFECT")
             self.assertEqual(record["reconciliation"]["outcome"], "PRE_PROVIDER_FAILURE")
+
+    def test_product_committed_flow_can_still_prepare_and_dispatch(self):
+        with repository("effect-product-committed") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-COMMITTED", execution_class="EXTERNAL_EFFECT"),
+                execution_spec=spec(external=True),
+            )
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            git(root, "add", "app.py")
+            git(root, "commit", "-qm", "product implementation")
+            osys.record_commit()
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            dispatched = osys.effect(transition="DISPATCH", effect_id="attempt_one").snapshot
+            self.assertEqual(dispatched.state["phase"], "PRODUCT_COMMITTED")
+            self.assertEqual(
+                dispatched.state["execution"]["effect_ledger"]["attempt_one"]["state"],
+                "DISPATCH_UNCONFIRMED",
+            )
 
     def test_pre_provider_timeout_cannot_promote_to_dispatch(self):
         with repository("pre-provider-timeout") as root:
@@ -475,6 +745,14 @@ class ExternalEffectTests(unittest.TestCase):
                 runtime["effect_ledger"]["attempt_one"]["effect_contract_hash"],
                 runtime["envelope"]["effects"]["submit_job"]["effect_contract_hash"],
             )
+            self.assertEqual(
+                runtime["effect_ledger"]["attempt_one"]["effect_input"],
+                runtime["envelope"]["effects"]["submit_job"]["effect_input"],
+            )
+            self.assertEqual(
+                runtime["effect_ledger"]["attempt_one"]["adapter_contract"],
+                runtime["envelope"]["effects"]["submit_job"]["adapter_contract"],
+            )
             with self.assertRaisesRegex(KernelError, "stable effect identity"):
                 osys.effect(transition="PREPARE", effect_id="attempt_two", action_id="submit_job")
             assured = osys.validate(
@@ -518,6 +796,33 @@ class ExternalEffectTests(unittest.TestCase):
             ).snapshot
             self.assertEqual(prepared.state["execution"]["effect_ledger"]["attempt_two"]["state"], "INTENT_RECORDED")
 
+    def test_committed_effect_does_not_satisfy_same_action_id_with_changed_request_payload(self):
+        with repository("effect-replan-changed-request") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-REQUEST-CHANGED", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True),
+            )
+            self._commit_provider_effect(osys)
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/plan-a-invalid",
+                assumption_id="input_complete",
+            )
+            changed = spec(external=True, plan_id="plan_two")
+            changed["effects"][0]["effect_input"] = {
+                "kind": "PROJECT_ARTIFACT", "path": ALT_EFFECT_INPUT_PATH,
+                "sha256": ALT_EFFECT_INPUT_SHA256,
+            }
+            replaced = osys.replan(execution_spec=changed).snapshot
+            self.assertEqual(replaced.event["effects_carried"], [])
+            self.assertEqual(replaced.event["effects_retired"], ["attempt_one"])
+            self.assertEqual(replaced.state["execution"]["effect_ledger"], {})
+            with self.assertRaisesRegex(KernelError, "required external effect"):
+                osys.validate(
+                    checks=[], inspected_by="TEST",
+                    runtime_acceptance_reference="runtime/changed-request",
+                )
+
     def test_resolved_no_effect_carries_retry_authority_but_unresolved_effect_blocks_replan(self):
         with repository("effect-replan-no-effect") as root:
             osys = BuildOS(root)
@@ -560,7 +865,10 @@ class ExternalEffectTests(unittest.TestCase):
                 assumption_id="input_complete",
             )
             changed = spec(external=True, idempotent=False, plan_id="plan_two")
-            changed["effects"][0]["effect_input_sha256"] = "3" * 64
+            changed["effects"][0]["effect_input"] = {
+                "kind": "PROJECT_ARTIFACT", "path": ALT_EFFECT_INPUT_PATH,
+                "sha256": ALT_EFFECT_INPUT_SHA256,
+            }
             replaced = osys.replan(execution_spec=changed).snapshot
             self.assertEqual(replaced.event["effects_carried"], [])
             self.assertEqual(replaced.event["effects_retired"], ["attempt_one"])
@@ -590,6 +898,38 @@ class ExternalEffectTests(unittest.TestCase):
                 osys.replan(
                     execution_spec=spec(external=True, idempotent=False, plan_id="plan_two"),
                 )
+
+    def test_uncertain_effect_blocks_wip_replan_then_positive_no_effect_proof_preserves_wip(self):
+        with repository("effect-wip-uncertain") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-WIP", execution_class="EXTERNAL_EFFECT"),
+                execution_spec=spec(external=True, idempotent=False),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(transition="DISPATCH", effect_id="attempt_one")
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
+            osys.report_blocker(
+                family="local_defect", evidence="evidence/critical", assumption_id="input_complete",
+            )
+            with self.assertRaisesRegex(KernelError, "cannot bypass an unresolved external effect"):
+                osys.replan(
+                    execution_spec=spec(external=True, idempotent=False, plan_id="plan_two"),
+                )
+            osys.effect(
+                transition="RECONCILE_NO_EFFECT", effect_id="attempt_one",
+                reference="provider/positive-no-effect", predicate="canonical_no_effect",
+            )
+            replaced = osys.replan(
+                execution_spec=spec(external=True, idempotent=False, plan_id="plan_two"),
+            ).snapshot
+            self.assertEqual((root / "app.py").read_text(encoding="utf-8"), "value = 2\n")
+            self.assertEqual(replaced.event["effects_carried"], ["attempt_one"])
+            retried = osys.effect(transition="AUTHORIZE_RETRY", effect_id="attempt_one").snapshot
+            self.assertEqual(
+                retried.state["execution"]["effect_ledger"]["attempt_one"]["retry_basis"],
+                "POSITIVE_NO_EFFECT_PROOF",
+            )
 
 
 class ProportionalAssuranceTests(unittest.TestCase):
@@ -683,10 +1023,17 @@ class TransactionBoundaryTests(unittest.TestCase):
         with repository("crash-replan") as root:
             osys = BuildOS(root); osys.bootstrap(request("CRASH-REPLAN"), execution_spec=spec())
             osys.report_blocker(family="local_defect", evidence="evidence/critical", assumption_id="input_complete")
+            (root / "app.py").write_text("value = 2\n", encoding="utf-8")
             kwargs = {"execution_spec": spec(plan_id="plan_two"), "op_id": "crash-replan"}
             with self.assertRaises(InjectedFailure):
                 osys.replan(configured_failures="after_pointer_swap", **kwargs)
-            self.assertTrue(osys.replan(**kwargs).idempotent)
+            retried = osys.replan(**kwargs)
+            self.assertTrue(retried.idempotent)
+            self.assertEqual((root / "app.py").read_text(encoding="utf-8"), "value = 2\n")
+            self.assertEqual(
+                retried.snapshot.state["execution"]["product_state_binding"]["dirty_paths"],
+                ["app.py"],
+            )
 
         with repository("crash-review") as root:
             osys = BuildOS(root); osys.bootstrap(request("CRASH-REVIEW"), execution_spec=spec())

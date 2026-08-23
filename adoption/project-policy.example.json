@@ -48,7 +48,7 @@
       {
         "id": "replace-with-project-gate",
         "argv": ["python", "-m", "unittest", "discover"],
-        "provenance": "OWNER_AUTHORED"
+        "provenance": "PROJECT_POLICY_TRUSTED"
       }
     ],
     "testing_strategy": "Replace with the focused and regression testing strategy.",

@@ -478,12 +478,41 @@ def _validate_scope(state: Mapping[str, Any], changed_paths: list[str], *, case_
 
 
 def _validate_change_kinds(state: Mapping[str, Any], git: Mapping[str, Any]) -> None:
-    deletions = [str(path) for path in git.get("deletions_since_base") or []]
+    deletions = sorted({
+        *[str(path) for path in git.get("deletions_since_base") or []],
+        *[str(path) for path in git.get("worktree_deletions") or []],
+    })
     if deletions and not (state.get("risk") == "R3" and state.get("side_effect") == "DELETE"):
         raise KernelError(f"product deletion requires an authorized R3 DELETE contract: {', '.join(deletions)}")
-    type_changes = [str(path) for path in git.get("type_changes_since_base") or []]
+    type_changes = sorted({
+        *[str(path) for path in git.get("type_changes_since_base") or []],
+        *[str(path) for path in git.get("worktree_type_changes") or []],
+    })
     if type_changes and RISKS_ORDER.get(str(state.get("risk")), -1) < RISKS_ORDER["R2"]:
         raise KernelError(f"product file type changes require at least R2: {', '.join(type_changes)}")
+
+
+def validate_in_progress_product_state(state: Mapping[str, Any], git: Mapping[str, Any]) -> None:
+    """Admit a stable product observation without treating it as trust or a product commit."""
+    validate_state(state)
+    if state.get("phase") != "ACTIVE":
+        raise KernelError("in-progress product preservation requires ACTIVE lifecycle state")
+    if not git.get("available") or not git.get("head"):
+        raise KernelError("in-progress product preservation requires observable Git state")
+    if git.get("tracked_control_paths"):
+        raise KernelError("in-progress product preservation refuses tracked .buildos control paths")
+    base = (state.get("base_git") or {}).get("head")
+    relation = str(git.get("relation_to_base") or "UNKNOWN").upper()
+    if base and relation not in {"SAME", "DESCENDANT"}:
+        raise KernelError("in-progress product HEAD must remain the task baseline or its descendant")
+    changed = sorted({
+        *[str(path) for path in git.get("changes_since_base") or []],
+        *[str(path) for path in git.get("product_dirty_paths") or []],
+    })
+    if _product_change_mode(state) == "NO_SOURCE_DELTA" and changed:
+        raise KernelError("NO_SOURCE_DELTA task cannot preserve in-progress product mutation")
+    _validate_change_kinds(state, git)
+    _validate_scope(state, changed, case_insensitive=bool(git.get("case_insensitive_paths")))
 
 
 def transition_validate(prev: Mapping[str, Any], git: Mapping[str, Any], evidence: Mapping[str, Any], *, at: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
