@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import copy
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
+from unittest.mock import patch
 
 from buildos.facade import BuildOS
 from buildos.model import KernelError, sha256_json
@@ -660,13 +661,25 @@ class ExternalEffectTests(unittest.TestCase):
             value["effects"][0]["deadline_seconds"] = 2
             osys = BuildOS(root)
             osys.bootstrap(request("EFFECT-TIME", execution_class="EXTERNAL_EFFECT", no_source=True), execution_spec=value)
-            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
-            with self.assertRaisesRegex(KernelError, "deadline has not expired"):
-                osys.effect(transition="TIMEOUT_NO_DISPATCH", effect_id="attempt_one", reference="preflight/timeout")
-            time.sleep(2.1)
-            resolved = osys.effect(
-                transition="TIMEOUT_NO_DISPATCH", effect_id="attempt_one", reference="preflight/timeout",
-            ).snapshot
+            class FixedDateTime(datetime):
+                current = datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+                @classmethod
+                def now(cls, tz=None):
+                    return cls.current
+
+            with patch("buildos.execution.datetime", FixedDateTime):
+                osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+                with self.assertRaisesRegex(KernelError, "deadline has not expired"):
+                    osys.effect(
+                        transition="TIMEOUT_NO_DISPATCH", effect_id="attempt_one",
+                        reference="preflight/timeout",
+                    )
+                FixedDateTime.current += timedelta(seconds=3)
+                resolved = osys.effect(
+                    transition="TIMEOUT_NO_DISPATCH", effect_id="attempt_one",
+                    reference="preflight/timeout",
+                ).snapshot
             self.assertEqual(resolved.state["execution"]["effect_ledger"]["attempt_one"]["state"], "RESOLVED_NO_EFFECT")
 
     def test_uncertain_non_idempotent_effect_needs_positive_no_effect_proof(self):
