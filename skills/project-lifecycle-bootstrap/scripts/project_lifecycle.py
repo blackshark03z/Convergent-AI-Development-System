@@ -13,7 +13,7 @@ from typing import Any
 
 from side_effect_contract import ContractError, validate_file as validate_side_effect_contract
 
-KIT_VERSION = "1.3.0"
+KIT_VERSION = "1.3.1"
 POLICY_FILE = ".buildos-policy.json"
 REQUIRED_CATEGORIES = {
     "USER_BEHAVIOR", "ARCHITECTURE_OWNERSHIP_BOUNDARY", "API_CONFIG_SCHEMA",

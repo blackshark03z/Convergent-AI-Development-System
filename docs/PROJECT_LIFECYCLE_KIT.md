@@ -1,7 +1,7 @@
 # Project Lifecycle Kit
 
-Project Lifecycle Kit v1.3.0 is the portable adoption layer around Build OS
-v1.24 candidate. It is mandatory by the adoption contract, not kernel-enforced
+Project Lifecycle Kit v1.3.1 is the portable adoption layer around Build OS
+v1.25 candidate. It is mandatory by the adoption contract, not kernel-enforced
 security. `buildos/` continues to own task, revision, lifecycle and immutable
 validation evidence.
 

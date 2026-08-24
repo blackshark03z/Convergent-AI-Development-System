@@ -332,6 +332,10 @@ def transition_grounding_refresh(
         )
     if boundary_changed and previous.get("phase") != "ACTIVE":
         raise KernelError("Worker action-boundary adaptation must occur before product commit adoption")
+    from .grounding import assert_decision_authority_progression
+    assert_decision_authority_progression(
+        previous.get("work_loop") or {}, work_loop,
+    )
     result = deepcopy(dict(previous))
     result["allowed_paths"] = req["allowed_paths"]
     result["prohibited_paths"] = req["prohibited_paths"]

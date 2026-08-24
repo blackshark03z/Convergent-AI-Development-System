@@ -407,7 +407,7 @@ def _write_receipt(p: StorePaths, snapshot: Snapshot) -> Path:
 
 
 def _read_receipts(root: Path | str) -> tuple[list[Snapshot], list[str]]:
-    p = ensure_layout(root)
+    p = paths(root)
     valid: list[Snapshot] = []
     invalid: list[str] = []
     for path in sorted(p.receipts.glob("p*.json")):
@@ -511,7 +511,7 @@ def read_current(root: Path | str, *, allow_uninitialized: bool = False) -> Snap
 
 
 def scan_generations(root: Path | str) -> tuple[list[Snapshot], list[str]]:
-    p = ensure_layout(root)
+    p = paths(root)
     good: list[Snapshot] = []
     invalid: list[str] = []
     for candidate in sorted(p.generations.glob("g*.json")):

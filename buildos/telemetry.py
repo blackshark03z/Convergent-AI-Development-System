@@ -1153,12 +1153,13 @@ def _load_source(path: Path, source: str) -> list[dict[str, Any]]:
     return records
 
 
-def _ledger(root: Path | str) -> Path:
+def _ledger(root: Path | str, *, create_parent: bool = False) -> Path:
     path = safe_repository_descendant(
         root, Path(".buildos") / "runtime" / "telemetry.jsonl",
         label="telemetry event target",
     )
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if create_parent:
+        path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -1230,7 +1231,6 @@ def read(root: Path | str) -> tuple[list[dict[str, Any]], list[str]]:
 
 
 def ingest(root: Path | str, state: Mapping[str, Any], payloads: Iterable[Mapping[str, Any]], *, source: str) -> int:
-    ledger = _ledger(root)
     existing, ledger_errors = read(root)
     if ledger_errors:
         raise TelemetryError(f"telemetry ledger requires repair before append: {ledger_errors[0]}")
@@ -1263,6 +1263,7 @@ def ingest(root: Path | str, state: Mapping[str, Any], payloads: Iterable[Mappin
     ]
     if not fresh:
         return 0
+    ledger = _ledger(root, create_parent=True)
     with ledger.open("ab") as handle:
         for item in fresh:
             handle.write((json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"))

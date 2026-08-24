@@ -59,6 +59,48 @@ class SideEffectContractTests(unittest.TestCase):
         with self.assertRaisesRegex(contract.ContractError, "unknown canonical predicate"):
             contract.validate_contract(unknown)
 
+    def test_every_retry_replay_and_recovery_consumer_uses_the_action_proof(self):
+        for role in ("RETRY", "REPLAY", "RECOVERY"):
+            with self.subTest(role=role):
+                value = example()
+                value["canonical_predicates"].append({
+                    "id": "weak_no_effect",
+                    "semantics": "A weaker proof that must not authorize another attempt.",
+                    "verifier": "weak verifier",
+                })
+                if role == "RECOVERY":
+                    value["semantic_consumers"].append({
+                        "id": "recovery_no_effect_gate",
+                        "action_id": "submit_external_effect",
+                        "role": role,
+                        "predicate_id": "weak_no_effect",
+                        "purpose": "Permit recovery after possible execution.",
+                    })
+                else:
+                    target = next(
+                        row for row in value["semantic_consumers"] if row["role"] == role
+                    )
+                    target["predicate_id"] = "weak_no_effect"
+                with self.assertRaisesRegex(contract.ContractError, "canonical no-effect predicate"):
+                    contract.validate_contract(value)
+
+    def test_missing_canonical_retry_or_replay_binding_is_rejected(self):
+        for role in ("RETRY", "REPLAY"):
+            with self.subTest(role=role):
+                value = example()
+                value["semantic_consumers"] = [
+                    row for row in value["semantic_consumers"] if row["role"] != role
+                ]
+                with self.assertRaisesRegex(contract.ContractError, "missing canonical no-effect"):
+                    contract.validate_contract(value)
+
+    def test_legacy_single_action_consumer_shape_remains_compatible(self):
+        value = example()
+        for row in value["semantic_consumers"]:
+            row.pop("action_id")
+            row.pop("role")
+        self.assertEqual(contract.validate_contract(value)["status"], "PASS")
+
     def test_possible_or_confirmed_effect_never_authorizes_retry(self):
         for effect_state in ("POSSIBLE", "CONFIRMED"):
             with self.subTest(effect_state=effect_state):

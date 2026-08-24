@@ -10,7 +10,7 @@ import re
 import sys
 
 KERNEL_VERSION = "1.25"
-LIFECYCLE_KIT_VERSION = "1.3.0"
+LIFECYCLE_KIT_VERSION = "1.3.1"
 CONTINUITY_SKILL_VERSION = "1.1.0"
 RECORD = ".buildos-authority.json"
 LEGACY_EXECUTABLES = ("scripts/ai.py", "scripts/ai_os.py")

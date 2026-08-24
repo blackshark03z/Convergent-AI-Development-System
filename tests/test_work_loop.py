@@ -5,14 +5,22 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from buildos import git_adapter
 from buildos.facade import BuildOS
-from buildos.grounding import GroundingError, verify_work_loop_evidence
+from buildos.grounding import (
+    TRUSTED_DECISION_RESOLUTION_SHA256_ENV,
+    GroundingError,
+    decision_request_hash,
+    decision_request_source_reference,
+    verify_work_loop_evidence,
+)
 from buildos.model import KernelError
 from buildos.store import read_current
 from buildos.work_contract import TRUSTED_CONTRACT_SHA256_ENV, validate_contract
@@ -28,6 +36,22 @@ def canonical_hash(value: dict) -> str:
     return hashlib.sha256(json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")).hexdigest()
+
+
+def snapshot_tree(root: Path) -> dict[str, tuple]:
+    result: dict[str, tuple] = {}
+    for path in [root, *sorted(root.rglob("*"))]:
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        stat = path.stat()
+        result[relative] = (
+            ("directory", stat.st_mtime_ns)
+            if path.is_dir()
+            else (
+                "file", stat.st_size, stat.st_mtime_ns,
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
+        )
+    return result
 
 
 class WorkLoopBootstrapTests(unittest.TestCase):
@@ -301,20 +325,24 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             completed = self._bootstrap(root, contract_path, grounding_path)
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
-            def snapshot_files() -> dict[str, tuple[int, int, str]]:
-                return {
-                    path.relative_to(root).as_posix(): (
-                        path.stat().st_size,
-                        path.stat().st_mtime_ns,
-                        hashlib.sha256(path.read_bytes()).hexdigest(),
-                    )
-                    for path in (root / ".buildos").rglob("*") if path.is_file()
-                }
-
-            before = snapshot_files()
+            before = snapshot_tree(root / ".buildos")
             value = BuildOS(root).inspect()
-            after = snapshot_files()
+            after = snapshot_tree(root / ".buildos")
             self.assertTrue(value["read_only"])
+            self.assertEqual(before, after)
+
+    def test_inspect_does_not_create_missing_runtime_directory(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
+            root, contract_path, grounding_path = self._inputs(Path(raw))
+            completed = self._bootstrap(root, contract_path, grounding_path)
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            runtime = root / ".buildos" / "runtime"
+            shutil.rmtree(runtime)
+            before = snapshot_tree(root / ".buildos")
+            value = BuildOS(root).inspect()
+            after = snapshot_tree(root / ".buildos")
+            self.assertTrue(value["read_only"])
+            self.assertFalse(runtime.exists())
             self.assertEqual(before, after)
 
     def test_inspect_cli_is_strictly_read_only_for_entire_repository(self):
@@ -323,23 +351,13 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             completed = self._bootstrap(root, contract_path, grounding_path)
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
-            def snapshot_files() -> dict[str, tuple[int, int, str]]:
-                return {
-                    path.relative_to(root).as_posix(): (
-                        path.stat().st_size,
-                        path.stat().st_mtime_ns,
-                        hashlib.sha256(path.read_bytes()).hexdigest(),
-                    )
-                    for path in root.rglob("*") if path.is_file()
-                }
-
-            before = snapshot_files()
+            before = snapshot_tree(root)
             inspected = subprocess.run(
                 [sys.executable, str(AI), "--root", str(root), "inspect"],
                 text=True, encoding="utf-8", errors="replace",
                 capture_output=True, timeout=30,
             )
-            after = snapshot_files()
+            after = snapshot_tree(root)
             self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)
             self.assertTrue(json.loads(inspected.stdout)["read_only"])
             self.assertEqual(before, after)
@@ -436,6 +454,211 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             repeated = BuildOS(root).advance(run_assurance=True)
             self.assertEqual(repeated["status"], "DECISION_REQUIRED")
             self.assertEqual(repeated["transitions"], [])
+
+    def test_same_contract_contradiction_requires_exact_authority_resolution(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
+            base = Path(raw)
+            root, contract_path, grounding_path = self._inputs(base)
+            started = self._work(
+                root, "--work-contract", str(contract_path), "--grounding", str(grounding_path),
+            )
+            self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+            (root / "scripts" / "ai.py").write_text("print('candidate')\n", encoding="utf-8")
+            run_git(root, "add", "scripts/ai.py")
+            run_git(root, "commit", "-m", "candidate implementation")
+            current = read_current(root)
+            assert current is not None
+            contract_hash = current.state["work_loop"]["work_contract"]["hash"]
+            observed = git_adapter.snapshot(root)
+
+            contradicted = report(
+                root, observed, contract_hash,
+                claim_id="acceptance.contract", outcome="CONTRADICTED",
+            )
+            contradicted_path = base / "contradicted.json"
+            contradicted_path.write_text(json.dumps(contradicted), encoding="utf-8")
+            blocked = BuildOS(root).advance(
+                work_contract=contract_path, grounding_report=contradicted_path,
+            )
+            self.assertEqual(blocked["status"], "DECISION_REQUIRED")
+            blocked_snapshot = read_current(root)
+            assert blocked_snapshot is not None
+            request = blocked_snapshot.state["work_loop"]["grounding"]["decision_requests"][0]
+
+            verified = report(
+                root, observed, contract_hash,
+                claim_id="acceptance.contract", outcome="VERIFIED",
+            )
+            verified_path = base / "verified.json"
+            verified_path.write_text(json.dumps(verified), encoding="utf-8")
+            with self.assertRaisesRegex(KernelError, "cannot clear an unresolved Decision Request"):
+                BuildOS(root).advance(
+                    work_contract=contract_path, grounding_report=verified_path,
+                )
+            unchanged = read_current(root)
+            assert unchanged is not None
+            self.assertEqual(unchanged.generation_hash, blocked_snapshot.generation_hash)
+            self.assertEqual(
+                unchanged.state["work_loop"]["action_rights"]["requested_action_status"],
+                "BLOCKED",
+            )
+
+            resolution = {
+                "schema": "buildos.decision-resolution.v1",
+                "request_id": request["request_id"],
+                "request_sha256": decision_request_hash(request),
+                "contract_hash": request["contract_hash"],
+                "claim_id": request["claim_id"],
+                "decision_type": request["decision_type"],
+                "decision": "CONFIRM_CANONICAL",
+                "authority": {
+                    "role": request["requested_from"],
+                    "identity": "authenticated-tech-lead",
+                    "authority_reference": "decision:acceptance-contract-confirmed",
+                    "decided_at": "2026-08-24T18:00:00Z",
+                },
+            }
+            resolution_path = base / "decision-resolution.json"
+            resolution_path.write_text(json.dumps(resolution), encoding="utf-8")
+            resolution_digest = canonical_hash(resolution)
+            with patch.dict(os.environ, {
+                TRUSTED_DECISION_RESOLUTION_SHA256_ENV: resolution_digest,
+            }):
+                advanced = BuildOS(root).advance(
+                    work_contract=contract_path, grounding_report=verified_path,
+                    decision_resolution=resolution_path,
+                )
+            self.assertEqual(
+                [row["kind"] for row in advanced["transitions"]],
+                ["GROUNDING_REFRESH", "PRODUCT_COMMIT"],
+            )
+            after = read_current(root)
+            assert after is not None
+            self.assertEqual(after.state["work_loop"]["action_rights"]["requested_action_status"], "GRANTED")
+            self.assertEqual(after.state["work_loop"]["grounding"]["decision_requests"], [])
+            history = after.state["work_loop"]["decision_history"]
+            self.assertEqual(len(history), 1)
+            self.assertEqual(history[0]["request"], request)
+            self.assertEqual(history[0]["resolution_kind"], "DIRECT_AUTHORITY_DECISION")
+            verify_work_loop_evidence(root, after.state["work_loop"])
+
+            with patch.dict(os.environ, {
+                TRUSTED_DECISION_RESOLUTION_SHA256_ENV: resolution_digest,
+            }):
+                retried = BuildOS(root).advance(
+                    work_contract=contract_path, grounding_report=verified_path,
+                    decision_resolution=resolution_path,
+                )
+            self.assertEqual(retried["transitions"], [])
+            retried_snapshot = read_current(root)
+            assert retried_snapshot is not None
+            self.assertEqual(len(retried_snapshot.state["work_loop"]["decision_history"]), 1)
+
+    def test_linked_authority_contract_supersession_may_replace_blocked_handoff(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
+            base = Path(raw)
+            root, contract_path, grounding_path = self._inputs(base)
+            started = self._work(
+                root, "--work-contract", str(contract_path), "--grounding", str(grounding_path),
+            )
+            self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+            current = read_current(root)
+            assert current is not None
+            prior_hash = current.state["work_loop"]["work_contract"]["hash"]
+            observed = git_adapter.snapshot(root)
+            contradicted = report(
+                root, observed, prior_hash,
+                claim_id="acceptance.contract", outcome="CONTRADICTED",
+            )
+            contradicted_path = base / "contradicted.json"
+            contradicted_path.write_text(json.dumps(contradicted), encoding="utf-8")
+            BuildOS(root).advance(
+                work_contract=contract_path, grounding_report=contradicted_path,
+            )
+            blocked = read_current(root)
+            assert blocked is not None
+            request = blocked.state["work_loop"]["grounding"]["decision_requests"][0]
+
+            successor = json.loads(contract_path.read_text(encoding="utf-8"))
+            successor["revision"] = 2
+            successor["issuer"]["issued_at"] = "2026-08-24T18:05:00Z"
+            successor["issuer"]["authority_reference"] = "decision:contract-supersession"
+            successor["metadata"]["parent_contract_hash"] = prior_hash
+            successor["metadata"]["source_context_refs"] = [
+                decision_request_source_reference(request),
+            ]
+            successor = validate_contract(successor)
+            successor_hash = canonical_hash(successor)
+            successor_path = base / "work-contract-r2.json"
+            successor_path.write_text(json.dumps(successor), encoding="utf-8")
+            successor_grounding = report(
+                root, observed, successor_hash,
+                claim_id="acceptance.contract", outcome="VERIFIED",
+            )
+            successor_grounding_path = base / "grounding-r2.json"
+            successor_grounding_path.write_text(json.dumps(successor_grounding), encoding="utf-8")
+
+            with patch.dict(os.environ, {TRUSTED_CONTRACT_SHA256_ENV: successor_hash}):
+                advanced = BuildOS(root).advance(
+                    work_contract=successor_path,
+                    grounding_report=successor_grounding_path,
+                )
+            self.assertEqual(
+                [row["kind"] for row in advanced["transitions"]],
+                ["WORK_CONTRACT_SUPERSESSION"],
+            )
+            after = read_current(root)
+            assert after is not None
+            self.assertEqual(after.state["task_id"], f"{successor['contract_id']}-r2")
+            self.assertEqual(after.state["work_loop"]["work_contract"]["hash"], successor_hash)
+            self.assertEqual(after.state["work_loop"]["action_rights"]["requested_action_status"], "GRANTED")
+            history = after.state["work_loop"]["decision_history"]
+            self.assertEqual(history[-1]["request"], request)
+            self.assertEqual(history[-1]["resolution_kind"], "WORK_CONTRACT_SUPERSESSION")
+            verify_work_loop_evidence(root, after.state["work_loop"])
+
+    def test_repository_contradiction_and_unrelated_question_remain_worker_scoped(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
+            base = Path(raw)
+            root = base / "repo"
+            observed = repository(root)
+            value = contract()
+            value["target"]["repository"] = str(root.resolve())
+            value["target"]["ref"] = observed["branch"]
+            value["claims"].append({
+                "id": "question.unrelated",
+                "kind": "OPEN_QUESTION",
+                "statement": "An unrelated future product question.",
+                "authority": "TECH_LEAD",
+                "binding": "ADVISORY",
+                "status": "UNKNOWN",
+                "source_refs": [],
+                "repo_binding": None,
+                "observed_at": None,
+                "invalidators": [],
+                "verification_owner": "TECH_LEAD",
+            })
+            value["open_question_ids"] = ["question.unrelated"]
+            normalized = validate_contract(value)
+            digest = canonical_hash(normalized)
+            grounding = report(
+                root, observed, digest,
+                claim_id="repo.current_cli", outcome="CONTRADICTED",
+            )
+            contract_file = base / "work-contract.json"
+            grounding_file = base / "grounding.json"
+            contract_file.write_text(json.dumps(normalized), encoding="utf-8")
+            grounding_file.write_text(json.dumps(grounding), encoding="utf-8")
+            completed = self._bootstrap(root, contract_file, grounding_file)
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            current = read_current(root)
+            assert current is not None
+            self.assertEqual(
+                current.state["work_loop"]["grounding"]["local_adaptation_claim_ids"],
+                ["repo.current_cli"],
+            )
+            self.assertEqual(current.state["work_loop"]["grounding"]["decision_requests"], [])
+            self.assertEqual(current.state["work_loop"]["action_rights"]["requested_action_status"], "GRANTED")
 
     def test_changed_grounding_dependency_blocks_assurance_until_regrounded(self):
         with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:

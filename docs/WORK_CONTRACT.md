@@ -78,6 +78,28 @@ architecture or business constraints produces a deterministic typed Decision
 Request. Its blocking scope is only actions dependent on that claim. Unscoped
 claims and unrelated unknowns remain non-blocking at this read-only stage.
 
+An open canonical Decision Request remains part of the current authority debt
+even if a later Worker grounding report labels the claim `VERIFIED`. The same
+Contract can advance only with a strict `buildos.decision-resolution.v1` file
+that binds the exact request ID and request SHA-256, names the requested
+Owner/Tech Lead role, and is pinned by the trusted launcher through
+`BUILDOS_TRUSTED_DECISION_RESOLUTION_SHA256`:
+
+```powershell
+python scripts/ai.py --root <target-repo> work `
+  --work-contract <work-contract.json> --grounding <fresh-grounding.json> `
+  --decision-resolution <decision-resolution.json>
+```
+
+The original request and its immutable resolution evidence remain visible in
+`work_loop.decision_history`. An authority may instead issue the next Contract
+revision. That Contract must retain `contract_id`, bind the active hash through
+`metadata.parent_contract_hash`, and include the exact
+`buildos-decision-request:<id>:sha256:<request-sha256>` reference in
+`metadata.source_context_refs`. Its trusted Contract hash then authorizes one
+atomic `WORK_CONTRACT_SUPERSESSION`; a Worker cannot use an unrelated Contract
+as a replacement.
+
 ## Canonical start and normal loop
 
 Before the Worker starts, the trusted Tech Lead launcher sets

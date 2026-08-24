@@ -12,11 +12,11 @@ import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.25"
-PACKAGE_ID = "build-os-v1.25-rc2-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.3.0-continuity-1.1.0-context-epoch-1.0.1"
-ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc2_work_loop_v1.0.0_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.0_continuity_v1.1.0_context_epoch_v1.0.1.zip"
-RELEASE_EVIDENCE_PATH = "docs/V1.25_RC2_REPORT.md"
-RELEASE_REFERENCE = "BUILDOS-V1.25-WORK-LOOP-RC2"
-EXPECTED_TEST_COUNT = 295
+PACKAGE_ID = "build-os-v1.25-rc3-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.3.1-continuity-1.1.0-context-epoch-1.0.1"
+ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc3_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.1_continuity_v1.1.0_context_epoch_v1.0.1.zip"
+RELEASE_EVIDENCE_PATH = "docs/V1.25_RC3_REPORT.md"
+RELEASE_REFERENCE = "BUILDOS-V1.25-WORK-LOOP-RC3"
+EXPECTED_TEST_COUNT = 304
 EXPECTED_TEST_MODULES = [
     "test_acceptance_contract.py", "test_adversarial.py", "test_candidate.py",
     "test_context_epoch.py", "test_continuity_sidecar.py", "test_execution_authority.py",
@@ -122,7 +122,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         "lifecycle_version": lifecycle.get("version"), "continuity_version": continuity.get("version"),
         "runtime_capability": runtime.get("identity"), "runtime_version": runtime.get("version"),
     }
-    if manifest.get("frozen_kernel_version") != "1.25-rc2": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
+    if manifest.get("frozen_kernel_version") != "1.25-rc3": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
     try:
         packaged_version = (root / "VERSION").read_text(encoding="ascii").strip()
     except OSError:
@@ -139,7 +139,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         errors.append("BUILDOS_LIBRARY_IDENTITY_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("version") != expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_SKILL_MISMATCH")
     if continuity.get("name") != "documentation-handoff-continuity" or expected["continuity_version"] != "1.1.0": errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")
-    if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or expected["lifecycle_version"] != "1.3.0": errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
+    if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or expected["lifecycle_version"] != "1.3.1": errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
     if runtime.get("name") != "codex-app-server-context-epoch" or expected["runtime_capability"] != "codex-app-server-context-epoch.v1" or expected["runtime_version"] != "1.0.1":
         errors.append("MANIFEST_RUNTIME_CONTEXT_EPOCH_IDENTITY_MISMATCH")
     execution_runtime_raw = manifest.get("execution_runtime")
@@ -153,7 +153,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
     if not exact_fields(work_loop, {"version", "contract_schema", "grounding_schema", "canonical_authority"}):
         errors.append("MANIFEST_WORK_LOOP_FIELDS_INVALID")
     if (
-        work_loop.get("version") != "1.0.0"
+        work_loop.get("version") != "1.0.1"
         or work_loop.get("contract_schema") != "buildos.work-contract.v1"
         or work_loop.get("grounding_schema") != "buildos.grounding-report.v1"
         or work_loop.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION"
@@ -217,7 +217,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
             release_text = ""
         release_lines = release_text.splitlines()
         required_lines = {
-            0: "# Build OS v1.25 Work Loop RC2 report",
+            0: "# Build OS v1.25 Work Loop RC3 report",
             2: "Status: `CANDIDATE_AWAITING_INDEPENDENT_R3`",
             4: "Frozen kernel target:",
             5: f"`{kernel_commit}`",

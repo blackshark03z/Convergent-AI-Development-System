@@ -35,9 +35,12 @@ clean observable baseline. `.buildos` remains reserved and locally excluded.
 
 A Work Loop Contract is immutable. Repository contradictions may be adapted
 locally when canonical intent and acceptance remain intact. A material
-Decision Request must be resolved by the named authority and represented by a
-new/superseding Work Contract. Legacy `new-revision` is rejected for Work Loop
-tasks so scope or intent cannot diverge from the bound handoff.
+Decision Request must be resolved by the named authority through exact
+request-hash-bound immutable resolution evidence, or by the next trusted Work
+Contract revision linked through `parent_contract_hash` and the exact Decision
+Request reference. Same-Contract Worker grounding cannot clear the obligation.
+Legacy `new-revision` remains rejected for Work Loop tasks so scope or intent
+cannot diverge from the bound handoff.
 
 ## Rollback
 

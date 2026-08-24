@@ -130,6 +130,10 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     work = commands.add_parser("work", help="advance the normal evidence-carrying Work Loop")
     work.add_argument("--work-contract", type=Path)
     work.add_argument("--grounding", type=Path)
+    work.add_argument(
+        "--decision-resolution", type=Path,
+        help="trusted authority resolution linked to one exact open Decision Request",
+    )
     work.add_argument("--execution-spec", type=Path)
     work.add_argument("--assure", action="store_true", help="explicitly run bound assurance and close when safe")
     work.add_argument("--inspected-by")
@@ -304,6 +308,7 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
                 },
                 work_contract=args.work_contract,
                 grounding_report=args.grounding,
+                decision_resolution=args.decision_resolution,
                 execution_spec=args.execution_spec,
                 run_assurance=args.assure,
                 inspected_by=args.inspected_by,
@@ -441,7 +446,11 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
             _json({"status": "PASS", "ingested": os.ingest_telemetry(payloads, source=args.source)})
         outcome = "PASS"
         return 0
-    except (KernelError, RecoveryRequired, InjectedFailure, TelemetryError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
+    except (
+        KernelError, GroundingError, WorkContractError, RecoveryRequired,
+        InjectedFailure, TelemetryError, OSError, RuntimeError,
+        subprocess.SubprocessError,
+    ) as exc:
         _json({"status": "ACTION_REQUIRED", "error": type(exc).__name__, "message": str(exc)})
         return 2
     finally:

@@ -116,6 +116,12 @@ claim, authority, evidence, options and `ACTIONS_DEPENDENT_ON_CLAIM` scope.
 Repository-claim contradictions produce local adaptation, not escalation.
 Unscoped questions are visible and non-blocking.
 
+The request remains authority-blocking across same-Contract grounding refreshes.
+It is discharged only by trusted immutable evidence bound to the exact request
+hash, or by a trusted next Contract revision that binds both the active parent
+Contract hash and the exact request reference. Current state retains compact
+Decision history while the parent generation and evidence remain immutable.
+
 ## 10. Handoff and evidence model
 
 Claims declare kind, authority, binding, status, source pointers, repo binding,
@@ -142,8 +148,9 @@ legacy tasks continue with the old commands. New Work Loop tasks use new
 contract/grounding schemas and optional `work_loop` state. No historical
 generation is rewritten. A Work Loop task cannot use legacy `new-revision` to
 silently change intent; it starts a fresh Contract revision/task after the
-prior lease is released. Enhanced runtime/effect specs remain required for
-high-cost and external-effect work.
+prior lease is released, or uses the authority-bound atomic supersession path
+when an open Decision Request is the explicit predecessor. Enhanced
+runtime/effect specs remain required for high-cost and external-effect work.
 
 ## 13. What not to build
 

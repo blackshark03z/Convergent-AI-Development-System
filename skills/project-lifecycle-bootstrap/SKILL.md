@@ -5,7 +5,7 @@ description: Establish or adopt the bounded Project Lifecycle Kit operating cont
 
 # Project lifecycle bootstrap
 
-Project Lifecycle Kit v1.3.0 is mandatory by the portable adoption contract,
+Project Lifecycle Kit v1.3.1 is mandatory by the portable adoption contract,
 not kernel-enforced security. It does not replace
 `documentation-handoff-continuity v1.1.0`, which remains the sole
 authority for active operational intent.

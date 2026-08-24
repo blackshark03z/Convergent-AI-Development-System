@@ -10,12 +10,13 @@ import sys
 from typing import Any, Mapping
 
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 SCHEMA = "buildos.side-effect-contract.v1"
 ID = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 RETRY_POLICIES = {"SAFE_IDEMPOTENT", "POSITIVE_NO_EFFECT_PROOF_ONLY", "NEVER"}
 EFFECT_STATES = {"NOT_POSSIBLE", "POSSIBLE", "CONFIRMED"}
 COMPATIBILITY = {"CURRENT_SCHEMA", "VERIFIED_LEGACY_EQUIVALENT", "UNMIGRATABLE"}
+CONSUMER_ROLES = {"AUTHORITY", "RETRY", "REPLAY", "RECOVERY"}
 TOP_LEVEL_FIELDS = {
     "schema", "system_id", "state_dimensions", "canonical_predicates",
     "semantic_consumers", "dangerous_actions", "crash_recovery", "schema_compatibility",
@@ -76,10 +77,13 @@ def validate_contract(value: Mapping[str, Any]) -> dict[str, Any]:
         predicate_ids.add(identifier)
 
     consumer_ids: set[str] = set()
-    consumed_predicates: set[str] = set()
+    consumers: list[dict[str, str | None]] = []
     for item in _objects(value.get("semantic_consumers"), "semantic_consumers"):
         identifier = _id(item.get("id"), "semantic consumer id")
-        if set(item) != {"id", "predicate_id", "purpose"}:
+        legacy_shape = {"id", "predicate_id", "purpose"}
+        bound_shape = legacy_shape | {"action_id", "role"}
+        item_shape = frozenset(item)
+        if item_shape not in {frozenset(legacy_shape), frozenset(bound_shape)}:
             raise ContractError(f"semantic consumer {identifier} has an invalid shape")
         predicate = _id(item.get("predicate_id"), f"semantic consumer {identifier}.predicate_id")
         if identifier in consumer_ids:
@@ -88,10 +92,24 @@ def validate_contract(value: Mapping[str, Any]) -> dict[str, Any]:
             raise ContractError(f"semantic consumer {identifier} references unknown canonical predicate: {predicate}")
         _text(item.get("purpose"), f"semantic consumer {identifier}.purpose")
         consumer_ids.add(identifier)
-        consumed_predicates.add(predicate)
+        consumers.append({
+            "id": identifier,
+            "predicate_id": predicate,
+            "action_id": (
+                _id(item.get("action_id"), f"semantic consumer {identifier}.action_id")
+                if item_shape == frozenset(bound_shape) else None
+            ),
+            "role": (
+                str(item.get("role") or "").strip().upper()
+                if item_shape == frozenset(bound_shape) else None
+            ),
+        })
+        if consumers[-1]["role"] is not None and consumers[-1]["role"] not in CONSUMER_ROLES:
+            raise ContractError(f"semantic consumer {identifier} has an invalid role")
 
     action_ids: set[str] = set()
     action_retry: dict[str, str] = {}
+    action_semantics: dict[str, dict[str, str]] = {}
     for item in _objects(value.get("dangerous_actions"), "dangerous_actions"):
         identifier = _id(item.get("id"), "dangerous action id")
         if set(item) != {
@@ -129,8 +147,57 @@ def validate_contract(value: Mapping[str, Any]) -> dict[str, Any]:
             raise ContractError(f"dangerous action {identifier} has no-effect proof without matching retry policy")
         action_ids.add(identifier)
         action_retry[identifier] = retry
-        if authority_predicate not in consumed_predicates or (proof and proof not in consumed_predicates):
-            raise ContractError(f"dangerous action {identifier} predicates must have named semantic consumers")
+        action_semantics[identifier] = {
+            "authority_predicate": authority_predicate,
+            "positive_no_effect_proof": proof,
+        }
+
+    legacy_roles = {
+        "effect_authority_gate": "AUTHORITY",
+        "retry_authority_gate": "RETRY",
+        "replay_validator": "REPLAY",
+    }
+    if any(item["action_id"] is None for item in consumers):
+        if len(action_ids) != 1:
+            raise ContractError("legacy semantic consumers are ambiguous for multiple dangerous actions")
+        only_action = next(iter(action_ids))
+        for item in consumers:
+            if item["action_id"] is not None:
+                continue
+            role = legacy_roles.get(str(item["id"]))
+            if role is None:
+                raise ContractError(
+                    f"legacy semantic consumer {item['id']} requires explicit action_id and role"
+                )
+            item["action_id"] = only_action
+            item["role"] = role
+
+    for item in consumers:
+        action = str(item["action_id"])
+        if action not in action_ids:
+            raise ContractError(f"semantic consumer {item['id']} references unknown action: {action}")
+        semantics = action_semantics[action]
+        role = str(item["role"])
+        expected = (
+            semantics["authority_predicate"]
+            if role == "AUTHORITY" else semantics["positive_no_effect_proof"]
+        )
+        if not expected or item["predicate_id"] != expected:
+            label = "authority" if role == "AUTHORITY" else "canonical no-effect"
+            raise ContractError(
+                f"semantic consumer {item['id']} must use action {action}'s {label} predicate"
+            )
+
+    for action in sorted(action_ids):
+        roles = {str(item["role"]) for item in consumers if item["action_id"] == action}
+        if "AUTHORITY" not in roles:
+            raise ContractError(f"dangerous action {action} is missing its authority consumer binding")
+        if action_retry[action] == "POSITIVE_NO_EFFECT_PROOF_ONLY":
+            missing = sorted({"RETRY", "REPLAY"} - roles)
+            if missing:
+                raise ContractError(
+                    f"dangerous action {action} is missing canonical no-effect consumer bindings: {missing}"
+                )
 
     covered: set[str] = set()
     for item in _objects(value.get("crash_recovery"), "crash_recovery"):

@@ -14,11 +14,15 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import execution, git_adapter
 from .grounding import (
     canonical_grounding_bytes,
+    decision_history_entry,
     derive_action_rights,
     grounding_claim_freshness,
     grounding_hash,
+    load_decision_resolution,
     load_grounding_report,
+    merge_decision_history,
     task_request_from_work_loop,
+    validate_contract_supersession,
     verify_work_loop_evidence,
     work_loop_binding,
 )
@@ -95,6 +99,69 @@ def _publish_work_loop_document(
     failpoint("after_work_loop_evidence_publish", configured_failures)
     if final.read_bytes() != data:
         raise KernelError("immutable Work Loop evidence publication selected different bytes")
+
+
+def _decision_history_for_refresh(
+    current_work_loop: Mapping[str, Any], supplied_grounding: Mapping[str, Any], *,
+    task_id: str, decision_resolution: Path | str | None,
+) -> tuple[list[dict[str, Any]] | None, list[tuple[dict[str, str], bytes]]]:
+    prior_requests = {
+        str(item["request_id"]): item
+        for item in (current_work_loop.get("grounding") or {}).get("decision_requests") or []
+    }
+    next_requests = {
+        str(item["request_id"])
+        for item in supplied_grounding.get("decision_requests") or []
+    }
+    removed = sorted(set(prior_requests) - next_requests)
+    if not removed:
+        if decision_resolution is not None:
+            raise KernelError("Decision resolution does not correspond to a removed open request")
+        history = list(current_work_loop.get("decision_history") or [])
+        return (history if "decision_history" in current_work_loop else None), []
+    if len(removed) != 1:
+        raise KernelError("one grounding refresh may resolve only one exact Decision Request")
+    if decision_resolution is None:
+        raise KernelError(
+            "same-Contract grounding refresh cannot clear an unresolved Decision Request"
+        )
+    normalized, resolution_digest, resolution_bytes = load_decision_resolution(
+        decision_resolution, prior_requests,
+    )
+    request_id = str(normalized["request_id"])
+    if request_id != removed[0]:
+        raise KernelError("Decision resolution is not linked to the request removed by grounding")
+    resolution_reference = _work_loop_evidence_reference(
+        task_id, "decision-resolution", resolution_digest,
+    )
+    entry = decision_history_entry(
+        prior_requests[request_id], current_work_loop["work_contract"],
+        resolution_kind="DIRECT_AUTHORITY_DECISION",
+        resolution_hash=resolution_digest,
+        resolution_evidence=resolution_reference,
+    )
+    history = merge_decision_history(
+        list(current_work_loop.get("decision_history") or []), [entry],
+    )
+    return history, [(resolution_reference, resolution_bytes)]
+
+
+def _validate_decision_resolution_retry(
+    current_work_loop: Mapping[str, Any], decision_resolution: Path | str,
+) -> None:
+    recorded = [
+        item for item in current_work_loop.get("decision_history") or []
+        if item.get("resolution_kind") == "DIRECT_AUTHORITY_DECISION"
+    ]
+    requests = {
+        str((item.get("request") or {}).get("request_id") or ""): item["request"]
+        for item in recorded
+    }
+    _normalized, digest, _canonical = load_decision_resolution(
+        decision_resolution, requests,
+    )
+    if not any(item.get("resolution_hash") == digest for item in recorded):
+        raise KernelError("Decision resolution retry does not match immutable Decision history")
 
 
 def _stored_grounding_report(root: Path, state: Mapping[str, Any]) -> dict[str, Any]:
@@ -1356,10 +1423,118 @@ class BuildOS:
         """Derive current Git/lifecycle truth without telemetry or projection writes."""
         return self.status(refresh_telemetry=False, persist_projection=False)
 
+    def _supersede_work_contract(
+        self, current: Snapshot, contract_value: Mapping[str, Any],
+        contract_digest: str, grounding_report: Path | str, *,
+        execution_spec: Path | str | Mapping[str, Any] | None,
+        configured_failures: str | None,
+    ) -> CommitResult:
+        """Atomically replace one authority-blocked Contract with its exact successor."""
+        prior_binding = current.state.get("work_loop") or {}
+        prior_contract = prior_binding.get("work_contract") or {}
+        open_requests = list((prior_binding.get("grounding") or {}).get("decision_requests") or [])
+        validate_contract_supersession(
+            prior_contract, open_requests, contract_value, contract_digest,
+        )
+        require_trusted_contract_transport(contract_digest)
+        if current.state.get("phase") != "ACTIVE" or current.state.get("product_commit") is not None:
+            raise KernelError("Work Contract supersession is allowed only before product commit")
+        execution.assert_no_unresolved_effects(current.state, "Work Contract supersession")
+        observed = git_adapter.snapshot(self.root)
+        base = current.state.get("base_git") or {}
+        if (
+            observed.get("head") != base.get("head")
+            or observed.get("tree") != base.get("tree")
+            or observed.get("product_dirty")
+        ):
+            raise KernelError("Work Contract supersession requires the unchanged clean task baseline")
+        supplied_grounding = load_grounding_report(
+            grounding_report, contract_value, contract_digest,
+            root=self.root, observed_repository=observed,
+        )
+        rights = derive_action_rights(supplied_grounding)
+        if rights["requested_action_status"] != "GRANTED":
+            raise KernelError("superseding Work Contract grounding still has unresolved action rights")
+        authorization = current.state.get("authorization") or {}
+        request = task_request_from_work_loop(
+            contract_value, supplied_grounding,
+            owner_authorization=str(authorization.get("status") or "NONE"),
+            authorization_reference=str(authorization.get("reference") or ""),
+            authorization_actor=str(authorization.get("actor") or "OWNER"),
+        )
+        validated = validate_task_request(request)
+        if task_id_exists(self.root, validated["task_id"]):
+            raise KernelError("superseding Work Contract task identity already exists in canonical history")
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=str(observed.get("head") or ""),
+        )
+        grounding_digest = grounding_hash(supplied_grounding)
+        contract_reference = _work_loop_evidence_reference(
+            validated["task_id"], "work-contract", contract_digest,
+        )
+        grounding_reference = _work_loop_evidence_reference(
+            validated["task_id"], "grounding", grounding_digest,
+        )
+        additions = [
+            decision_history_entry(
+                request_row, prior_contract,
+                resolution_kind="WORK_CONTRACT_SUPERSESSION",
+                resolution_hash=contract_digest,
+                resolution_evidence=contract_reference,
+            )
+            for request_row in open_requests
+        ]
+        history = merge_decision_history(
+            list(prior_binding.get("decision_history") or []), additions,
+        )
+        binding = work_loop_binding(
+            contract_value, contract_digest, supplied_grounding,
+            contract_evidence=contract_reference,
+            grounding_evidence=grounding_reference,
+            decision_history=history,
+        )
+        candidate = initial_state(
+            request, observed, execution=runtime, work_loop=binding,
+        )
+        _publish_work_loop_document(
+            self.root, contract_reference, canonical_contract_bytes(contract_value),
+            configured_failures=configured_failures,
+        )
+        _publish_work_loop_document(
+            self.root, grounding_reference, canonical_grounding_bytes(supplied_grounding),
+            configured_failures=configured_failures,
+        )
+        operation = operation_id(
+            "WORK_CONTRACT_SUPERSESSION", current.state["task_id"],
+            candidate["task_id"], prior_contract["hash"], contract_digest,
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=current.generation_hash,
+            candidate_state=candidate,
+            event={
+                "kind": "WORK_CONTRACT_SUPERSESSION",
+                "source_task_id": current.state["task_id"],
+                "source_generation": current.generation,
+                "source_generation_hash": current.generation_hash,
+                "prior_contract_hash": prior_contract["hash"],
+                "contract_hash": contract_digest,
+                "resolved_decision_request_ids": sorted(
+                    str(item["request_id"]) for item in open_requests
+                ),
+            },
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(self.root, observed),
+        )
+
     def advance(
         self, request: Mapping[str, Any] | None = None, *,
         work_contract: Path | str | None = None,
         grounding_report: Path | str | None = None,
+        decision_resolution: Path | str | None = None,
         execution_spec: Path | str | Mapping[str, Any] | None = None,
         run_assurance: bool = False,
         inspected_by: str | None = None,
@@ -1400,80 +1575,108 @@ class BuildOS:
             contract_value, contract_digest = load_contract(work_contract)
             expected = (((current.state.get("work_loop") or {}).get("work_contract") or {}).get("hash"))
             if contract_digest != expected:
-                raise KernelError("provided Work Contract is not the canonical active handoff")
-            observed = git_adapter.snapshot(self.root)
-            transition_observed = git_adapter.snapshot(
-                self.root,
-                base_sha=(current.state.get("base_git") or {}).get("head"),
-                product_sha=(current.state.get("product_commit") or {}).get("sha"),
-            )
-            supplied_grounding = load_grounding_report(
-                grounding_report, contract_value, contract_digest,
-                root=self.root, observed_repository=observed,
-            )
-            expected_grounding = (((current.state.get("work_loop") or {}).get("grounding") or {}).get("hash"))
-            if grounding_hash(supplied_grounding) != expected_grounding:
-                if current.state.get("phase") not in {"ACTIVE", "PRODUCT_COMMITTED"}:
-                    raise KernelError("grounding can refresh only before assurance is recorded")
-                rights = derive_action_rights(supplied_grounding)
-                refreshed_digest = grounding_hash(supplied_grounding)
-                grounding_reference = _work_loop_evidence_reference(
-                    current.state["task_id"], "grounding", refreshed_digest,
-                )
-                contract_reference = current.state["work_loop"]["work_contract"]["evidence"]
-                refreshed_binding = work_loop_binding(
-                    contract_value, contract_digest, supplied_grounding,
-                    contract_evidence=contract_reference,
-                    grounding_evidence=grounding_reference,
-                )
-                authorization = current.state.get("authorization") or {}
-                refreshed_request = task_request_from_work_loop(
-                    contract_value, supplied_grounding,
-                    owner_authorization=str(authorization.get("status") or "NONE"),
-                    authorization_reference=str(authorization.get("reference") or ""),
-                    authorization_actor=str(authorization.get("actor") or "OWNER"),
-                )
-                candidate, refresh_event = transition_grounding_refresh(
-                    current.state, refreshed_request, refreshed_binding,
-                    preaction_product_state=(
-                        transition_observed.get("head") == (current.state.get("base_git") or {}).get("head")
-                        and transition_observed.get("tree") == (current.state.get("base_git") or {}).get("tree")
-                        and not transition_observed.get("product_dirty")
-                    ),
-                )
-                _publish_work_loop_document(
-                    self.root, grounding_reference,
-                    canonical_grounding_bytes(supplied_grounding),
+                if decision_resolution is not None:
+                    raise KernelError("Contract supersession does not accept a separate Decision resolution")
+                superseded = self._supersede_work_contract(
+                    current, contract_value, contract_digest, grounding_report,
+                    execution_spec=execution_spec,
                     configured_failures=configured_failures,
-                )
-                refreshed = commit_candidate(
-                    self.root,
-                    expected_hash=current.generation_hash,
-                    candidate_state=candidate,
-                    event={
-                        **refresh_event,
-                        "prior_grounding_hash": expected_grounding,
-                        "grounding_hash": refreshed_digest,
-                        "repository_head": supplied_grounding["repository"]["head"],
-                        "repository_tree": supplied_grounding["repository"]["tree"],
-                    },
-                    operation_id=operation_id(
-                        "GROUNDING_REFRESH", candidate["task_id"], candidate["revision"],
-                        expected_grounding, refreshed_digest,
-                    ),
-                    configured_failures=configured_failures,
-                    projector=self.project,
-                    precommit_validator=lambda: _assert_git_unchanged(
-                        self.root, transition_observed,
-                        base_sha=(candidate.get("base_git") or {}).get("head"),
-                        product_sha=(candidate.get("product_commit") or {}).get("sha"),
-                    ),
                 )
                 transitions.append({
-                    "kind": "GROUNDING_REFRESH",
-                    "generation": refreshed.snapshot.generation,
-                    "generation_hash": refreshed.snapshot.generation_hash,
+                    "kind": "WORK_CONTRACT_SUPERSESSION",
+                    "generation": superseded.snapshot.generation,
+                    "generation_hash": superseded.snapshot.generation_hash,
                 })
+            else:
+                observed = git_adapter.snapshot(self.root)
+                transition_observed = git_adapter.snapshot(
+                    self.root,
+                    base_sha=(current.state.get("base_git") or {}).get("head"),
+                    product_sha=(current.state.get("product_commit") or {}).get("sha"),
+                )
+                supplied_grounding = load_grounding_report(
+                    grounding_report, contract_value, contract_digest,
+                    root=self.root, observed_repository=observed,
+                )
+                expected_grounding = (((current.state.get("work_loop") or {}).get("grounding") or {}).get("hash"))
+                if grounding_hash(supplied_grounding) != expected_grounding:
+                    if current.state.get("phase") not in {"ACTIVE", "PRODUCT_COMMITTED"}:
+                        raise KernelError("grounding can refresh only before assurance is recorded")
+                    refreshed_digest = grounding_hash(supplied_grounding)
+                    grounding_reference = _work_loop_evidence_reference(
+                        current.state["task_id"], "grounding", refreshed_digest,
+                    )
+                    contract_reference = current.state["work_loop"]["work_contract"]["evidence"]
+                    decision_history, resolution_publications = _decision_history_for_refresh(
+                        current.state["work_loop"], supplied_grounding,
+                        task_id=current.state["task_id"],
+                        decision_resolution=decision_resolution,
+                    )
+                    refreshed_binding = work_loop_binding(
+                        contract_value, contract_digest, supplied_grounding,
+                        contract_evidence=contract_reference,
+                        grounding_evidence=grounding_reference,
+                        decision_history=decision_history,
+                    )
+                    authorization = current.state.get("authorization") or {}
+                    refreshed_request = task_request_from_work_loop(
+                        contract_value, supplied_grounding,
+                        owner_authorization=str(authorization.get("status") or "NONE"),
+                        authorization_reference=str(authorization.get("reference") or ""),
+                        authorization_actor=str(authorization.get("actor") or "OWNER"),
+                    )
+                    candidate, refresh_event = transition_grounding_refresh(
+                        current.state, refreshed_request, refreshed_binding,
+                        preaction_product_state=(
+                            transition_observed.get("head") == (current.state.get("base_git") or {}).get("head")
+                            and transition_observed.get("tree") == (current.state.get("base_git") or {}).get("tree")
+                            and not transition_observed.get("product_dirty")
+                        ),
+                    )
+                    for resolution_reference, resolution_bytes in resolution_publications:
+                        _publish_work_loop_document(
+                            self.root, resolution_reference, resolution_bytes,
+                            configured_failures=configured_failures,
+                        )
+                    _publish_work_loop_document(
+                        self.root, grounding_reference,
+                        canonical_grounding_bytes(supplied_grounding),
+                        configured_failures=configured_failures,
+                    )
+                    refreshed = commit_candidate(
+                        self.root,
+                        expected_hash=current.generation_hash,
+                        candidate_state=candidate,
+                        event={
+                            **refresh_event,
+                            "prior_grounding_hash": expected_grounding,
+                            "grounding_hash": refreshed_digest,
+                            "repository_head": supplied_grounding["repository"]["head"],
+                            "repository_tree": supplied_grounding["repository"]["tree"],
+                        },
+                        operation_id=operation_id(
+                            "GROUNDING_REFRESH", candidate["task_id"], candidate["revision"],
+                            expected_grounding, refreshed_digest,
+                        ),
+                        configured_failures=configured_failures,
+                        projector=self.project,
+                        precommit_validator=lambda: _assert_git_unchanged(
+                            self.root, transition_observed,
+                            base_sha=(candidate.get("base_git") or {}).get("head"),
+                            product_sha=(candidate.get("product_commit") or {}).get("sha"),
+                        ),
+                    )
+                    transitions.append({
+                        "kind": "GROUNDING_REFRESH",
+                        "generation": refreshed.snapshot.generation,
+                        "generation_hash": refreshed.snapshot.generation_hash,
+                    })
+                elif decision_resolution is not None:
+                    _validate_decision_resolution_retry(
+                        current.state["work_loop"], decision_resolution,
+                    )
+        elif decision_resolution is not None:
+            raise KernelError("Decision resolution requires Work Contract and grounding evidence")
 
         for _ in range(4):
             snapshot = self._snapshot()

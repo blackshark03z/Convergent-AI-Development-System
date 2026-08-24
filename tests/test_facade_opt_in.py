@@ -28,6 +28,30 @@ class FacadeOptInTests(unittest.TestCase):
                 self.assertEqual(FACADE._epoch_preflight(["--root", str(root), "validate"]), 0)
             run.assert_not_called()
 
+    def test_command_classification_consumes_root_values_before_selecting_subcommand(self) -> None:
+        for name in ("work", "contract", "inspect", "recover"):
+            with self.subTest(relative=name):
+                argv = ["--root", name, "inspect"]
+                self.assertEqual(FACADE._requested_command(argv), "inspect")
+                with patch.object(FACADE.subprocess, "run") as run:
+                    self.assertEqual(FACADE._epoch_preflight(argv), 0)
+                    self.assertEqual(FACADE._adoption_preflight(argv), 0)
+                    self.assertEqual(ADMIN_FACADE._admin_preflight(argv), 0)
+                run.assert_not_called()
+
+        with tempfile.TemporaryDirectory() as raw:
+            for name in ("work", "contract", "inspect", "recover"):
+                absolute = str(Path(raw) / name)
+                with self.subTest(absolute=absolute):
+                    self.assertEqual(
+                        FACADE._requested_command(["--root", absolute, "inspect"]),
+                        "inspect",
+                    )
+
+    def test_option_values_after_the_command_cannot_reclassify_the_route(self) -> None:
+        argv = ["--root", "project", "work", "--work-contract", "recover", "--grounding", "inspect"]
+        self.assertEqual(FACADE._requested_command(argv), "work")
+
     def test_enrolled_project_runs_context_epoch_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

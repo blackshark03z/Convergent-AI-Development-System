@@ -38,6 +38,12 @@ an external effect or adopts dirty/uncommitted product work. See
 [docs/VNEXT_MIGRATION.md](docs/VNEXT_MIGRATION.md), and
 [docs/VNEXT_PILOT_REPORT.md](docs/VNEXT_PILOT_REPORT.md).
 
+An open canonical Decision Request survives every same-Contract grounding
+refresh. The named authority may supply one trusted exact-request
+`--decision-resolution`, or issue the next trusted Contract revision linked to
+the active Contract and request hash. Both paths preserve immutable Decision
+history; neither grants provider dispatch.
+
 The detailed v1.24 commands remain compatibility and exceptional-operation
 surfaces:
 

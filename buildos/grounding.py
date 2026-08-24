@@ -9,8 +9,10 @@ Tech Lead claims.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from fnmatch import fnmatchcase
+import os
 from pathlib import Path
 import re
 from typing import Any, Mapping
@@ -22,7 +24,11 @@ from .work_contract import (
 
 SCHEMA = "buildos.grounding-report.v1"
 PROJECTION_SCHEMA = "buildos.grounding-projection.v1"
+DECISION_RESOLUTION_SCHEMA = "buildos.decision-resolution.v1"
+DECISION_HISTORY_SCHEMA = "buildos.decision-history.v1"
+TRUSTED_DECISION_RESOLUTION_SHA256_ENV = "BUILDOS_TRUSTED_DECISION_RESOLUTION_SHA256"
 MAX_REPORT_BYTES = 256 * 1024
+MAX_DECISION_RESOLUTION_BYTES = 64 * 1024
 MAX_ITEMS = 256
 GIT_OBJECT_RE = re.compile(r"^[0-9a-f]{40,64}$")
 OUTCOMES = {"VERIFIED", "CONTRADICTED", "UNKNOWN"}
@@ -122,6 +128,173 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def decision_request_hash(request: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_canonical_bytes(dict(request))).hexdigest()
+
+
+def decision_request_source_reference(request: Mapping[str, Any]) -> str:
+    return (
+        f"buildos-decision-request:{request['request_id']}:"
+        f"sha256:{decision_request_hash(request)}"
+    )
+
+
+def canonical_decision_resolution_bytes(value: Mapping[str, Any]) -> bytes:
+    return _canonical_bytes(dict(value))
+
+
+def validate_decision_resolution(
+    value: Any, request: Mapping[str, Any], *, require_transport: bool = False,
+) -> dict[str, Any]:
+    """Validate one authority decision against the exact immutable open request."""
+    row = _object(
+        value, label="Decision resolution",
+        keys={
+            "schema", "request_id", "request_sha256", "contract_hash",
+            "claim_id", "decision_type", "decision", "authority",
+        },
+    )
+    if row["schema"] != DECISION_RESOLUTION_SCHEMA:
+        raise GroundingError(f"Decision resolution schema must be {DECISION_RESOLUTION_SCHEMA}")
+    expected_request_hash = decision_request_hash(request)
+    exact = {
+        "request_id": request.get("request_id"),
+        "request_sha256": expected_request_hash,
+        "contract_hash": request.get("contract_hash"),
+        "claim_id": request.get("claim_id"),
+        "decision_type": request.get("decision_type"),
+    }
+    for key, expected in exact.items():
+        if row[key] != expected:
+            raise GroundingError(f"Decision resolution {key} does not match the exact open request")
+    decision = _enum(
+        row["decision"], label="Decision resolution.decision",
+        allowed={"CONFIRM_CANONICAL", "PROVIDE_DECISION"},
+    )
+    if decision not in set(request.get("options") or []):
+        raise GroundingError("Decision resolution is not an allowed option for the open request")
+    authority = _object(
+        row["authority"], label="Decision resolution.authority",
+        keys={"role", "identity", "authority_reference", "decided_at"},
+    )
+    role = _enum(authority["role"], label="Decision resolution.authority.role", allowed={"OWNER", "TECH_LEAD"})
+    if role != request.get("requested_from"):
+        raise GroundingError("Decision resolution was not issued by the authority named by the request")
+    normalized = {
+        "schema": DECISION_RESOLUTION_SCHEMA,
+        **exact,
+        "decision": decision,
+        "authority": {
+            "role": role,
+            "identity": _text(authority["identity"], label="Decision resolution.authority.identity", maximum=256),
+            "authority_reference": _text(
+                authority["authority_reference"],
+                label="Decision resolution.authority.authority_reference", maximum=2_048,
+            ),
+            "decided_at": _text(authority["decided_at"], label="Decision resolution.authority.decided_at", maximum=128),
+        },
+    }
+    if require_transport:
+        digest = hashlib.sha256(canonical_decision_resolution_bytes(normalized)).hexdigest()
+        supplied = str(os.environ.get(TRUSTED_DECISION_RESOLUTION_SHA256_ENV) or "").strip().lower()
+        if not SHA_RE.fullmatch(supplied):
+            raise GroundingError(
+                "Decision resolution requires trusted launcher binding in "
+                f"{TRUSTED_DECISION_RESOLUTION_SHA256_ENV}"
+            )
+        if not hmac.compare_digest(supplied, digest):
+            raise GroundingError("trusted launcher Decision resolution hash does not match validated evidence")
+    return normalized
+
+
+def load_decision_resolution(
+    path: Path | str, requests: Mapping[str, Mapping[str, Any]],
+) -> tuple[dict[str, Any], str, bytes]:
+    source = Path(path)
+    try:
+        payload = source.read_bytes()
+    except OSError as exc:
+        raise GroundingError(f"Decision resolution is unreadable: {source}") from exc
+    if len(payload) > MAX_DECISION_RESOLUTION_BYTES:
+        raise GroundingError(
+            f"Decision resolution exceeds {MAX_DECISION_RESOLUTION_BYTES} bytes"
+        )
+    try:
+        raw = json.loads(payload.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GroundingError("Decision resolution is not valid JSON") from exc
+    request_id = str(raw.get("request_id") or "") if isinstance(raw, Mapping) else ""
+    request = requests.get(request_id)
+    if request is None:
+        raise GroundingError("Decision resolution does not target an open canonical request")
+    normalized = validate_decision_resolution(raw, request, require_transport=True)
+    canonical = canonical_decision_resolution_bytes(normalized)
+    digest = hashlib.sha256(canonical).hexdigest()
+    return normalized, digest, canonical
+
+
+def validate_contract_supersession(
+    source_contract: Mapping[str, Any], requests: list[Mapping[str, Any]],
+    contract: Mapping[str, Any], contract_hash: str,
+) -> None:
+    """Require an exact authority-linked next Contract revision for open requests."""
+    if not requests:
+        raise GroundingError("Work Contract supersession requires an open Decision Request")
+    if contract.get("contract_id") != source_contract.get("contract_id"):
+        raise GroundingError("superseding Work Contract must retain contract_id")
+    if int(contract.get("revision", 0)) != int(source_contract.get("revision", 0)) + 1:
+        raise GroundingError("superseding Work Contract must be the next Contract revision")
+    if (contract.get("metadata") or {}).get("parent_contract_hash") != source_contract.get("hash"):
+        raise GroundingError("superseding Work Contract must bind the active parent_contract_hash")
+    references = set((contract.get("metadata") or {}).get("source_context_refs") or [])
+    issuer_role = (contract.get("issuer") or {}).get("role")
+    for request in requests:
+        if issuer_role != request.get("requested_from"):
+            raise GroundingError("superseding Work Contract lacks the authority named by an open request")
+        if decision_request_source_reference(request) not in references:
+            raise GroundingError("superseding Work Contract does not link the exact open Decision Request")
+    if not SHA_RE.fullmatch(str(contract_hash)):
+        raise GroundingError("superseding Work Contract hash is invalid")
+
+
+def decision_history_entry(
+    request: Mapping[str, Any], source_contract: Mapping[str, Any], *,
+    resolution_kind: str, resolution_hash: str,
+    resolution_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema": DECISION_HISTORY_SCHEMA,
+        "request": dict(request),
+        "request_sha256": decision_request_hash(request),
+        "source_contract": {
+            "contract_id": source_contract["contract_id"],
+            "revision": source_contract["revision"],
+            "hash": source_contract["hash"],
+        },
+        "resolution_kind": resolution_kind,
+        "resolution_hash": resolution_hash,
+        "resolution_evidence": dict(resolution_evidence),
+    }
+
+
+def merge_decision_history(
+    prior: list[Mapping[str, Any]], additions: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for raw in [*prior, *additions]:
+        item = dict(raw)
+        key = (
+            str(item.get("request_sha256") or ""),
+            str(item.get("resolution_kind") or ""),
+            str(item.get("resolution_hash") or ""),
+        )
+        existing = merged.get(key)
+        if existing is not None and existing != item:
+            raise GroundingError("Decision history identity is bound to conflicting evidence")
+        merged[key] = item
+    return [merged[key] for key in sorted(merged)]
 
 
 def _safe_repo_locator(locator: str) -> Path:
@@ -672,8 +845,9 @@ def grounding_claim_freshness(
 def work_loop_binding(
     contract: Mapping[str, Any], contract_hash: str, report: Mapping[str, Any], *,
     contract_evidence: Mapping[str, Any], grounding_evidence: Mapping[str, Any],
+    decision_history: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    return {
+    binding = {
         "schema": "buildos.work-loop.v1",
         "work_contract": {
             "contract_id": contract["contract_id"],
@@ -697,6 +871,9 @@ def work_loop_binding(
         },
         "action_rights": derive_action_rights(report),
     }
+    if decision_history is not None:
+        binding["decision_history"] = [dict(item) for item in decision_history]
+    return binding
 
 
 def replay_canonical_grounding(
@@ -759,12 +936,53 @@ def replay_canonical_grounding(
     return replayed
 
 
+def _validated_decision_request(
+    value: Any, *, label: str, expected_contract_hash: str | None = None,
+    scope: set[str] | None = None,
+) -> dict[str, Any]:
+    request = _object(
+        value, label=label,
+        keys={
+            "schema", "request_id", "status", "contract_hash", "claim_id",
+            "decision_type", "requested_from", "question", "options",
+            "evidence_refs", "trigger_sources", "blocking_scope",
+        },
+    )
+    if request["schema"] != "buildos.decision-request.v1" or request["status"] != "OPEN":
+        raise GroundingError(f"{label} state is invalid")
+    request_id = _identifier(request["request_id"], label=f"{label} id")
+    contract_hash = _text(request["contract_hash"], label=f"{label} contract_hash", maximum=64)
+    if not isinstance(contract_hash, str) or not SHA_RE.fullmatch(contract_hash):
+        raise GroundingError(f"{label} contract hash is invalid")
+    if expected_contract_hash is not None and contract_hash != expected_contract_hash:
+        raise GroundingError(f"{label} is bound to another Contract")
+    claim_id = _identifier(request["claim_id"], label=f"{label} claim_id")
+    if scope is not None and claim_id not in scope:
+        raise GroundingError(f"{label} claim is outside grounding scope")
+    if request["decision_type"] not in {
+        "PRODUCT_INTENT", "CANONICAL_ARCHITECTURE", "BUSINESS_CONSTRAINT",
+        "CANONICAL_PREMISE", "OPEN_QUESTION",
+    }:
+        raise GroundingError(f"{label} type is invalid")
+    if request["requested_from"] not in {"OWNER", "TECH_LEAD"}:
+        raise GroundingError(f"{label} has invalid authority destination")
+    _text(request["question"], label=f"{label} question")
+    _strings(request["options"], label=f"{label} options", maximum=8)
+    _ids(request["evidence_refs"], label=f"{label} evidence_refs", maximum=64)
+    _strings(request["trigger_sources"], label=f"{label} trigger_sources", maximum=64)
+    if request["blocking_scope"] != "ACTIONS_DEPENDENT_ON_CLAIM":
+        raise GroundingError(f"{label} has invalid blocking scope")
+    return dict(request) | {"request_id": request_id, "claim_id": claim_id}
+
+
 def validate_work_loop_binding(value: Any) -> None:
     """Validate the compact canonical binding stored in each generation."""
-    root = _object(
-        value, label="work_loop",
-        keys={"schema", "work_contract", "grounding", "action_rights"},
-    )
+    if not isinstance(value, Mapping):
+        raise GroundingError("work_loop must be an object")
+    base_keys = {"schema", "work_contract", "grounding", "action_rights"}
+    if frozenset(value) not in {frozenset(base_keys), frozenset(base_keys | {"decision_history"})}:
+        raise GroundingError("work_loop fields are invalid")
+    root = value
     if root["schema"] != "buildos.work-loop.v1":
         raise GroundingError("work_loop schema is invalid")
     contract = _object(
@@ -830,39 +1048,70 @@ def validate_work_loop_binding(value: Any) -> None:
     decision_claim_ids: list[str] = []
     seen_requests: set[str] = set()
     for index, raw_request in enumerate(grounding["decision_requests"]):
-        request = _object(
+        request = _validated_decision_request(
             raw_request, label=f"work_loop decision_requests[{index}]",
-            keys={
-                "schema", "request_id", "status", "contract_hash", "claim_id",
-                "decision_type", "requested_from", "question", "options",
-                "evidence_refs", "trigger_sources", "blocking_scope",
-            },
+            expected_contract_hash=contract_hash, scope=set(scope),
         )
-        if request["schema"] != "buildos.decision-request.v1" or request["status"] != "OPEN":
-            raise GroundingError("work_loop decision request state is invalid")
-        request_id = _identifier(request["request_id"], label="work_loop decision request id")
+        request_id = request["request_id"]
         if request_id in seen_requests:
             raise GroundingError("work_loop decision request ids must be unique")
         seen_requests.add(request_id)
-        if request["contract_hash"] != contract_hash:
-            raise GroundingError("work_loop decision request is bound to another Contract")
-        claim_id = _identifier(request["claim_id"], label="work_loop decision request claim_id")
-        if claim_id not in scope:
-            raise GroundingError("work_loop decision request claim is outside grounding scope")
-        decision_claim_ids.append(claim_id)
-        if request["decision_type"] not in {
-            "PRODUCT_INTENT", "CANONICAL_ARCHITECTURE", "BUSINESS_CONSTRAINT",
-            "CANONICAL_PREMISE", "OPEN_QUESTION",
-        }:
-            raise GroundingError("work_loop decision request type is invalid")
-        if request["requested_from"] not in {"OWNER", "TECH_LEAD"}:
-            raise GroundingError("work_loop decision request has invalid authority destination")
-        _text(request["question"], label="work_loop decision request question")
-        _strings(request["options"], label="work_loop decision request options", maximum=8)
-        _ids(request["evidence_refs"], label="work_loop decision request evidence_refs", maximum=64)
-        _strings(request["trigger_sources"], label="work_loop decision request trigger_sources", maximum=64)
-        if request["blocking_scope"] != "ACTIONS_DEPENDENT_ON_CLAIM":
-            raise GroundingError("work_loop decision request has invalid blocking scope")
+        decision_claim_ids.append(request["claim_id"])
+    history = root.get("decision_history", [])
+    if not isinstance(history, list):
+        raise GroundingError("work_loop decision_history must be an array")
+    seen_history: set[tuple[str, str, str]] = set()
+    for index, raw_entry in enumerate(history):
+        entry = _object(
+            raw_entry, label=f"work_loop decision_history[{index}]",
+            keys={
+                "schema", "request", "request_sha256", "source_contract",
+                "resolution_kind", "resolution_hash", "resolution_evidence",
+            },
+        )
+        if entry["schema"] != DECISION_HISTORY_SCHEMA:
+            raise GroundingError("work_loop Decision history schema is invalid")
+        historical_request = _validated_decision_request(
+            entry["request"], label=f"work_loop decision_history[{index}].request",
+        )
+        request_digest = _text(
+            entry["request_sha256"], label=f"work_loop decision_history[{index}].request_sha256", maximum=64,
+        )
+        if request_digest != decision_request_hash(historical_request):
+            raise GroundingError("work_loop Decision history request hash does not match its request")
+        source_contract = _object(
+            entry["source_contract"], label=f"work_loop decision_history[{index}].source_contract",
+            keys={"contract_id", "revision", "hash"},
+        )
+        _identifier(source_contract["contract_id"], label="work_loop Decision history contract_id")
+        if not isinstance(source_contract["revision"], int) or isinstance(source_contract["revision"], bool) or source_contract["revision"] < 1:
+            raise GroundingError("work_loop Decision history Contract revision is invalid")
+        source_hash = _text(source_contract["hash"], label="work_loop Decision history Contract hash", maximum=64)
+        if not isinstance(source_hash, str) or not SHA_RE.fullmatch(source_hash):
+            raise GroundingError("work_loop Decision history Contract hash is invalid")
+        if historical_request["contract_hash"] != source_hash:
+            raise GroundingError("work_loop Decision history request is bound to another source Contract")
+        resolution_kind = _enum(
+            entry["resolution_kind"], label="work_loop Decision history resolution_kind",
+            allowed={"DIRECT_AUTHORITY_DECISION", "WORK_CONTRACT_SUPERSESSION"},
+        )
+        resolution_hash = _text(entry["resolution_hash"], label="work_loop Decision history resolution_hash", maximum=64)
+        if not isinstance(resolution_hash, str) or not SHA_RE.fullmatch(resolution_hash):
+            raise GroundingError("work_loop Decision history resolution hash is invalid")
+        reference = _object(
+            entry["resolution_evidence"], label="work_loop Decision history resolution evidence",
+            keys={"path", "sha256"},
+        )
+        evidence_path = _text(reference["path"], label="work_loop Decision history evidence.path", maximum=2_048)
+        evidence_hash = _text(reference["sha256"], label="work_loop Decision history evidence.sha256", maximum=64)
+        if not isinstance(evidence_path, str) or not evidence_path.replace("\\", "/").startswith(".buildos/evidence/"):
+            raise GroundingError("work_loop Decision history evidence must use the reserved evidence tree")
+        if evidence_hash != resolution_hash:
+            raise GroundingError("work_loop Decision history evidence hash does not match its resolution")
+        identity = (str(request_digest), resolution_kind, resolution_hash)
+        if identity in seen_history:
+            raise GroundingError("work_loop Decision history entries must be unique")
+        seen_history.add(identity)
     if not isinstance(grounding["contract_target_drift"], bool):
         raise GroundingError("work_loop contract_target_drift must be boolean")
     rights = _object(
@@ -928,13 +1177,84 @@ def verify_work_loop_evidence(root: Path | str, binding: Mapping[str, Any]) -> N
     report = replay_canonical_grounding(contract, contract_hash, raw_grounding, root=root)
     if canonical_grounding_bytes(report) != payloads["grounding"]:
         raise GroundingError("work_loop grounding evidence is not canonical replay bytes")
+    for entry in binding.get("decision_history") or []:
+        reference = entry["resolution_evidence"]
+        target = (root / str(reference["path"])).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError as exc:
+            raise GroundingError("work_loop Decision history evidence escapes repository root") from exc
+        if not target.is_file() or _sha256_file(target) != reference["sha256"]:
+            raise GroundingError("work_loop Decision history evidence is missing or changed")
+        try:
+            raw_resolution = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise GroundingError("work_loop Decision history evidence is invalid JSON") from exc
+        if entry["resolution_kind"] == "DIRECT_AUTHORITY_DECISION":
+            resolution = validate_decision_resolution(raw_resolution, entry["request"])
+            if canonical_decision_resolution_bytes(resolution) != target.read_bytes():
+                raise GroundingError("work_loop Decision resolution evidence is not canonical bytes")
+        else:
+            superseding_contract = validate_contract(raw_resolution)
+            if canonical_contract_bytes(superseding_contract) != target.read_bytes():
+                raise GroundingError("work_loop superseding Contract evidence is not canonical bytes")
+            validate_contract_supersession(
+                entry["source_contract"], [entry["request"]],
+                superseding_contract, entry["resolution_hash"],
+            )
     replayed_binding = work_loop_binding(
         contract, contract_hash, report,
         contract_evidence=binding["work_contract"]["evidence"],
         grounding_evidence=binding["grounding"]["evidence"],
+        decision_history=(
+            list(binding["decision_history"]) if "decision_history" in binding else None
+        ),
     )
     if replayed_binding != dict(binding):
         raise GroundingError("canonical Work Loop binding does not match immutable evidence replay")
+
+
+def assert_decision_authority_progression(
+    previous: Mapping[str, Any], current: Mapping[str, Any],
+) -> None:
+    """Prevent a same-Contract grounding refresh from erasing authority debt."""
+    prior_history = list(previous.get("decision_history") or [])
+    current_history = list(current.get("decision_history") or [])
+    current_identities = {
+        (
+            item.get("request_sha256"), item.get("resolution_kind"),
+            item.get("resolution_hash"),
+        )
+        for item in current_history
+    }
+    for item in prior_history:
+        identity = (
+            item.get("request_sha256"), item.get("resolution_kind"),
+            item.get("resolution_hash"),
+        )
+        if identity not in current_identities:
+            raise GroundingError("grounding refresh cannot discard immutable Decision history")
+    prior_open = {
+        str(item["request_id"]): item
+        for item in (previous.get("grounding") or {}).get("decision_requests") or []
+    }
+    current_open = {
+        str(item["request_id"])
+        for item in (current.get("grounding") or {}).get("decision_requests") or []
+    }
+    resolved = {
+        str((item.get("request") or {}).get("request_id")): item
+        for item in current_history
+        if item.get("resolution_kind") == "DIRECT_AUTHORITY_DECISION"
+    }
+    for request_id, request in prior_open.items():
+        if request_id in current_open:
+            continue
+        entry = resolved.get(request_id)
+        if entry is None or entry.get("request_sha256") != decision_request_hash(request):
+            raise GroundingError(
+                "same-Contract grounding refresh cannot clear an unresolved Decision Request"
+            )
 
 
 def derive_action_rights(report: Mapping[str, Any]) -> dict[str, Any]:

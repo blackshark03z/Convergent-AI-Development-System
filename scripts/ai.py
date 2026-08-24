@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Worker facade with an opt-in context-epoch adoption preflight."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,13 @@ MUTATING_COMMANDS = {
     *EXECUTION_AUTHORITY_MUTATORS,
     "work", "continue-task",
 }
+KNOWN_COMMANDS = {
+    "contract", "work", "admit", "bootstrap", "inspect", "status", "next",
+    "record-commit", "validate", "rollover", "close", "recover",
+    "block-for-source-fix", "continue-task", "report-blocker", "replan",
+    "effect", "review", "assurance-plan", "adopt-existing-change",
+    "new-revision", "abort", "telemetry-ingest",
+}
 
 
 def _requested_root(argv: list[str]) -> Path:
@@ -37,13 +45,12 @@ def _requested_root(argv: list[str]) -> Path:
 
 
 def _requested_command(argv: list[str]) -> str | None:
-    known = {
-        "contract", "work", "admit", "bootstrap", "inspect", "status", "next", "record-commit", "validate",
-        "rollover", "close", "recover", "block-for-source-fix", "continue-task",
-        "report-blocker", "replan", "effect", "review", "assurance-plan",
-        "adopt-existing-change", "new-revision", "abort", "telemetry-ingest",
-    }
-    return next((value for value in argv if value in known), None)
+    """Classify the actual subcommand while consuming global option values."""
+    probe = argparse.ArgumentParser(add_help=False)
+    probe.add_argument("--root")
+    probe.add_argument("command", nargs="?")
+    parsed, _unknown = probe.parse_known_args(argv)
+    return parsed.command if parsed.command in KNOWN_COMMANDS else None
 
 
 def _context_epoch_preflight_enabled(root: Path) -> bool:
