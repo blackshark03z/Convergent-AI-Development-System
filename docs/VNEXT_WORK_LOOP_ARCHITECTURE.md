@@ -62,6 +62,9 @@ The Work Contract is not a compiled implementation plan. The grounding report
 is not a second lifecycle state. Canonical generations store compact hashes,
 status and immutable evidence references; the source artifacts live in the
 append-only evidence tree and are rehashed before lifecycle operations.
+Initial Contract admission also requires an exact hash supplied by the trusted
+Tech Lead launcher before Worker execution. Issuer strings inside the Contract
+never authenticate themselves.
 
 ## 5. Why it wins
 
@@ -83,6 +86,7 @@ remain explicit stops.
 ## 7. What lives in Build OS
 
 - Strict contract/grounding schemas and semantic validation.
+- Exact trusted-launcher binding for initial Contract canonicalization.
 - Hashing, freshness, evidence integrity and exact Git binding.
 - Authority separation and deterministic Decision Request typing/coalescing.
 - Progressive action rights and normal-loop lifecycle compilation.
@@ -96,7 +100,8 @@ or models, or synthesize a universal implementation plan.
 ## 8. Worker responsibility
 
 - Independently inspect the real repository and current dirty/committed state.
-- Select the smallest claim set needed for the next action.
+- Select the smallest claim set for read-only investigation; mutation must cover
+  the Tech Lead-declared action basis, including every repo-verification claim.
 - Verify or contradict repo-sensitive premises with locally checkable evidence.
 - Adapt locally when repo truth changes implementation detail.
 - Implement, test, diagnose and challenge the handoff when evidence conflicts.
@@ -174,3 +179,10 @@ the full deterministic suite and independent release review.
   trust for legacy low-risk tasks is unchanged from v1.24.
 - Merge/deploy/runtime activation still needs the existing authorized
   external-effect path; close only reports readiness for the declared mode.
+- The default launcher hash pin assumes a cooperative same-user Worker. A
+  hostile Worker deployment requires signed admission receipts and an external
+  public-key or separate-identity trust root; Build OS does not pretend an
+  environment variable is a hostile-process security boundary.
+- R3 authorization strings retain the v1.24 trusted-launcher/procedural trust
+  model. A future signed admission receipt should bind the Contract hash,
+  resolved repository, R3 grant/reference/actor, nonce and expiry together.

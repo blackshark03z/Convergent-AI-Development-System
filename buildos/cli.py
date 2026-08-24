@@ -1,4 +1,4 @@
-"""Command-line interface for the thin v1.24 candidate facade."""
+"""Command-line interface for the v1.25 evidence-carrying Work Loop."""
 from __future__ import annotations
 
 import argparse

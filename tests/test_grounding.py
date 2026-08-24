@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -48,6 +49,18 @@ def repository(root: Path) -> dict:
 
 def report(root: Path, observed: dict, contract_hash: str, *, claim_id: str = "repo.current_cli", outcome: str = "VERIFIED") -> dict:
     digest = hashlib.sha256((root / "scripts" / "ai.py").read_bytes()).hexdigest()
+    scope = [claim_id]
+    results = [{
+        "claim_id": claim_id, "outcome": outcome,
+        "summary": "Repository inspection result.", "evidence_refs": ["evidence.cli"],
+    }]
+    if claim_id != "repo.current_cli":
+        scope.append("repo.current_cli")
+        results.append({
+            "claim_id": "repo.current_cli", "outcome": "VERIFIED",
+            "summary": "The required repository action basis was verified.",
+            "evidence_refs": ["evidence.cli"],
+        })
     return {
         "schema": "buildos.grounding-report.v1",
         "contract_hash": contract_hash,
@@ -56,7 +69,7 @@ def report(root: Path, observed: dict, contract_hash: str, *, claim_id: str = "r
             "root": str(root.resolve()), "head": observed["head"], "tree": observed["tree"],
             "product_state_digest": observed["product_state_digest"],
         },
-        "scope_claim_ids": [claim_id],
+        "scope_claim_ids": scope,
         "execution_request": {
             "requested_action": "LOCAL_MUTATION", "product_change_mode": "PRODUCT_DELTA",
             "risk": "AUTO", "allowed_paths": ["scripts/**"],
@@ -66,10 +79,7 @@ def report(root: Path, observed: dict, contract_hash: str, *, claim_id: str = "r
             "id": "evidence.cli", "kind": "REPO_FILE", "locator": "scripts/ai.py",
             "digest": digest, "observed_at": "2026-08-24T00:00:00Z",
         }],
-        "results": [{
-            "claim_id": claim_id, "outcome": outcome,
-            "summary": "Repository inspection result.", "evidence_refs": ["evidence.cli"],
-        }],
+        "results": results,
         "discoveries": [],
     }
 
@@ -78,6 +88,7 @@ class GroundingTests(unittest.TestCase):
     def _contract(self, root: Path) -> tuple[dict, str]:
         raw = contract()
         raw["target"]["repository"] = str(root.resolve())
+        raw["target"]["ref"] = git_adapter.snapshot(root)["branch"]
         normalized = validate_contract(raw)
         encoded = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return normalized, hashlib.sha256(encoded).hexdigest()
@@ -109,6 +120,34 @@ class GroundingTests(unittest.TestCase):
             self.assertEqual(projection["local_adaptation_claim_ids"], ["repo.current_cli"])
             self.assertEqual(projection["decision_requests"], [])
 
+    def test_advisory_decision_kind_cannot_acquire_escalation_authority(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            base = contract()
+            base["target"]["repository"] = str(root.resolve())
+            base["target"]["ref"] = observed["branch"]
+            base["claims"].append({
+                "id": "advice.possible_design", "kind": "DECISION",
+                "statement": "An advisory model suggested a possible design.",
+                "authority": "ADVISORY_MODEL", "binding": "ADVISORY",
+                "status": "SUPPORTED", "source_refs": [], "repo_binding": None,
+                "observed_at": None, "invalidators": [], "verification_owner": "WORKER",
+            })
+            work_contract = validate_contract(base)
+            digest = hashlib.sha256(json.dumps(
+                work_contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            value = report(
+                root, observed, digest,
+                claim_id="advice.possible_design", outcome="CONTRADICTED",
+            )
+            projection = grounding_projection(validate_grounding_report(
+                work_contract, digest, value, root=root, observed_repository=observed,
+            ))
+            self.assertEqual(projection["decision_requests"], [])
+            self.assertIn("advice.possible_design", projection["local_adaptation_claim_ids"])
+
     def test_canonical_conflict_emits_deterministic_typed_decision_request(self):
         with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
             root = Path(raw) / "repo"
@@ -139,6 +178,23 @@ class GroundingTests(unittest.TestCase):
             with self.assertRaisesRegex(GroundingError, "stale"):
                 validate_grounding_report(work_contract, digest, value, root=root, observed_repository=observed)
 
+    def test_contract_target_ref_cannot_silently_name_another_branch(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            base = contract()
+            base["target"]["repository"] = str(root.resolve())
+            base["target"]["ref"] = "definitely-not-the-active-branch"
+            work_contract = validate_contract(base)
+            digest = hashlib.sha256(json.dumps(
+                work_contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            with self.assertRaisesRegex(GroundingError, "target ref"):
+                validate_grounding_report(
+                    work_contract, digest, report(root, observed, digest),
+                    root=root, observed_repository=observed,
+                )
+
     def test_repo_result_cannot_rely_only_on_external_reference(self):
         with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
             root = Path(raw) / "repo"
@@ -168,6 +224,107 @@ class GroundingTests(unittest.TestCase):
                 "digest": hashlib.sha256(control.read_bytes()).hexdigest(),
             })
             with self.assertRaisesRegex(GroundingError, "control state"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
+
+    def test_repo_evidence_alias_cannot_resolve_into_buildos_control_state(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            repository(root)
+            control_dir = root / ".buildos"
+            control_dir.mkdir()
+            control = control_dir / "CURRENT"
+            control.write_text("not product truth\n", encoding="utf-8")
+            alias = root / "product_link"
+            try:
+                os.symlink(control_dir, alias, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"directory symlink unavailable: {exc}")
+            observed = git_adapter.snapshot(root)
+            work_contract, digest = self._contract(root)
+            value = report(root, observed, digest)
+            value["evidence"][0].update({
+                "locator": "product_link/CURRENT",
+                "digest": hashlib.sha256(control.read_bytes()).hexdigest(),
+            })
+            with self.assertRaisesRegex(GroundingError, "resolve into repository control state"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
+
+    def test_repo_evidence_cannot_cite_git_control_state(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            work_contract, digest = self._contract(root)
+            git_head = root / ".git" / "HEAD"
+            value = report(root, observed, digest)
+            value["evidence"][0].update({
+                "locator": ".git/HEAD",
+                "digest": hashlib.sha256(git_head.read_bytes()).hexdigest(),
+            })
+            with self.assertRaisesRegex(GroundingError, "control state"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
+
+    def test_repo_claim_cannot_be_grounded_by_an_unrelated_repository_file(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            repository(root)
+            unrelated = root / "unrelated.txt"
+            unrelated.write_text("unrelated\n", encoding="utf-8")
+            run_git(root, "add", "unrelated.txt")
+            run_git(root, "commit", "-m", "add unrelated evidence")
+            observed = git_adapter.snapshot(root)
+            work_contract, digest = self._contract(root)
+            value = report(root, observed, digest)
+            value["evidence"][0].update({
+                "locator": "unrelated.txt",
+                "digest": hashlib.sha256(unrelated.read_bytes()).hexdigest(),
+            })
+            with self.assertRaisesRegex(GroundingError, "does not cover repository binding path"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
+
+    def test_mutation_grounding_cannot_omit_contract_action_basis(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            work_contract, digest = self._contract(root)
+            value = report(root, observed, digest)
+            value["scope_claim_ids"] = ["acceptance.contract"]
+            value["results"] = [{
+                "claim_id": "acceptance.contract", "outcome": "VERIFIED",
+                "summary": "A selectively harmless result.",
+                "evidence_refs": ["evidence.cli"],
+            }]
+            with self.assertRaisesRegex(GroundingError, "omits required action-basis"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
+
+    def test_head_bound_repo_claim_requires_claim_specific_head_observation(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            base = contract()
+            base["target"]["repository"] = str(root.resolve())
+            base["target"]["ref"] = observed["branch"]
+            base["claims"][2]["repo_binding"]["head"] = observed["head"]
+            work_contract = validate_contract(base)
+            digest = hashlib.sha256(json.dumps(
+                work_contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            value = report(root, observed, digest)
+            with self.assertRaisesRegex(GroundingError, "does not cover repository binding HEAD"):
                 validate_grounding_report(
                     work_contract, digest, value,
                     root=root, observed_repository=observed,
@@ -208,6 +365,25 @@ class GroundingTests(unittest.TestCase):
             self.assertEqual(projection["status"], "DECISION_REQUIRED")
             self.assertEqual(projection["decision_requests"][0]["decision_type"], "PRODUCT_INTENT")
 
+    def test_hypothesis_discovery_cannot_trigger_human_escalation(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            work_contract, digest = self._contract(root)
+            value = report(root, observed, digest)
+            value["discoveries"] = [{
+                "id": "discovery.hypothesis",
+                "statement": "A tentative concern may conflict with acceptance.",
+                "status": "HYPOTHESIS", "conflicts_with": ["acceptance.contract"],
+                "evidence_refs": [],
+            }]
+            normalized = validate_grounding_report(
+                work_contract, digest, value,
+                root=root, observed_repository=observed,
+            )
+            self.assertEqual(normalized["decision_requests"], [])
+            self.assertEqual(derive_action_rights(normalized)["requested_action_status"], "GRANTED")
+
     def test_target_drift_is_explicit_and_duplicate_decisions_coalesce(self):
         with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
             root = Path(raw) / "repo"
@@ -239,6 +415,7 @@ class GroundingTests(unittest.TestCase):
             observed = repository(root)
             base = contract()
             base["target"]["repository"] = str(root.resolve())
+            base["target"]["ref"] = observed["branch"]
             base["claims"].append({
                 "id": "question.unrelated", "kind": "OPEN_QUESTION",
                 "statement": "A later product choice remains open.", "authority": "TECH_LEAD",
@@ -262,6 +439,7 @@ class GroundingTests(unittest.TestCase):
             observed = repository(root)
             base = contract()
             base["target"]["repository"] = str(root.resolve())
+            base["target"]["ref"] = observed["branch"]
             base["claims"].append({
                 "id": "question.material", "kind": "OPEN_QUESTION",
                 "statement": "Which canonical behavior applies?", "authority": "TECH_LEAD",
@@ -270,6 +448,7 @@ class GroundingTests(unittest.TestCase):
                 "verification_owner": "TECH_LEAD",
             })
             base["open_question_ids"] = ["question.material"]
+            base["action_basis_ids"].append("question.material")
             work_contract = validate_contract(base)
             digest = hashlib.sha256(json.dumps(
                 work_contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
@@ -282,6 +461,35 @@ class GroundingTests(unittest.TestCase):
             self.assertEqual(normalized["decision_requests"][0]["decision_type"], "OPEN_QUESTION")
             self.assertEqual(normalized["decision_requests"][0]["requested_from"], "TECH_LEAD")
             self.assertEqual(derive_action_rights(normalized)["requested_action_status"], "BLOCKED")
+
+    def test_worker_cannot_self_resolve_owner_action_basis_question(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            observed = repository(root)
+            base = contract()
+            base["target"]["repository"] = str(root.resolve())
+            base["target"]["ref"] = observed["branch"]
+            base["claims"].append({
+                "id": "question.owner", "kind": "OPEN_QUESTION",
+                "statement": "Owner must choose the canonical behavior.",
+                "authority": "OWNER", "binding": "ADVISORY", "status": "UNKNOWN",
+                "source_refs": [], "repo_binding": None, "observed_at": None,
+                "invalidators": [], "verification_owner": "OWNER",
+            })
+            base["open_question_ids"] = ["question.owner"]
+            base["action_basis_ids"].append("question.owner")
+            work_contract = validate_contract(base)
+            digest = hashlib.sha256(json.dumps(
+                work_contract, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            value = report(
+                root, observed, digest, claim_id="question.owner", outcome="VERIFIED",
+            )
+            with self.assertRaisesRegex(GroundingError, "cannot resolve a material open question"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
 
     def test_lifecycle_request_is_compiled_from_contract_and_worker_grounding(self):
         with tempfile.TemporaryDirectory(prefix="grounding-") as raw:

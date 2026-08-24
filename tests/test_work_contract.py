@@ -77,7 +77,7 @@ def contract() -> dict:
                 "binding": "VERIFY_IN_REPO",
                 "status": "SUPPORTED",
                 "source_refs": [],
-                "repo_binding": None,
+                "repo_binding": {"head": None, "tree": None, "paths": ["scripts/ai.py"]},
                 "observed_at": None,
                 "invalidators": ["The target repository HEAD changes."],
                 "verification_owner": "WORKER",
@@ -85,6 +85,7 @@ def contract() -> dict:
         ],
         "acceptance_ids": ["acceptance.contract"],
         "open_question_ids": [],
+        "action_basis_ids": ["repo.current_cli"],
         "ship": {"mode": "HANDOFF_ONLY", "authority_reference": None},
         "metadata": {"parent_contract_hash": None, "source_context_refs": []},
     }
@@ -127,27 +128,170 @@ class WorkContractTests(unittest.TestCase):
                 "status": "SUPPORTED",
                 "source_refs": [{
                     "id": f"source.{index}", "kind": "FILE",
-                    "locator": f"evidence/{index}.json", "sha256": "a" * 64,
+                    "locator": f"evidence/source/{index}.json", "sha256": "a" * 64,
                     "observed_at": "2026-08-24T00:00:00Z",
                 }],
-                "repo_binding": None,
+                "repo_binding": {"head": None, "tree": None, "paths": [f"src/module-{index}.py"]},
                 "observed_at": "2026-08-24T00:00:00Z",
                 "invalidators": ["HEAD changes"],
                 "verification_owner": "WORKER",
             })
+            value["action_basis_ids"].append(f"repo.claim.{index}")
         normalized = validate_contract(value)
         capsule = worker_capsule(normalized, "b" * 64)
         encoded = json.dumps(capsule, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self.assertLessEqual(len(encoded), MAX_CAPSULE_BYTES)
         self.assertEqual(capsule["current_action_right"], "READ_AND_VERIFY")
         self.assertEqual(capsule["mutation_authority"], "NONE_READ_ONLY_INTAKE")
+        self.assertEqual(capsule["action_basis_ids"][0], "repo.current_cli")
+        self.assertGreater(capsule["action_basis_overflow"], 0)
         self.assertGreater(capsule["repo_verification_overflow"], 0)
-        self.assertNotIn("evidence/0.json", encoded.decode("utf-8"))
+        self.assertNotIn("evidence/source/0.json", encoded.decode("utf-8"))
+
+    def test_worker_capsule_carries_constraints_repo_bindings_and_completed_evidence(self):
+        value = contract()
+        value["claims"][2]["statement"] = "Verify the named repository premise."
+        value["claims"].extend([
+            {
+                "id": "constraint.customer_data", "kind": "CONSTRAINT",
+                "statement": "Never export customer data.", "authority": "OWNER",
+                "binding": "CONSTRAINT", "status": "DECIDED", "source_refs": [],
+                "repo_binding": None, "observed_at": None, "invalidators": [],
+                "verification_owner": "NONE",
+            },
+            {
+                "id": "artifact.research", "kind": "ARTIFACT",
+                "statement": "Relevant research is complete.", "authority": "TECH_LEAD",
+                "binding": "ADVISORY", "status": "VERIFIED",
+                "source_refs": [{
+                    "id": "source.research", "kind": "EVIDENCE",
+                    "locator": "evidence/research.json", "sha256": "a" * 64,
+                    "observed_at": "2026-08-24T00:00:00Z",
+                }],
+                "repo_binding": None, "observed_at": "2026-08-24T00:00:00Z",
+                "invalidators": [], "verification_owner": "NONE",
+            },
+        ])
+        normalized = validate_contract(value)
+        capsule = worker_capsule(normalized, "b" * 64)
+        self.assertEqual(capsule["constraints"][0]["statement"], "Never export customer data.")
+        self.assertEqual(
+            capsule["repo_verification_required"][0]["repo_binding"]["paths"],
+            ["scripts/ai.py"],
+        )
+        self.assertEqual(capsule["transferred_advisory_evidence"][0]["id"], "artifact.research")
+        self.assertIn("claim:artifact.research:source_refs", capsule["targeted_reads"])
+
+    def test_worker_capsule_remains_bounded_for_many_long_repo_bindings(self):
+        value = contract()
+        value["claims"] = value["claims"][:2]
+        value["action_basis_ids"] = []
+        for index in range(8):
+            claim_id = f"repo.long.{index}"
+            value["claims"].append({
+                "id": claim_id, "kind": "REPO_CLAIM",
+                "statement": "Long repository claim " + ("s" * 900),
+                "authority": "TECH_LEAD", "binding": "VERIFY_IN_REPO",
+                "status": "SUPPORTED", "source_refs": [],
+                "repo_binding": {
+                    "head": None, "tree": None,
+                    "paths": [f"src/{index}/" + (character * 480) for character in "abcd"],
+                },
+                "observed_at": None, "invalidators": ["HEAD changes"],
+                "verification_owner": "WORKER",
+            })
+            value["action_basis_ids"].append(claim_id)
+        normalized = validate_contract(value)
+        capsule = worker_capsule(normalized, "b" * 64)
+        encoded = json.dumps(capsule, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self.assertLessEqual(len(encoded), MAX_CAPSULE_BYTES)
+        self.assertGreater(capsule["repo_verification_overflow"], 0)
+        self.assertIn("claim:repo.long.0:repo_binding:path:0", capsule["targeted_reads"])
+
+    def test_verified_repo_claim_remains_visible_for_worker_reverification(self):
+        value = contract()
+        value["claims"][2]["status"] = "VERIFIED"
+        value["claims"][2]["source_refs"] = [{
+            "id": "source.cli", "kind": "REPOSITORY", "locator": "scripts/ai.py",
+            "sha256": "a" * 64, "observed_at": "2026-08-24T00:00:00Z",
+        }]
+        normalized = validate_contract(value)
+        capsule = worker_capsule(normalized, "b" * 64)
+        self.assertEqual(capsule["repo_verification_required"][0]["id"], "repo.current_cli")
+        self.assertEqual(capsule["repo_verification_required"][0]["status"], "VERIFIED")
 
     def test_advisory_model_cannot_claim_canonical_authority(self):
         value = contract()
         value["claims"][0]["authority"] = "ADVISORY_MODEL"
         with self.assertRaisesRegex(WorkContractError, "advisory model cannot own canonical"):
+            validate_contract(value)
+
+    def test_binding_constraint_requires_owner_or_tech_lead_authority(self):
+        value = contract()
+        value["claims"].append({
+            "id": "constraint.advisory", "kind": "CONSTRAINT",
+            "statement": "An advisory constraint.", "authority": "WORKER",
+            "binding": "CONSTRAINT", "status": "SUPPORTED", "source_refs": [],
+            "repo_binding": None, "observed_at": None, "invalidators": [],
+            "verification_owner": "NONE",
+        })
+        with self.assertRaisesRegex(WorkContractError, "binding constraint"):
+            validate_contract(value)
+
+    def test_active_canonical_claims_cannot_be_unknown_or_superseded(self):
+        for status in ("UNKNOWN", "SUPERSEDED", "CONTRADICTED"):
+            value = contract()
+            value["claims"][1]["status"] = status
+            with self.subTest(status=status), self.assertRaisesRegex(
+                WorkContractError, "must have DECIDED status",
+            ):
+                validate_contract(value)
+
+    def test_action_basis_must_include_every_repository_verification_claim(self):
+        value = contract()
+        value["action_basis_ids"] = []
+        with self.assertRaisesRegex(WorkContractError, "all repository verification claims"):
+            validate_contract(value)
+
+    def test_repository_binding_cannot_name_nested_git_control_state(self):
+        value = contract()
+        value["claims"][2]["repo_binding"]["paths"] = ["vendor/.git/HEAD"]
+        with self.assertRaisesRegex(WorkContractError, "product-repository file"):
+            validate_contract(value)
+
+    def test_repository_binding_requires_exact_files_not_partial_glob_evidence(self):
+        value = contract()
+        value["claims"][2]["repo_binding"]["paths"] = ["scripts/**"]
+        with self.assertRaisesRegex(WorkContractError, "exact file, not a glob pattern"):
+            validate_contract(value)
+
+    def test_contract_target_requires_an_absolute_local_repository(self):
+        value = contract()
+        value["target"]["repository"] = "some/relative/repository"
+        with self.assertRaisesRegex(WorkContractError, "absolute local repository path"):
+            validate_contract(value)
+
+    def test_repository_source_reference_uses_the_same_safe_exact_file_grammar(self):
+        value = contract()
+        value["claims"][2]["source_refs"] = [{
+            "id": "source.unsafe", "kind": "REPOSITORY", "locator": ".git/HEAD",
+            "sha256": None, "observed_at": None,
+        }]
+        with self.assertRaisesRegex(WorkContractError, "product-repository file"):
+            validate_contract(value)
+
+    def test_action_basis_open_question_requires_human_decision_authority(self):
+        value = contract()
+        value["claims"].append({
+            "id": "question.worker", "kind": "OPEN_QUESTION",
+            "statement": "A Worker-owned question.", "authority": "WORKER",
+            "binding": "ADVISORY", "status": "UNKNOWN", "source_refs": [],
+            "repo_binding": None, "observed_at": None, "invalidators": [],
+            "verification_owner": "WORKER",
+        })
+        value["open_question_ids"] = ["question.worker"]
+        value["action_basis_ids"].append("question.worker")
+        with self.assertRaisesRegex(WorkContractError, "decision authority"):
             validate_contract(value)
 
     def test_repo_claim_cannot_self_declare_verified_without_bound_evidence(self):
@@ -201,6 +345,12 @@ class WorkContractTests(unittest.TestCase):
         value = copy.deepcopy(contract())
         value["semantic_plan"] = {"pretend": "kernel reasoning"}
         with self.assertRaisesRegex(WorkContractError, "unexpected"):
+            validate_contract(value)
+
+    def test_contract_identity_cannot_pass_intake_then_overflow_task_identity(self):
+        value = contract()
+        value["contract_id"] = "x" * 96
+        with self.assertRaisesRegex(WorkContractError, "canonical task identity limit"):
             validate_contract(value)
 
 

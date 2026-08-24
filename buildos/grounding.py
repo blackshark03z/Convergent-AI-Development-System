@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from fnmatch import fnmatchcase
 from pathlib import Path
 import re
 from typing import Any, Mapping
 
-from .work_contract import ID_RE, SHA_RE, WorkContractError
+from .work_contract import (
+    ID_RE, SHA_RE, WorkContractError, canonical_contract_bytes, validate_contract,
+)
 
 
 SCHEMA = "buildos.grounding-report.v1"
@@ -121,26 +124,37 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _repo_file(root: Path, locator: str) -> Path:
+def _safe_repo_locator(locator: str) -> Path:
     relative = Path(locator.replace("\\", "/"))
     if relative.is_absolute() or ".." in relative.parts:
         raise GroundingError(f"repository evidence path escapes the target repository: {locator}")
-    if relative.parts and relative.parts[0].casefold() == ".buildos":
+    relative_parts = [part.casefold() for part in relative.parts]
+    if relative_parts and (relative_parts[0] == ".buildos" or ".git" in relative_parts):
         raise GroundingError(
-            f"repository evidence cannot cite Build OS control state: {locator}"
+            f"repository evidence cannot cite repository control state: {locator}"
         )
+    return relative
+
+
+def _repo_file(root: Path, locator: str) -> Path:
+    relative = _safe_repo_locator(locator)
     target = (root / relative).resolve()
     try:
-        target.relative_to(root)
+        resolved_relative = target.relative_to(root)
     except ValueError as exc:
         raise GroundingError(f"repository evidence path escapes the target repository: {locator}") from exc
+    resolved_parts = [part.casefold() for part in resolved_relative.parts]
+    if resolved_parts and (resolved_parts[0] == ".buildos" or ".git" in resolved_parts):
+        raise GroundingError(
+            f"repository evidence cannot resolve into repository control state: {locator}"
+        )
     if not target.is_file():
         raise GroundingError(f"repository evidence file is missing: {locator}")
     return target
 
 
 def _evidence(
-    value: Any, *, root: Path, observed: Mapping[str, Any],
+    value: Any, *, root: Path, observed: Mapping[str, Any], verify_live: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     if not isinstance(value, list) or len(value) > MAX_ITEMS:
         raise GroundingError(f"evidence must be an array of at most {MAX_ITEMS} items")
@@ -160,8 +174,11 @@ def _evidence(
         if kind == "REPO_FILE":
             if digest is None or not SHA_RE.fullmatch(digest):
                 raise GroundingError(f"repository evidence {evidence_id} requires lowercase SHA-256")
-            if _sha256_file(_repo_file(root, locator)) != digest:
-                raise GroundingError(f"repository evidence changed: {evidence_id}")
+            if verify_live:
+                if _sha256_file(_repo_file(root, locator)) != digest:
+                    raise GroundingError(f"repository evidence changed: {evidence_id}")
+            else:
+                _safe_repo_locator(locator)
             verified = True
         elif kind == "REPO_OBSERVATION":
             locator = locator.upper()
@@ -203,6 +220,66 @@ def _require_local_repo_evidence(
 ) -> None:
     if not any(evidence[item]["locally_verified"] for item in refs):
         raise GroundingError(f"{label} requires at least one locally verified repository evidence item")
+
+
+def _requires_material_decision(claim: Mapping[str, Any]) -> bool:
+    return (
+        claim.get("binding") in {"CANONICAL", "CONSTRAINT"}
+        and claim.get("authority") in {"OWNER", "TECH_LEAD"}
+    )
+
+
+def _require_claim_bound_evidence(
+    claim: Mapping[str, Any], outcome: str, refs: list[str], *,
+    evidence: Mapping[str, Mapping[str, Any]], observed: Mapping[str, Any], label: str,
+) -> None:
+    """Require repository proof to cover the exact claim binding, not any repo byte."""
+    _require_local_repo_evidence(refs, evidence=evidence, label=label)
+    binding = claim.get("repo_binding")
+    if claim.get("binding") != "VERIFY_IN_REPO":
+        return
+    if not isinstance(binding, Mapping):
+        raise GroundingError(f"{label} lacks an explicit repository binding")
+    rows = [evidence[item] for item in refs]
+    file_rows = [row for row in rows if row.get("kind") == "REPO_FILE"]
+    observation_rows = {
+        str(row.get("locator")): row for row in rows
+        if row.get("kind") == "REPO_OBSERVATION"
+    }
+    for pattern in binding.get("paths") or []:
+        normalized = str(pattern).replace("\\", "/")
+        if not any(
+            fnmatchcase(str(row.get("locator")).replace("\\", "/"), normalized)
+            for row in file_rows
+        ):
+            raise GroundingError(f"{label} does not cover repository binding path {normalized}")
+    for key, locator in (("head", "HEAD"), ("tree", "TREE")):
+        expected = binding.get(key)
+        if expected is None:
+            continue
+        if locator not in observation_rows:
+            raise GroundingError(f"{label} does not cover repository binding {locator}")
+        if outcome == "VERIFIED" and expected != observed.get(key):
+            raise GroundingError(f"{label} cannot verify stale repository binding {locator}")
+    for source in claim.get("source_refs") or []:
+        if source.get("kind") != "REPOSITORY":
+            continue
+        locator = str(source.get("locator") or "").replace("\\", "/")
+        if locator.upper() in REPO_OBSERVATIONS:
+            candidates = [observation_rows.get(locator.upper())]
+        else:
+            candidates = [
+                row for row in file_rows
+                if str(row.get("locator")).replace("\\", "/") == locator
+            ]
+        candidates = [row for row in candidates if row is not None]
+        if not candidates:
+            raise GroundingError(f"{label} does not cover repository source {locator}")
+        expected_digest = source.get("sha256")
+        if outcome == "VERIFIED" and expected_digest and not any(
+            row.get("digest") == expected_digest for row in candidates
+        ):
+            raise GroundingError(f"{label} does not reproduce repository source {locator}")
 
 
 def _decision_request(
@@ -261,6 +338,7 @@ def _open_question_request(
 def validate_grounding_report(
     contract: Mapping[str, Any], contract_hash: str, value: Any, *,
     root: Path | str, observed_repository: Mapping[str, Any],
+    verify_live_evidence: bool = True,
 ) -> dict[str, Any]:
     """Validate one report against the exact current repository observation."""
     if len(_canonical_bytes(value)) > MAX_REPORT_BYTES:
@@ -282,8 +360,15 @@ def validate_grounding_report(
     if observed_root != root:
         raise GroundingError("repository grounding root must be the Git worktree top-level")
     target_repository = str((contract.get("target") or {}).get("repository") or "").strip()
-    if target_repository and Path(target_repository).is_absolute() and Path(target_repository).resolve() != root:
+    if not Path(target_repository).is_absolute() or Path(target_repository).resolve() != root:
         raise GroundingError("Work Contract target names a different repository root")
+    target_ref = str((contract.get("target") or {}).get("ref") or "").strip()
+    if target_ref:
+        expected_branch = target_ref.removeprefix("refs/heads/")
+        if str(observed_repository.get("branch") or "") != expected_branch:
+            raise GroundingError(
+                f"Work Contract target ref {target_ref} does not match the active branch"
+            )
 
     repository = _object(
         report["repository"], label="repository",
@@ -351,7 +436,17 @@ def validate_grounding_report(
     unknown_scope = [item for item in scope_claim_ids if item not in claims]
     if unknown_scope:
         raise GroundingError(f"scope_claim_ids references unknown claims: {unknown_scope}")
-    evidence_rows, evidence_by_id = _evidence(report["evidence"], root=root, observed=observed_repository)
+    required_scope = set(contract.get("action_basis_ids") or [])
+    if requested_action != "READ_ONLY":
+        omitted_basis = sorted(required_scope - set(scope_claim_ids))
+        if omitted_basis:
+            raise GroundingError(
+                f"mutation grounding omits required action-basis claims: {omitted_basis}"
+            )
+    evidence_rows, evidence_by_id = _evidence(
+        report["evidence"], root=root, observed=observed_repository,
+        verify_live=verify_live_evidence,
+    )
     if not isinstance(report["results"], list) or len(report["results"]) > MAX_ITEMS:
         raise GroundingError(f"results must be an array of at most {MAX_ITEMS} items")
     results: list[dict[str, Any]] = []
@@ -367,17 +462,24 @@ def validate_grounding_report(
         seen_results.add(claim_id)
         outcome = _enum(row["outcome"], label=f"result {claim_id}.outcome", allowed=OUTCOMES)
         refs = _bound_evidence(row["evidence_refs"], label=f"result {claim_id}.evidence_refs", evidence=evidence_by_id)
-        if outcome in {"VERIFIED", "CONTRADICTED"}:
-            _require_local_repo_evidence(refs, evidence=evidence_by_id, label=f"result {claim_id}")
         claim = claims[claim_id]
+        if outcome in {"VERIFIED", "CONTRADICTED"}:
+            _require_claim_bound_evidence(
+                claim, outcome, refs, evidence=evidence_by_id,
+                observed=observed_repository, label=f"result {claim_id}",
+            )
+        if claim["kind"] == "OPEN_QUESTION" and outcome != "UNKNOWN":
+            raise GroundingError(
+                f"result {claim_id}: Worker grounding cannot resolve a material open question"
+            )
         if outcome == "CONTRADICTED":
-            if claim["binding"] == "CANONICAL" or claim["kind"] in CANONICAL_DECISION_TYPES:
+            if _requires_material_decision(claim):
                 decisions.append(_decision_request(
                     contract_hash=contract_hash, claim=claim, evidence_refs=refs, source="GROUNDING_RESULT",
                 ))
             else:
                 local_adaptations.append(claim_id)
-        elif outcome == "UNKNOWN" and claim["kind"] == "OPEN_QUESTION":
+        elif claim["kind"] == "OPEN_QUESTION":
             decisions.append(_open_question_request(
                 contract_hash=contract_hash, claim=claim, evidence_refs=refs,
             ))
@@ -409,14 +511,20 @@ def validate_grounding_report(
         refs = _bound_evidence(row["evidence_refs"], label=f"discovery {discovery_id}.evidence_refs", evidence=evidence_by_id)
         if status == "VERIFIED":
             _require_local_repo_evidence(refs, evidence=evidence_by_id, label=f"discovery {discovery_id}")
-        for claim_id in conflicts:
-            claim = claims[claim_id]
-            if claim["binding"] == "CANONICAL" or claim["kind"] in CANONICAL_DECISION_TYPES:
-                decisions.append(_decision_request(
-                    contract_hash=contract_hash, claim=claim, evidence_refs=refs, source=f"DISCOVERY:{discovery_id}",
-                ))
-            else:
-                local_adaptations.append(claim_id)
+        if status == "VERIFIED":
+            for claim_id in conflicts:
+                claim = claims[claim_id]
+                if claim.get("binding") == "VERIFY_IN_REPO":
+                    _require_claim_bound_evidence(
+                        claim, "CONTRADICTED", refs, evidence=evidence_by_id,
+                        observed=observed_repository, label=f"discovery {discovery_id}",
+                    )
+                if _requires_material_decision(claim):
+                    decisions.append(_decision_request(
+                        contract_hash=contract_hash, claim=claim, evidence_refs=refs, source=f"DISCOVERY:{discovery_id}",
+                    ))
+                else:
+                    local_adaptations.append(claim_id)
         discoveries.append({
             "id": discovery_id,
             "statement": _text(row["statement"], label=f"discovery {discovery_id}.statement"),
@@ -510,6 +618,53 @@ def grounding_hash(report: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_grounding_bytes(report)).hexdigest()
 
 
+def grounding_claim_freshness(
+    report: Mapping[str, Any], *, root: Path | str,
+    observed_repository: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    """Classify VERIFIED results by whether their repository dependencies remain exact."""
+    root = Path(root).resolve()
+    evidence = {str(row["id"]): row for row in report.get("evidence") or []}
+    stale_evidence: set[str] = set()
+    for evidence_id, row in evidence.items():
+        kind = row.get("kind")
+        if kind == "REPO_FILE":
+            try:
+                target = _repo_file(root, str(row.get("locator") or ""))
+                if _sha256_file(target) != row.get("digest"):
+                    stale_evidence.add(evidence_id)
+            except (GroundingError, OSError):
+                stale_evidence.add(evidence_id)
+        elif kind == "REPO_OBSERVATION":
+            locator = str(row.get("locator") or "").upper()
+            current = {
+                "HEAD": observed_repository.get("head"),
+                "TREE": observed_repository.get("tree"),
+                "PRODUCT_STATE_DIGEST": observed_repository.get("product_state_digest"),
+            }.get(locator)
+            if current is None or current != row.get("digest"):
+                stale_evidence.add(evidence_id)
+    reused: list[str] = []
+    reexecute: list[str] = []
+    for result in report.get("results") or []:
+        if result.get("outcome") not in {"VERIFIED", "CONTRADICTED"}:
+            continue
+        claim_id = str(result.get("claim_id") or "")
+        refs = [str(item) for item in result.get("evidence_refs") or []]
+        if any(item in stale_evidence for item in refs):
+            reexecute.append(claim_id)
+        else:
+            reused.append(claim_id)
+    for discovery in report.get("discoveries") or []:
+        if discovery.get("status") != "VERIFIED":
+            continue
+        refs = [str(item) for item in discovery.get("evidence_refs") or []]
+        targets = [str(item) for item in discovery.get("conflicts_with") or []]
+        destination = reexecute if any(item in stale_evidence for item in refs) else reused
+        destination.extend(targets)
+    return {"reused": sorted(set(reused)), "reexecute": sorted(set(reexecute))}
+
+
 def work_loop_binding(
     contract: Mapping[str, Any], contract_hash: str, report: Mapping[str, Any], *,
     contract_evidence: Mapping[str, Any], grounding_evidence: Mapping[str, Any],
@@ -538,6 +693,66 @@ def work_loop_binding(
         },
         "action_rights": derive_action_rights(report),
     }
+
+
+def replay_canonical_grounding(
+    contract: Mapping[str, Any], contract_hash: str, value: Any, *, root: Path | str,
+) -> dict[str, Any]:
+    """Re-derive a published normalized report without requiring old worktree bytes.
+
+    Live repository evidence was checked before publication. Replay checks the
+    immutable artifact's complete schema and deterministic semantic derivation
+    against its recorded repository observation; current freshness is enforced
+    separately before action boundaries.
+    """
+    normalized = _object(
+        value, label="canonical grounding evidence",
+        keys={
+            "schema", "contract_hash", "worker", "repository", "execution_request",
+            "scope_claim_ids", "evidence", "results", "discoveries",
+            "contract_target_drift", "local_adaptation_claim_ids", "decision_requests",
+        },
+    )
+    if not isinstance(normalized["evidence"], list):
+        raise GroundingError("canonical grounding evidence rows must be an array")
+    raw_evidence: list[dict[str, Any]] = []
+    for index, row in enumerate(normalized["evidence"]):
+        item = _object(
+            row, label=f"canonical grounding evidence[{index}]",
+            keys={"id", "kind", "locator", "digest", "observed_at", "locally_verified"},
+        )
+        if not isinstance(item["locally_verified"], bool):
+            raise GroundingError("canonical grounding locally_verified must be boolean")
+        raw_evidence.append({
+            key: item[key] for key in ("id", "kind", "locator", "digest", "observed_at")
+        })
+    repository = normalized["repository"]
+    if not isinstance(repository, Mapping):
+        raise GroundingError("canonical grounding repository must be an object")
+    target_ref = str((contract.get("target") or {}).get("ref") or "")
+    recorded_observation = {
+        "available": True,
+        "root": repository.get("root"),
+        "branch": target_ref.removeprefix("refs/heads/"),
+        "head": repository.get("head"),
+        "tree": repository.get("tree"),
+        "product_state_digest": repository.get("product_state_digest"),
+    }
+    raw = {
+        key: normalized[key]
+        for key in (
+            "schema", "contract_hash", "worker", "repository", "scope_claim_ids",
+            "execution_request", "results", "discoveries",
+        )
+    }
+    raw["evidence"] = raw_evidence
+    replayed = validate_grounding_report(
+        contract, contract_hash, raw, root=root,
+        observed_repository=recorded_observation, verify_live_evidence=False,
+    )
+    if replayed != dict(normalized):
+        raise GroundingError("canonical grounding evidence does not match deterministic replay")
+    return replayed
 
 
 def validate_work_loop_binding(value: Any) -> None:
@@ -608,6 +823,42 @@ def validate_work_loop_binding(value: Any) -> None:
     _ids(grounding["local_adaptation_claim_ids"], label="work_loop.grounding.local_adaptation_claim_ids")
     if not isinstance(grounding["decision_requests"], list):
         raise GroundingError("work_loop decision_requests must be an array")
+    decision_claim_ids: list[str] = []
+    seen_requests: set[str] = set()
+    for index, raw_request in enumerate(grounding["decision_requests"]):
+        request = _object(
+            raw_request, label=f"work_loop decision_requests[{index}]",
+            keys={
+                "schema", "request_id", "status", "contract_hash", "claim_id",
+                "decision_type", "requested_from", "question", "options",
+                "evidence_refs", "trigger_sources", "blocking_scope",
+            },
+        )
+        if request["schema"] != "buildos.decision-request.v1" or request["status"] != "OPEN":
+            raise GroundingError("work_loop decision request state is invalid")
+        request_id = _identifier(request["request_id"], label="work_loop decision request id")
+        if request_id in seen_requests:
+            raise GroundingError("work_loop decision request ids must be unique")
+        seen_requests.add(request_id)
+        if request["contract_hash"] != contract_hash:
+            raise GroundingError("work_loop decision request is bound to another Contract")
+        claim_id = _identifier(request["claim_id"], label="work_loop decision request claim_id")
+        if claim_id not in scope:
+            raise GroundingError("work_loop decision request claim is outside grounding scope")
+        decision_claim_ids.append(claim_id)
+        if request["decision_type"] not in {
+            "PRODUCT_INTENT", "CANONICAL_ARCHITECTURE", "BUSINESS_CONSTRAINT",
+            "CANONICAL_PREMISE", "OPEN_QUESTION",
+        }:
+            raise GroundingError("work_loop decision request type is invalid")
+        if request["requested_from"] not in {"OWNER", "TECH_LEAD"}:
+            raise GroundingError("work_loop decision request has invalid authority destination")
+        _text(request["question"], label="work_loop decision request question")
+        _strings(request["options"], label="work_loop decision request options", maximum=8)
+        _ids(request["evidence_refs"], label="work_loop decision request evidence_refs", maximum=64)
+        _strings(request["trigger_sources"], label="work_loop decision request trigger_sources", maximum=64)
+        if request["blocking_scope"] != "ACTIONS_DEPENDENT_ON_CLAIM":
+            raise GroundingError("work_loop decision request has invalid blocking scope")
     if not isinstance(grounding["contract_target_drift"], bool):
         raise GroundingError("work_loop contract_target_drift must be boolean")
     rights = _object(
@@ -627,6 +878,19 @@ def validate_work_loop_binding(value: Any) -> None:
         raise GroundingError("work_loop action rights bypass a progressive boundary")
     _strings(rights["blockers"], label="work_loop.action_rights.blockers", maximum=16, item_maximum=128)
     _ids(rights["blocked_claim_ids"], label="work_loop.action_rights.blocked_claim_ids")
+    expected_rights = derive_action_rights({
+        "decision_requests": list(grounding["decision_requests"]),
+        "results": [
+            {"claim_id": claim_id, "outcome": outcome}
+            for claim_id, outcome in grounding["outcomes"].items()
+        ],
+        "execution_request": {"requested_action": rights["requested_action"]},
+    })
+    if dict(rights) != expected_rights:
+        raise GroundingError("work_loop action rights do not match compact grounding outcomes")
+    adaptations = set(grounding["local_adaptation_claim_ids"])
+    if not adaptations.issubset(set(scope)) or adaptations.intersection(decision_claim_ids):
+        raise GroundingError("work_loop local adaptations are inconsistent with decision routing")
 
 
 def verify_work_loop_evidence(root: Path | str, binding: Mapping[str, Any]) -> None:
@@ -637,6 +901,7 @@ def verify_work_loop_evidence(root: Path | str, binding: Mapping[str, Any]) -> N
         ("contract", binding["work_contract"]["evidence"]),
         ("grounding", binding["grounding"]["evidence"]),
     )
+    payloads: dict[str, bytes] = {}
     for label, reference in pairs:
         locator = str(reference["path"])
         target = (root / locator).resolve()
@@ -646,6 +911,26 @@ def verify_work_loop_evidence(root: Path | str, binding: Mapping[str, Any]) -> N
             raise GroundingError(f"work_loop {label} evidence escapes repository root") from exc
         if not target.is_file() or _sha256_file(target) != reference["sha256"]:
             raise GroundingError(f"work_loop {label} evidence is missing or changed")
+        payloads[label] = target.read_bytes()
+    try:
+        raw_contract = json.loads(payloads["contract"].decode("utf-8"))
+        raw_grounding = json.loads(payloads["grounding"].decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GroundingError("work_loop evidence JSON is invalid") from exc
+    contract = validate_contract(raw_contract)
+    if canonical_contract_bytes(contract) != payloads["contract"]:
+        raise GroundingError("work_loop Contract evidence is not canonical validated bytes")
+    contract_hash = str(binding["work_contract"]["hash"])
+    report = replay_canonical_grounding(contract, contract_hash, raw_grounding, root=root)
+    if canonical_grounding_bytes(report) != payloads["grounding"]:
+        raise GroundingError("work_loop grounding evidence is not canonical replay bytes")
+    replayed_binding = work_loop_binding(
+        contract, contract_hash, report,
+        contract_evidence=binding["work_contract"]["evidence"],
+        grounding_evidence=binding["grounding"]["evidence"],
+    )
+    if replayed_binding != dict(binding):
+        raise GroundingError("canonical Work Loop binding does not match immutable evidence replay")
 
 
 def derive_action_rights(report: Mapping[str, Any]) -> dict[str, Any]:

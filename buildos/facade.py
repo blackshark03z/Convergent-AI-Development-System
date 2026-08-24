@@ -1,6 +1,7 @@
 """Small orchestration facade over the pure model and transactional store."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -14,6 +15,7 @@ from . import execution, git_adapter
 from .grounding import (
     canonical_grounding_bytes,
     derive_action_rights,
+    grounding_claim_freshness,
     grounding_hash,
     load_grounding_report,
     task_request_from_work_loop,
@@ -30,6 +32,7 @@ from .model import (
     transition_adopt_existing_change,
     transition_block_for_source_fix,
     transition_close,
+    transition_grounding_refresh,
     transition_new_revision,
     transition_record_commit,
     transition_rollover,
@@ -56,7 +59,7 @@ from .store import (
     validate_operation_id,
 )
 from .telemetry import auto_refresh, ingest as telemetry_ingest, summarize as summarize_telemetry
-from .work_contract import canonical_contract_bytes, load_contract
+from .work_contract import canonical_contract_bytes, load_contract, require_trusted_contract_transport
 
 
 SKILL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -89,6 +92,36 @@ def _publish_work_loop_document(
     failpoint("after_work_loop_evidence_publish", configured_failures)
     if final.read_bytes() != data:
         raise KernelError("immutable Work Loop evidence publication selected different bytes")
+
+
+def _stored_grounding_report(root: Path, state: Mapping[str, Any]) -> dict[str, Any]:
+    reference = ((((state.get("work_loop") or {}).get("grounding") or {}).get("evidence")) or {})
+    target = (root / str(reference.get("path") or "")).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise KernelError("canonical grounding evidence escapes repository root") from exc
+    try:
+        value = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise KernelError(f"canonical grounding evidence cannot be read: {exc}") from exc
+    if not isinstance(value, dict) or grounding_hash(value) != reference.get("sha256"):
+        raise KernelError("canonical grounding evidence hash is invalid")
+    return value
+
+
+def _work_loop_grounding_freshness(root: Path, state: Mapping[str, Any]) -> dict[str, list[str]]:
+    if not state.get("work_loop"):
+        return {"reused": [], "reexecute": []}
+    observed = git_adapter.snapshot(
+        root,
+        base_sha=(state.get("base_git") or {}).get("head"),
+        product_sha=(state.get("product_commit") or {}).get("sha"),
+    )
+    return grounding_claim_freshness(
+        _stored_grounding_report(root, state),
+        root=root, observed_repository=observed,
+    )
 
 
 def _compile_execution_runtime(
@@ -688,6 +721,12 @@ class BuildOS:
         grounding_digest: str | None = None
         if work_contract is not None and grounding_report is not None:
             work_contract_value, contract_digest = load_contract(work_contract)
+            canonical_contract_hash = (
+                (((existing.state.get("work_loop") or {}).get("work_contract") or {}).get("hash"))
+                if existing else None
+            )
+            if canonical_contract_hash != contract_digest:
+                require_trusted_contract_transport(contract_digest)
             grounding_value = load_grounding_report(
                 grounding_report, work_contract_value, contract_digest,
                 root=self.root, observed_repository=observed,
@@ -734,6 +773,12 @@ class BuildOS:
         state = initial_state(request, observed, execution=runtime, work_loop=work_loop_context)
         if existing:
             if existing.state.get("contract_hash") == state.get("contract_hash"):
+                existing_grounding = ((((existing.state.get("work_loop") or {}).get("grounding") or {}).get("hash")))
+                supplied_grounding = ((((state.get("work_loop") or {}).get("grounding") or {}).get("hash")))
+                if existing_grounding != supplied_grounding:
+                    raise KernelError(
+                        "bootstrap retry supplied different grounding; use the Work Loop grounding refresh boundary"
+                    )
                 return self._idempotent(existing)
             if existing.state.get("phase") not in RELEASED_TASK_PHASES:
                 raise KernelError("a different live canonical task already exists")
@@ -1038,6 +1083,16 @@ class BuildOS:
         previous = self._snapshot()
         state = previous.state
         transition = str(transition).upper().strip()
+        if transition in {"PREPARE", "DISPATCH", "AUTHORIZE_RETRY"} and state.get("work_loop"):
+            rights = state["work_loop"]["action_rights"]
+            if rights["requested_action_status"] != "GRANTED":
+                raise KernelError(f"effect {transition} is blocked by canonical Work Loop action rights")
+            stale = _work_loop_grounding_freshness(self.root, state)["reexecute"]
+            if stale:
+                raise KernelError(
+                    f"effect {transition} requires fresh Worker grounding for changed claims: "
+                    + ", ".join(stale)
+                )
         prior_event = previous.event or {}
         if transition == "PREPARE" and prior_event.get("kind") == "EFFECT_INTENT_RECORDED" and prior_event.get("effect_id") == effect_id and prior_event.get("action_id") == action_id:
             return self._idempotent(previous)
@@ -1166,6 +1221,7 @@ class BuildOS:
             return plan
         grounding = work_loop.get("grounding") or {}
         outcomes = grounding.get("outcomes") or {}
+        freshness = _work_loop_grounding_freshness(self.root, state)
         risk = str(state.get("risk") or "R0")
         return {
             **plan,
@@ -1174,10 +1230,8 @@ class BuildOS:
                 "risk": risk,
                 "acceptance_criteria": list(state.get("acceptance") or []),
                 "acceptance_commands": list(state.get("acceptance_commands") or []),
-                "grounding_claims_reused": sorted(
-                    claim_id for claim_id, outcome in outcomes.items() if outcome == "VERIFIED"
-                ),
-                "grounding_claims_reexecuted": [],
+                "grounding_claims_reused": freshness["reused"],
+                "grounding_claims_reexecuted": freshness["reexecute"],
                 "local_adaptation_claim_ids": list(grounding.get("local_adaptation_claim_ids") or []),
                 "independent_reviewer_required": risk == "R3",
                 "rollback_recovery_check_required": risk == "R3",
@@ -1333,16 +1387,88 @@ class BuildOS:
             if contract_digest != expected:
                 raise KernelError("provided Work Contract is not the canonical active handoff")
             observed = git_adapter.snapshot(self.root)
-            load_grounding_report(
+            transition_observed = git_adapter.snapshot(
+                self.root,
+                base_sha=(current.state.get("base_git") or {}).get("head"),
+                product_sha=(current.state.get("product_commit") or {}).get("sha"),
+            )
+            supplied_grounding = load_grounding_report(
                 grounding_report, contract_value, contract_digest,
                 root=self.root, observed_repository=observed,
             )
+            expected_grounding = (((current.state.get("work_loop") or {}).get("grounding") or {}).get("hash"))
+            if grounding_hash(supplied_grounding) != expected_grounding:
+                if current.state.get("phase") not in {"ACTIVE", "PRODUCT_COMMITTED"}:
+                    raise KernelError("grounding can refresh only before assurance is recorded")
+                rights = derive_action_rights(supplied_grounding)
+                refreshed_digest = grounding_hash(supplied_grounding)
+                grounding_reference = _work_loop_evidence_reference(
+                    current.state["task_id"], "grounding", refreshed_digest,
+                )
+                contract_reference = current.state["work_loop"]["work_contract"]["evidence"]
+                refreshed_binding = work_loop_binding(
+                    contract_value, contract_digest, supplied_grounding,
+                    contract_evidence=contract_reference,
+                    grounding_evidence=grounding_reference,
+                )
+                authorization = current.state.get("authorization") or {}
+                refreshed_request = task_request_from_work_loop(
+                    contract_value, supplied_grounding,
+                    owner_authorization=str(authorization.get("status") or "NONE"),
+                    authorization_reference=str(authorization.get("reference") or ""),
+                    authorization_actor=str(authorization.get("actor") or "OWNER"),
+                )
+                candidate, refresh_event = transition_grounding_refresh(
+                    current.state, refreshed_request, refreshed_binding,
+                    preaction_product_state=(
+                        transition_observed.get("head") == (current.state.get("base_git") or {}).get("head")
+                        and transition_observed.get("tree") == (current.state.get("base_git") or {}).get("tree")
+                        and not transition_observed.get("product_dirty")
+                    ),
+                )
+                _publish_work_loop_document(
+                    self.root, grounding_reference,
+                    canonical_grounding_bytes(supplied_grounding),
+                    configured_failures=configured_failures,
+                )
+                refreshed = commit_candidate(
+                    self.root,
+                    expected_hash=current.generation_hash,
+                    candidate_state=candidate,
+                    event={
+                        **refresh_event,
+                        "prior_grounding_hash": expected_grounding,
+                        "grounding_hash": refreshed_digest,
+                        "repository_head": supplied_grounding["repository"]["head"],
+                        "repository_tree": supplied_grounding["repository"]["tree"],
+                    },
+                    operation_id=operation_id(
+                        "GROUNDING_REFRESH", candidate["task_id"], candidate["revision"],
+                        expected_grounding, refreshed_digest,
+                    ),
+                    configured_failures=configured_failures,
+                    projector=self.project,
+                    precommit_validator=lambda: _assert_git_unchanged(
+                        self.root, transition_observed,
+                        base_sha=(candidate.get("base_git") or {}).get("head"),
+                        product_sha=(candidate.get("product_commit") or {}).get("sha"),
+                    ),
+                )
+                transitions.append({
+                    "kind": "GROUNDING_REFRESH",
+                    "generation": refreshed.snapshot.generation,
+                    "generation_hash": refreshed.snapshot.generation_hash,
+                })
 
         for _ in range(4):
             snapshot = self._snapshot()
             state = snapshot.state
             if state.get("work_loop") is None:
                 raise KernelError("work advance is available only for evidence-carrying Work Loop tasks")
+            if state["work_loop"]["action_rights"]["requested_action_status"] != "GRANTED":
+                break
+            if _work_loop_grounding_freshness(self.root, state)["reexecute"]:
+                break
             phase = state["phase"]
             runtime = state.get("execution") or {}
             unresolved_effects = [
@@ -1418,6 +1544,10 @@ class BuildOS:
         state = self._snapshot().state
         if state["phase"] == "CLOSED":
             status = "COMPLETE"
+        elif state["work_loop"]["action_rights"]["requested_action_status"] != "GRANTED":
+            status = "DECISION_REQUIRED"
+        elif _work_loop_grounding_freshness(self.root, state)["reexecute"]:
+            status = "GROUNDING_REFRESH_REQUIRED"
         elif state["phase"] == "PRODUCT_COMMITTED":
             status = "ASSURANCE_REQUIRED"
         elif state.get("execution_class") == "EXTERNAL_EFFECT":
@@ -1431,6 +1561,12 @@ class BuildOS:
     def record_commit(self, *, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
         previous = self._snapshot()
         state = previous.state
+        stale = _work_loop_grounding_freshness(self.root, state)["reexecute"]
+        if stale:
+            raise KernelError(
+                "record-commit requires fresh Worker grounding for changed claims: "
+                + ", ".join(stale)
+            )
         execution.assert_plan_valid(state, "record-commit")
         observed = git_adapter.snapshot(self.root, base_sha=(state.get("base_git") or {}).get("head"))
         if state.get("phase") == "PRODUCT_COMMITTED":
@@ -1470,6 +1606,14 @@ class BuildOS:
             raise KernelError("validation timeout must be a positive number of seconds")
         previous = self._snapshot()
         state = previous.state
+        if state.get("work_loop") and state["work_loop"]["action_rights"]["requested_action_status"] != "GRANTED":
+            raise KernelError("validation is blocked by canonical Work Loop action rights")
+        freshness = _work_loop_grounding_freshness(self.root, state)
+        if freshness["reexecute"]:
+            raise KernelError(
+                "validation requires fresh Worker grounding for changed claims: "
+                + ", ".join(freshness["reexecute"])
+            )
         execution.assert_plan_valid(state, "validation")
         execution.assert_effects_resolved(state)
         enhanced = (state.get("execution") or {}).get("mode") == "ENHANCED"

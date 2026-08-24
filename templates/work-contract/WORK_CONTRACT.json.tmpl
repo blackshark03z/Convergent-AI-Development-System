@@ -9,7 +9,7 @@
     "issued_at": "2026-01-01T00:00:00Z"
   },
   "target": {
-    "repository": "replace-with-repository-locator",
+    "repository": "C:\\absolute\\path\\to\\repository",
     "ref": "main",
     "head": null,
     "tree": null
@@ -53,7 +53,7 @@
       "binding": "VERIFY_IN_REPO",
       "status": "SUPPORTED",
       "source_refs": [],
-      "repo_binding": null,
+      "repo_binding": {"head": null, "tree": null, "paths": ["replace/with/repository/path"]},
       "observed_at": null,
       "invalidators": [
         "Target repository HEAD changes."
@@ -65,6 +65,7 @@
     "acceptance.behavior"
   ],
   "open_question_ids": [],
+  "action_basis_ids": ["repo.entrypoint"],
   "ship": {
     "mode": "HANDOFF_ONLY",
     "authority_reference": null

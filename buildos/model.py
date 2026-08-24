@@ -1,4 +1,4 @@
-"""Pure lifecycle model for the v1.24 candidate.
+"""Pure lifecycle model for the v1.25 Work Loop candidate.
 
 The model deliberately knows nothing about the filesystem or Git.  A
 transition receives a validated observation and returns a complete candidate
@@ -284,6 +284,83 @@ def initial_state(
     }
     validate_state(state)
     return state
+
+
+def transition_grounding_refresh(
+    previous: Mapping[str, Any], request: Mapping[str, Any],
+    work_loop: Mapping[str, Any], *, preaction_product_state: bool,
+    at: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Append a Worker-owned, monotonic local action-boundary adaptation."""
+    validate_state(previous)
+    if previous.get("phase") not in {"ACTIVE", "PRODUCT_COMMITTED"}:
+        raise KernelError("grounding can refresh only before assurance is recorded")
+    req = validate_task_request(request)
+    immutable = {
+        "task_id": req["task_id"], "outcome": req["outcome"],
+        "acceptance": req["acceptance"], "side_effect": req["side_effect"],
+        "product_change_mode": req["product_change_mode"],
+        "execution_class": req["execution_class"], "worker_id": req["worker_id"],
+        "enforcement": req["enforcement"], "skill": req["skill"],
+    }
+    for key, value in immutable.items():
+        if previous.get(key) != value:
+            raise KernelError(f"grounding refresh cannot change canonical task field: {key}")
+    if not set(previous.get("prohibited_paths") or []).issubset(req["prohibited_paths"]):
+        raise KernelError("grounding refresh cannot remove a prohibited product path")
+    if not set(previous.get("acceptance_commands") or []).issubset(req["acceptance_commands"]):
+        raise KernelError("grounding refresh cannot remove an admitted assurance command")
+    prior_risk = str(previous.get("risk") or "R0")
+    if RISKS_ORDER[req["risk"]] < RISKS_ORDER[prior_risk]:
+        raise KernelError("grounding refresh cannot reduce canonical risk")
+    if req["risk"] == "R3" and prior_risk != "R3":
+        authorization = previous.get("authorization") or {}
+        if authorization.get("status") != "APPROVED" or not authorization.get("reference"):
+            raise KernelError("grounding refresh cannot escalate to R3 without existing owner authorization")
+    boundary_changed = any((
+        previous.get("allowed_paths") != req["allowed_paths"],
+        previous.get("prohibited_paths") != req["prohibited_paths"],
+        (previous.get("acceptance_commands") or []) != req["acceptance_commands"],
+        prior_risk != req["risk"],
+    ))
+    if boundary_changed and (previous.get("execution") or {}).get("mode") == "ENHANCED":
+        raise KernelError("enhanced execution boundary changes require the existing explicit replan transition")
+    if boundary_changed and not preaction_product_state:
+        raise KernelError(
+            "Worker action-boundary adaptation must precede every product change; "
+            "late scope widening cannot authorize an existing commit"
+        )
+    if boundary_changed and previous.get("phase") != "ACTIVE":
+        raise KernelError("Worker action-boundary adaptation must occur before product commit adoption")
+    result = deepcopy(dict(previous))
+    result["allowed_paths"] = req["allowed_paths"]
+    result["prohibited_paths"] = req["prohibited_paths"]
+    result["acceptance_commands"] = req["acceptance_commands"]
+    result["risk"] = req["risk"]
+    result["work_loop"] = deepcopy(dict(work_loop))
+    result["updated_at"] = at or now_iso()
+    result["contract_hash"] = sha256_json({
+        "task_id": result["task_id"], "outcome": result["outcome"],
+        "acceptance": result["acceptance"],
+        "acceptance_commands": result.get("acceptance_commands") or [],
+        "risk": result["risk"], "side_effect": result["side_effect"],
+        "product_change_mode": _product_change_mode(result),
+        "execution_class": str(result.get("execution_class") or "LOCAL_REVERSIBLE"),
+        "allowed_paths": result["allowed_paths"],
+        "prohibited_paths": result["prohibited_paths"],
+        "worker_id": result["worker_id"], "enforcement": result["enforcement"],
+        "authorization": result["authorization"], "skill": result.get("skill"),
+        "lineage": result.get("lineage"),
+        "execution_envelope_hash": ((result.get("execution") or {}).get("envelope_hash")),
+        "work_contract_hash": (((result.get("work_loop") or {}).get("work_contract") or {}).get("hash")),
+    })
+    validate_state(result)
+    return result, {
+        "kind": "GROUNDING_REFRESH",
+        "risk": result["risk"], "allowed_paths": result["allowed_paths"],
+        "prohibited_paths": result["prohibited_paths"],
+        "action_boundary_changed": boundary_changed,
+    }
 
 
 def validate_state(state: Mapping[str, Any]) -> None:
