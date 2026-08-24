@@ -263,8 +263,15 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
-    args = parser(admin=admin).parse_args(argv)
+def parse_invocation(
+    argv: list[str] | None = None, *, admin: bool = False,
+) -> argparse.Namespace:
+    """Parse one canonical CLI invocation for preflight and execution."""
+    return parser(admin=admin).parse_args(argv)
+
+
+def execute(args: argparse.Namespace) -> int:
+    """Execute an already parsed invocation without reinterpreting argv."""
     if args.command == "contract":
         try:
             contract, contract_hash = load_contract(args.file)
@@ -459,6 +466,10 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
         # the command mutate `.buildos` even though BuildOS.inspect() is pure.
         if args.command != "inspect":
             os.record_control_action(args.command, outcome)
+
+
+def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
+    return execute(parse_invocation(argv, admin=admin))
 
 
 if __name__ == "__main__":

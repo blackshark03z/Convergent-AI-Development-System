@@ -12,11 +12,11 @@ import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.25"
-PACKAGE_ID = "build-os-v1.25-rc3-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.3.1-continuity-1.1.0-context-epoch-1.0.1"
-ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc3_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.1_continuity_v1.1.0_context_epoch_v1.0.1.zip"
-RELEASE_EVIDENCE_PATH = "docs/V1.25_RC3_REPORT.md"
-RELEASE_REFERENCE = "BUILDOS-V1.25-WORK-LOOP-RC3"
-EXPECTED_TEST_COUNT = 304
+PACKAGE_ID = "build-os-v1.25-rc4-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.3.1-continuity-1.1.0-context-epoch-1.0.1"
+ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc4_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.1_continuity_v1.1.0_context_epoch_v1.0.1.zip"
+RELEASE_EVIDENCE_PATH = "docs/V1.25_RC4_REPORT.md"
+RELEASE_REFERENCE = "BUILDOS-V1.25-WORK-LOOP-RC4"
+EXPECTED_TEST_COUNT = 307
 EXPECTED_TEST_MODULES = [
     "test_acceptance_contract.py", "test_adversarial.py", "test_candidate.py",
     "test_context_epoch.py", "test_continuity_sidecar.py", "test_execution_authority.py",
@@ -122,7 +122,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         "lifecycle_version": lifecycle.get("version"), "continuity_version": continuity.get("version"),
         "runtime_capability": runtime.get("identity"), "runtime_version": runtime.get("version"),
     }
-    if manifest.get("frozen_kernel_version") != "1.25-rc3": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
+    if manifest.get("frozen_kernel_version") != "1.25-rc4": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
     try:
         packaged_version = (root / "VERSION").read_text(encoding="ascii").strip()
     except OSError:
@@ -217,7 +217,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
             release_text = ""
         release_lines = release_text.splitlines()
         required_lines = {
-            0: "# Build OS v1.25 Work Loop RC3 report",
+            0: "# Build OS v1.25 Work Loop RC4 report",
             2: "Status: `CANDIDATE_AWAITING_INDEPENDENT_R3`",
             4: "Frozen kernel target:",
             5: f"`{kernel_commit}`",

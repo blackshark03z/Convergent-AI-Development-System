@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -20,37 +21,129 @@ ADMIN_FACADE = importlib.util.module_from_spec(ADMIN_SPEC)
 ADMIN_SPEC.loader.exec_module(ADMIN_FACADE)
 
 
+def worker_args(argv: list[str]):
+    return FACADE.parse_invocation(argv, admin=False)
+
+
+def admin_args(argv: list[str]):
+    return ADMIN_FACADE.parse_invocation(argv, admin=True)
+
+
+def preflight_args(root: Path | str, command: str):
+    return SimpleNamespace(root=Path(root), command=command)
+
+
 class FacadeOptInTests(unittest.TestCase):
     def test_unenrolled_project_skips_context_epoch_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             with patch.object(FACADE.subprocess, "run") as run:
-                self.assertEqual(FACADE._epoch_preflight(["--root", str(root), "validate"]), 0)
+                self.assertEqual(FACADE._epoch_preflight(worker_args([
+                    "--root", str(root), "validate", "--inspected-by", "reviewer",
+                ])), 0)
             run.assert_not_called()
 
-    def test_command_classification_consumes_root_values_before_selecting_subcommand(self) -> None:
-        for name in ("work", "contract", "inspect", "recover"):
-            with self.subTest(relative=name):
-                argv = ["--root", name, "inspect"]
-                self.assertEqual(FACADE._requested_command(argv), "inspect")
-                with patch.object(FACADE.subprocess, "run") as run:
-                    self.assertEqual(FACADE._epoch_preflight(argv), 0)
-                    self.assertEqual(FACADE._adoption_preflight(argv), 0)
-                    self.assertEqual(ADMIN_FACADE._admin_preflight(argv), 0)
-                run.assert_not_called()
-
+    def test_canonical_parser_resolves_both_root_syntaxes_and_command_named_paths(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
-            for name in ("work", "contract", "inspect", "recover"):
-                absolute = str(Path(raw) / name)
-                with self.subTest(absolute=absolute):
-                    self.assertEqual(
-                        FACADE._requested_command(["--root", absolute, "inspect"]),
-                        "inspect",
-                    )
+            base = Path(raw)
+            previous = Path.cwd()
+            os.chdir(base)
+            try:
+                for name in ("work", "contract", "inspect", "recover"):
+                    expected = (base / name).resolve()
+                    for root_value in (name, str(expected)):
+                        for argv in (
+                            ["--root", root_value, "inspect"],
+                            [f"--root={root_value}", "inspect"],
+                        ):
+                            with self.subTest(name=name, argv=argv):
+                                worker = worker_args(argv)
+                                admin = admin_args(argv)
+                                self.assertEqual(worker.command, "inspect")
+                                self.assertEqual(admin.command, "inspect")
+                                self.assertEqual(worker.root.resolve(), expected)
+                                self.assertEqual(admin.root.resolve(), expected)
+            finally:
+                os.chdir(previous)
 
     def test_option_values_after_the_command_cannot_reclassify_the_route(self) -> None:
         argv = ["--root", "project", "work", "--work-contract", "recover", "--grounding", "inspect"]
-        self.assertEqual(FACADE._requested_command(argv), "work")
+        self.assertEqual(worker_args(argv).command, "work")
+
+    def test_inspect_remains_read_only_route_for_every_root_syntax(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "inspect"
+            root.mkdir()
+            for argv in (
+                ["--root", str(root), "inspect"],
+                [f"--root={root}", "inspect"],
+            ):
+                with self.subTest(argv=argv), patch.object(FACADE.subprocess, "run") as run:
+                    worker = worker_args(argv)
+                    admin = admin_args(argv)
+                    self.assertEqual(FACADE._epoch_preflight(worker), 0)
+                    self.assertEqual(FACADE._adoption_preflight(worker), 0)
+                    self.assertEqual(ADMIN_FACADE._admin_preflight(admin), 0)
+                run.assert_not_called()
+
+    def test_enrolled_root_reaches_normal_and_admin_preflight_for_every_root_form(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            previous = Path.cwd()
+            success = SimpleNamespace(returncode=0, stdout="")
+            for name in ("work", "contract", "inspect", "recover"):
+                root = base / name
+                root.mkdir()
+                (root / ".buildos-policy.json").write_text(json.dumps({
+                    "execution_admission": {
+                        "enabled": True,
+                        "require_authority_record": True,
+                    },
+                }), encoding="utf-8")
+            os.chdir(base)
+            try:
+                for name in ("work", "contract", "inspect", "recover"):
+                    root = (base / name).resolve()
+                    for root_value in (name, str(root)):
+                        for root_option in (
+                            ["--root", root_value],
+                            [f"--root={root_value}"],
+                        ):
+                            argv = [*root_option, "work"]
+                            for facade in (FACADE, ADMIN_FACADE):
+                                with self.subTest(name=name, argv=argv, facade=facade.__name__), \
+                                     patch.object(FACADE.subprocess, "run", return_value=success) as run, \
+                                     patch.object(facade, "execute", return_value=0) as execute:
+                                    self.assertEqual(facade.run(argv), 0)
+                                self.assertEqual(run.call_count, 2)
+                                self.assertTrue(all(call.kwargs["cwd"] == root for call in run.call_args_list))
+                                parsed = execute.call_args.args[0]
+                                self.assertEqual(parsed.command, "work")
+                                self.assertEqual(parsed.root.resolve(), root)
+            finally:
+                os.chdir(previous)
+
+    def test_invalid_enrolled_root_fails_identically_for_both_root_syntaxes(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw) / "recover"
+            root.mkdir()
+            (root / ".buildos-policy.json").write_text(json.dumps({
+                "execution_admission": {
+                    "enabled": True,
+                    "require_authority_record": False,
+                },
+            }), encoding="utf-8")
+            for argv in (
+                ["--root", str(root), "work"],
+                [f"--root={root}", "work"],
+            ):
+                for facade in (FACADE, ADMIN_FACADE):
+                    with self.subTest(argv=argv, facade=facade.__name__), \
+                         patch.object(FACADE.subprocess, "run") as run, \
+                         patch.object(facade, "execute", return_value=0) as execute:
+                        self.assertEqual(facade.run(argv), 2)
+                    run.assert_not_called()
+                    execute.assert_not_called()
 
     def test_enrolled_project_runs_context_epoch_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -58,7 +151,7 @@ class FacadeOptInTests(unittest.TestCase):
             (root / ".buildos-policy.json").write_text(json.dumps({"context_epoch": {"enabled": True}}), encoding="utf-8")
             result = SimpleNamespace(returncode=0, stdout="")
             with patch.object(FACADE.subprocess, "run", return_value=result) as run:
-                self.assertEqual(FACADE._epoch_preflight(["--root", str(root), "validate"]), 0)
+                self.assertEqual(FACADE._epoch_preflight(preflight_args(root, "validate")), 0)
             self.assertIn("context_epoch.py", str(run.call_args.args[0][1]))
 
     def test_environment_override_is_explicit(self) -> None:
@@ -77,7 +170,7 @@ class FacadeOptInTests(unittest.TestCase):
             }), encoding="utf-8")
             result = SimpleNamespace(returncode=0, stdout="")
             with patch.object(FACADE.subprocess, "run", return_value=result) as run:
-                self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "bootstrap"]), 0)
+                self.assertEqual(FACADE._adoption_preflight(preflight_args(root, "bootstrap")), 0)
             commands = [str(call.args[0][1]) for call in run.call_args_list]
             self.assertTrue(any("execution_authority.py" in item for item in commands))
             self.assertTrue(any("project_lifecycle.py" in item for item in commands))
@@ -87,16 +180,14 @@ class FacadeOptInTests(unittest.TestCase):
             root = Path(raw)
             (root / ".buildos-policy.json").write_text(json.dumps({"context_epoch": {"enabled": True}}), encoding="utf-8")
             with patch.object(FACADE.subprocess, "run") as run:
-                self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "bootstrap"]), 0)
+                self.assertEqual(FACADE._adoption_preflight(preflight_args(root, "bootstrap")), 0)
             run.assert_not_called()
 
     def test_admin_facade_delegates_to_shared_admission_filter(self) -> None:
+        args = preflight_args("project", "adopt-existing-change")
         with patch.object(ADMIN_FACADE, "_adoption_preflight", return_value=7) as preflight:
-            self.assertEqual(
-                ADMIN_FACADE._admin_preflight(["--root", "project", "adopt-existing-change"]),
-                7,
-            )
-        preflight.assert_called_once()
+            self.assertEqual(ADMIN_FACADE._admin_preflight(args), 7)
+        preflight.assert_called_once_with(args)
 
     def test_admin_adoption_is_guarded_but_break_glass_abort_is_available(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -105,10 +196,10 @@ class FacadeOptInTests(unittest.TestCase):
                 "execution_admission": {"enabled": True, "require_authority_record": False},
             }), encoding="utf-8")
             self.assertEqual(
-                FACADE._adoption_preflight(["--root", str(root), "adopt-existing-change"]),
+                FACADE._adoption_preflight(preflight_args(root, "adopt-existing-change")),
                 2,
             )
-            self.assertEqual(FACADE._adoption_preflight(["--root", str(root), "abort"]), 0)
+            self.assertEqual(FACADE._adoption_preflight(preflight_args(root, "abort")), 0)
 
     def test_admin_new_revision_is_guarded_by_integrated_admission(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -117,7 +208,7 @@ class FacadeOptInTests(unittest.TestCase):
                 "execution_admission": {"enabled": True, "require_authority_record": False},
             }), encoding="utf-8")
             self.assertEqual(
-                FACADE._adoption_preflight(["--root", str(root), "new-revision"]),
+                FACADE._adoption_preflight(preflight_args(root, "new-revision")),
                 2,
             )
 
@@ -142,7 +233,7 @@ class FacadeOptInTests(unittest.TestCase):
             result = SimpleNamespace(returncode=0, stdout="")
             with patch.object(FACADE.subprocess, "run", return_value=result) as run:
                 self.assertEqual(
-                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    ADMIN_FACADE._admin_preflight(preflight_args(root, "new-revision")),
                     0,
                 )
             commands = [str(call.args[0][1]) for call in run.call_args_list]
@@ -161,7 +252,7 @@ class FacadeOptInTests(unittest.TestCase):
             failed = SimpleNamespace(returncode=2, stdout='{"status":"FAIL"}')
             with patch.object(FACADE.subprocess, "run", return_value=failed) as run:
                 self.assertEqual(
-                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    ADMIN_FACADE._admin_preflight(preflight_args(root, "new-revision")),
                     2,
                 )
             self.assertEqual(run.call_count, 1)
@@ -170,7 +261,7 @@ class FacadeOptInTests(unittest.TestCase):
             (root / ".buildos-policy.json").write_text(json.dumps(invalid_policy), encoding="utf-8")
             with patch.object(FACADE.subprocess, "run") as run:
                 self.assertEqual(
-                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    ADMIN_FACADE._admin_preflight(preflight_args(root, "new-revision")),
                     2,
                 )
             run.assert_not_called()
@@ -185,7 +276,7 @@ class FacadeOptInTests(unittest.TestCase):
             with patch.object(FACADE.subprocess, "run") as run:
                 for command in ("abort", "recover", "telemetry-ingest"):
                     self.assertEqual(
-                        ADMIN_FACADE._admin_preflight(["--root", str(root), command]),
+                        ADMIN_FACADE._admin_preflight(preflight_args(root, command)),
                         0,
                     )
             run.assert_not_called()
@@ -195,7 +286,7 @@ class FacadeOptInTests(unittest.TestCase):
             root = Path(raw)
             with patch.object(FACADE.subprocess, "run") as run:
                 self.assertEqual(
-                    ADMIN_FACADE._admin_preflight(["--root", str(root), "new-revision"]),
+                    ADMIN_FACADE._admin_preflight(preflight_args(root, "new-revision")),
                     0,
                 )
             run.assert_not_called()
