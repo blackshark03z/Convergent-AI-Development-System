@@ -15,11 +15,11 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "PACKAGE_MANIFEST.json"
 PACKAGE_STORE = Path(os.environ.get("BUILDOS_PACKAGE_STORE", r"D:\Youtube\_packages"))
-OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.24_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.0_continuity_v1.1.0_context_epoch_v1.0.1.zip"
+OUT = PACKAGE_STORE / "Senior_AI_Build_OS_Reusable_v1.25_rc1_work_loop_v1.0.0_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.0_continuity_v1.1.0_context_epoch_v1.0.1.zip"
 EXCLUDE = {"__pycache__", ".git", ".buildos", "_proof_tmp"}
 VALIDATION = ROOT / "PACKAGE_VALIDATION.json"
 CONTENTS = ROOT / "PACKAGE_CONTENTS.sha256"
-FROZEN_KERNEL_COMMIT = "955d0710fe0913d1fc0c37496bc217298e5e2299"
+FROZEN_KERNEL_COMMIT = "0cd8627fdb79d3df3f0f0575f2ddfd11cdbcad81"
 FROZEN_KERNEL = ROOT / "FROZEN_KERNEL.sha256"
 IDENTITY = ROOT / "scripts" / "package_identity.py"
 
@@ -62,6 +62,7 @@ def validate() -> dict:
         "manifest_valid": manifest.get("frozen_kernel_commit") == FROZEN_KERNEL_COMMIT
             and manifest.get("project_lifecycle_kit", {}).get("version") == "1.3.0"
             and manifest.get("execution_runtime", {}).get("version") == "1.0.3"
+            and manifest.get("work_loop", {}).get("version") == "1.0.0"
             and manifest.get("continuity_skill", {}).get("version") == "1.1.0"
             and manifest.get("runtime_context_epoch_capability", {}).get("identity") == "codex-app-server-context-epoch.v1"
             and manifest.get("runtime_context_epoch_capability", {}).get("version") == "1.0.1",

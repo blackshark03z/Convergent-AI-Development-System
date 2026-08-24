@@ -174,4 +174,3 @@ the full deterministic suite and independent release review.
   trust for legacy low-risk tasks is unchanged from v1.24.
 - Merge/deploy/runtime activation still needs the existing authorized
   external-effect path; close only reports readiness for the declared mode.
-

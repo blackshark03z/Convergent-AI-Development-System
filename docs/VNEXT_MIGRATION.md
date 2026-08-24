@@ -45,4 +45,3 @@ The migration is additive. To stop using Work Loop intake, finish or abort the
 active Work Loop task and start a fresh legacy task; do not delete generations,
 edit evidence or repoint `CURRENT`. Package rollback uses the prior immutable
 portable package and does not reinterpret vNext generations as legacy tasks.
-

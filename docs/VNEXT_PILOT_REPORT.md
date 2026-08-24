@@ -28,4 +28,3 @@ No token-price or model-usage reduction is claimed from fixtures. Production
 pilots must record handoff bytes, targeted reads, prompt input/cache metrics,
 human relay events, contradictions before/after mutation, decision count,
 executed/reused claims and late defect escapes.
-

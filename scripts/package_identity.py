@@ -11,8 +11,8 @@ import subprocess
 import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
-KERNEL_VERSION = "1.24"
-KERNEL_COMMIT = "955d0710fe0913d1fc0c37496bc217298e5e2299"
+KERNEL_VERSION = "1.25"
+KERNEL_COMMIT = "0cd8627fdb79d3df3f0f0575f2ddfd11cdbcad81"
 
 
 def invoke(path: Path) -> dict[str, object]:
@@ -39,7 +39,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         "lifecycle_version": lifecycle.get("version"), "continuity_version": continuity.get("version"),
         "runtime_capability": runtime.get("identity"), "runtime_version": runtime.get("version"),
     }
-    if manifest.get("frozen_kernel_version") != "1.24-candidate": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
+    if manifest.get("frozen_kernel_version") != "1.25-rc1": errors.append("MANIFEST_KERNEL_VERSION_MISMATCH")
     if manifest.get("frozen_kernel_commit") != KERNEL_COMMIT: errors.append("MANIFEST_KERNEL_COMMIT_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("version") != expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_SKILL_MISMATCH")
     if continuity.get("name") != "documentation-handoff-continuity" or not expected["continuity_version"]: errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")
@@ -49,6 +49,14 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
     execution_runtime = manifest.get("execution_runtime") or {}
     if execution_runtime.get("version") != "1.0.3" or execution_runtime.get("spec_schema") != "buildos.execution-spec.v1" or execution_runtime.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION":
         errors.append("MANIFEST_EXECUTION_RUNTIME_IDENTITY_MISMATCH")
+    work_loop = manifest.get("work_loop") or {}
+    if (
+        work_loop.get("version") != "1.0.0"
+        or work_loop.get("contract_schema") != "buildos.work-contract.v1"
+        or work_loop.get("grounding_schema") != "buildos.grounding-report.v1"
+        or work_loop.get("canonical_authority") != "CURRENT_SELECTED_IMMUTABLE_GENERATION"
+    ):
+        errors.append("MANIFEST_WORK_LOOP_IDENTITY_MISMATCH")
     registries = manifest.get("trusted_command_registries")
     if not isinstance(registries, dict):
         errors.append("MANIFEST_TRUSTED_COMMAND_REGISTRIES_INVALID")

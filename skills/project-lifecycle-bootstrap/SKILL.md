@@ -1,6 +1,6 @@
 ---
 name: project-lifecycle-bootstrap
-description: Establish or adopt the bounded Project Lifecycle Kit operating contract around Build OS v1.24 candidate. Use for greenfield setup, existing-project adoption, accepted-baseline reconciliation, integrated execution admission, quality-gate verification, and explicitly requested project retirement.
+description: Establish or adopt the bounded Project Lifecycle Kit operating contract around Build OS v1.25 Work Loop candidate. Use for greenfield setup, existing-project adoption, accepted-baseline reconciliation, integrated execution admission, quality-gate verification, and explicitly requested project retirement.
 ---
 
 # Project lifecycle bootstrap
@@ -48,10 +48,10 @@ fix relevant failures, integrated relevant validation, final acceptance, close.
 Re-run only after relevant change, failure, staleness or a final clean-pass
 requirement. Batch adjacent safe deterministic operations, never risky actions.
 
-Before a Worker takes over, use the public `scripts/ai.py` facade. A v1.24
+Before a Worker takes over, use the public `scripts/ai.py` facade. A v1.25
 policy enables integrated admission so this one path composes execution
 authority, project policy and context ownership before mutation. Use only its
-recorded v1.24 executor; legacy project CLIs and `.ai` state are
+recorded v1.25 executor; legacy project CLIs and `.ai` state are
 never fallback authorities, and version mismatch or ambiguity is a Tech Lead
 blocker. Archives and historical documents are provenance only.
 

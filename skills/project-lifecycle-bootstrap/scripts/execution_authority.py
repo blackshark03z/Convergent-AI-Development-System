@@ -9,8 +9,8 @@ from pathlib import Path
 import re
 import sys
 
-KERNEL_VERSION = "1.24"
-KERNEL_COMMIT = "955d0710fe0913d1fc0c37496bc217298e5e2299"
+KERNEL_VERSION = "1.25"
+KERNEL_COMMIT = "0cd8627fdb79d3df3f0f0575f2ddfd11cdbcad81"
 LIFECYCLE_KIT_VERSION = "1.3.0"
 CONTINUITY_SKILL_VERSION = "1.1.0"
 RECORD = ".buildos-authority.json"
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv == ["--version"]:
         print(json.dumps({"component": "execution-authority", "kernel_commit": KERNEL_COMMIT, "kernel_version": KERNEL_VERSION, "project_lifecycle_kit_version": LIFECYCLE_KIT_VERSION, "continuity_skill_version": CONTINUITY_SKILL_VERSION}, sort_keys=True))
         return 0
-    parser = argparse.ArgumentParser(description="Build OS v1.24 execution authority preflight")
+    parser = argparse.ArgumentParser(description="Build OS v1.25 execution authority preflight")
     parser.add_argument("--root", required=True)
     parser.add_argument("--package-root")
     parser.add_argument("command", choices=("write-record", "check"))

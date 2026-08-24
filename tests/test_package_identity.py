@@ -58,6 +58,22 @@ class PackageIdentityTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn("RUNTIME_CONTEXT_EPOCH_EXECUTABLE_IDENTITY_MISMATCH", payload["errors"])
 
+    def test_work_loop_schema_identity_is_checked(self):
+        with tempfile.TemporaryDirectory(prefix="package-work-loop-identity-") as raw:
+            root = Path(raw) / "package"
+            for name in ("PACKAGE_MANIFEST.json", "skills"):
+                source = PACKAGE / name
+                if source.is_dir(): shutil.copytree(source, root / name)
+                else:
+                    root.mkdir(parents=True, exist_ok=True); shutil.copy2(source, root / name)
+            manifest_path = root / "PACKAGE_MANIFEST.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["work_loop"]["grounding_schema"] = "wrong.grounding.v0"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            code, payload = invoke(root)
+            self.assertEqual(code, 2)
+            self.assertIn("MANIFEST_WORK_LOOP_IDENTITY_MISMATCH", payload["errors"])
+
     def test_package_effect_adapter_contract_must_be_content_bound(self):
         with tempfile.TemporaryDirectory(prefix="package-adapter-identity-") as raw:
             root = Path(raw) / "package"
