@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Worker facade with an opt-in context-epoch adoption preflight."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -10,24 +11,23 @@ PACKAGE = Path(__file__).resolve().parents[1]
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
-from buildos.cli import main
+from buildos.cli import execute, parse_invocation
 
 
-MUTATING_COMMANDS = {"record-commit", "validate", "rollover", "close"}
-
-
-def _requested_root(argv: list[str]) -> Path:
-    for index, value in enumerate(argv[:-1]):
-        if value == "--root":
-            return Path(argv[index + 1]).resolve()
-    return Path.cwd().resolve()
-
-
-def _requested_command(argv: list[str]) -> str | None:
-    known = {"bootstrap", "status", "next", "record-commit", "validate", "rollover", "close", "recover"}
-    return next((value for value in argv if value in known), None)
-
-
+EXECUTION_AUTHORITY_CREATORS = {
+    "work", "admit", "bootstrap", "continue-task", "adopt-existing-change",
+}
+EXECUTION_AUTHORITY_MUTATORS = {
+    "record-commit", "validate", "rollover", "close", "block-for-source-fix",
+    "report-blocker", "replan", "effect", "review", "new-revision",
+}
+BREAK_GLASS_COMMANDS = {"abort", "recover"}
+DIAGNOSTIC_TELEMETRY_COMMANDS = {"status", "next", "assurance-plan", "telemetry-ingest"}
+ADMISSION_COMMANDS = EXECUTION_AUTHORITY_CREATORS | EXECUTION_AUTHORITY_MUTATORS
+MUTATING_COMMANDS = {
+    *EXECUTION_AUTHORITY_MUTATORS,
+    "work", "continue-task",
+}
 def _context_epoch_preflight_enabled(root: Path) -> bool:
     """Enable the adoption-layer guard only for an explicitly enrolled project."""
     override = os.environ.get("BUILDOS_CONTEXT_EPOCH_PREFLIGHT", "").strip().lower()
@@ -35,18 +35,59 @@ def _context_epoch_preflight_enabled(root: Path) -> bool:
         return True
     if override in {"0", "false", "no", "off"}:
         return False
-    try:
-        policy = json.loads((root / ".buildos-policy.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    context_epoch = policy.get("context_epoch") if isinstance(policy, dict) else None
+    context_epoch = _policy(root).get("context_epoch")
     return isinstance(context_epoch, dict) and context_epoch.get("enabled") is True
 
 
-def _epoch_preflight(argv: list[str]) -> int:
-    if _requested_command(argv) not in MUTATING_COMMANDS:
+def _policy(root: Path) -> dict:
+    try:
+        value = json.loads((root / ".buildos-policy.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _integrated_admission_enabled(root: Path) -> bool:
+    value = _policy(root).get("execution_admission")
+    return isinstance(value, dict) and value.get("enabled") is True
+
+
+def _run_preflight(command: list[str], *, root: Path) -> int:
+    proc = subprocess.run(command, cwd=root, text=True, encoding="utf-8", errors="replace", capture_output=True)
+    if proc.returncode:
+        print(proc.stdout.strip() or json.dumps({
+            "status": "ACTION_REQUIRED", "message": "integrated execution admission failed",
+        }, sort_keys=True))
+    return proc.returncode
+
+
+def _adoption_preflight(args: argparse.Namespace) -> int:
+    """Compose opt-in adoption checks behind the one public facade."""
+    command = args.command
+    if command not in ADMISSION_COMMANDS:
         return 0
-    root = _requested_root(argv)
+    root = args.root.resolve()
+    if not _integrated_admission_enabled(root):
+        return 0
+    policy = _policy(root).get("execution_admission") or {}
+    if policy.get("require_authority_record") is not True:
+        print(json.dumps({
+            "status": "ACTION_REQUIRED",
+            "message": "execution_admission.require_authority_record must remain true",
+        }, sort_keys=True))
+        return 2
+    authority = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "execution_authority.py"
+    code = _run_preflight([sys.executable, str(authority), "--root", str(root), "check"], root=root)
+    if code:
+        return code
+    lifecycle = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "project_lifecycle.py"
+    return _run_preflight([sys.executable, str(lifecycle), "--root", str(root), "check"], root=root)
+
+
+def _epoch_preflight(args: argparse.Namespace) -> int:
+    if args.command not in MUTATING_COMMANDS:
+        return 0
+    root = args.root.resolve()
     if not _context_epoch_preflight_enabled(root):
         return 0
     script = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "context_epoch.py"
@@ -57,6 +98,10 @@ def _epoch_preflight(argv: list[str]) -> int:
     return proc.returncode
 
 
+def run(argv: list[str] | None = None) -> int:
+    args = parse_invocation(argv, admin=False)
+    return _adoption_preflight(args) or _epoch_preflight(args) or execute(args)
+
+
 if __name__ == "__main__":
-    preflight = _epoch_preflight(sys.argv[1:])
-    raise SystemExit(preflight or main(admin=False))
+    raise SystemExit(run(sys.argv[1:]))

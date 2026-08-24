@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildos.invalid/schemas/decision-resolution.v1.json",
+  "title": "Build OS authority Decision resolution",
+  "type": "object",
+  "required": [
+    "schema", "request_id", "request_sha256", "contract_hash",
+    "claim_id", "decision_type", "decision", "authority"
+  ],
+  "properties": {
+    "schema": {"const": "buildos.decision-resolution.v1"},
+    "request_id": {"$ref": "#/$defs/id"},
+    "request_sha256": {"$ref": "#/$defs/sha256"},
+    "contract_hash": {"$ref": "#/$defs/sha256"},
+    "claim_id": {"$ref": "#/$defs/id"},
+    "decision_type": {
+      "enum": [
+        "PRODUCT_INTENT", "CANONICAL_ARCHITECTURE", "BUSINESS_CONSTRAINT",
+        "CANONICAL_PREMISE", "OPEN_QUESTION"
+      ]
+    },
+    "decision": {"enum": ["CONFIRM_CANONICAL", "PROVIDE_DECISION"]},
+    "authority": {
+      "type": "object",
+      "required": ["role", "identity", "authority_reference", "decided_at"],
+      "properties": {
+        "role": {"enum": ["OWNER", "TECH_LEAD"]},
+        "identity": {"type": "string", "minLength": 1, "maxLength": 256},
+        "authority_reference": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "decided_at": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

@@ -15,7 +15,10 @@ from typing import Any, Iterable, Mapping
 import uuid
 
 from .model import canonical_bytes
-from .store import RecoveryRequired, atomic_json, atomic_write, publish_immutable
+from .store import (
+    RecoveryRequired, atomic_json, atomic_write, publish_immutable,
+    safe_repository_descendant,
+)
 
 
 SCHEMA = "buildos.telemetry.v1"
@@ -449,7 +452,10 @@ def _desktop_header_fingerprint(
 def _binding_file(root: Path | str, state: Mapping[str, Any]) -> Path:
     identity = _binding_identity(state)
     key = hashlib.sha256(canonical_bytes(identity)).hexdigest()
-    return Path(root).resolve() / ".buildos" / "runtime" / "telemetry_bindings" / f"{key}.json"
+    return safe_repository_descendant(
+        root, Path(".buildos") / "runtime" / "telemetry_bindings" / f"{key}.json",
+        label="telemetry binding target",
+    )
 
 
 def _read_binding(root: Path | str, state: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -679,7 +685,10 @@ def _unbound(reason: str, *, candidates: Iterable[str] = ()) -> dict[str, Any]:
 def _previous_epoch_bindings(root: Path | str, state: Mapping[str, Any]) -> dict[int, str]:
     identity = _binding_identity(state)
     root_path = Path(root).resolve()
-    directory = root_path / ".buildos" / "runtime" / "telemetry_bindings"
+    directory = safe_repository_descendant(
+        root_path, Path(".buildos") / "runtime" / "telemetry_bindings",
+        label="telemetry binding directory",
+    )
     if not directory.is_dir():
         return {}
     result: dict[int, str] = {}
@@ -1144,14 +1153,21 @@ def _load_source(path: Path, source: str) -> list[dict[str, Any]]:
     return records
 
 
-def _ledger(root: Path | str) -> Path:
-    path = Path(root).resolve() / ".buildos" / "runtime" / "telemetry.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _ledger(root: Path | str, *, create_parent: bool = False) -> Path:
+    path = safe_repository_descendant(
+        root, Path(".buildos") / "runtime" / "telemetry.jsonl",
+        label="telemetry event target",
+    )
+    if create_parent:
+        path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _baseline_file(root: Path | str) -> Path:
-    path = Path(root).resolve() / ".buildos" / "runtime" / "telemetry_baselines.json"
+    path = safe_repository_descendant(
+        root, Path(".buildos") / "runtime" / "telemetry_baselines.json",
+        label="telemetry baseline target",
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -1215,7 +1231,6 @@ def read(root: Path | str) -> tuple[list[dict[str, Any]], list[str]]:
 
 
 def ingest(root: Path | str, state: Mapping[str, Any], payloads: Iterable[Mapping[str, Any]], *, source: str) -> int:
-    ledger = _ledger(root)
     existing, ledger_errors = read(root)
     if ledger_errors:
         raise TelemetryError(f"telemetry ledger requires repair before append: {ledger_errors[0]}")
@@ -1248,6 +1263,7 @@ def ingest(root: Path | str, state: Mapping[str, Any], payloads: Iterable[Mappin
     ]
     if not fresh:
         return 0
+    ledger = _ledger(root, create_parent=True)
     with ledger.open("ab") as handle:
         for item in fresh:
             handle.write((json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"))

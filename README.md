@@ -1,13 +1,19 @@
-# Build OS v1.22 candidate
+# Build OS vNext release candidate
 
-This is the isolated candidate produced for `BUILD-OS-FINAL-ULTRA-CANDIDATE`.
-It is a small, repository-independent control plane.  Point the external
-facade at a product repository; do not copy generated control state into the
-product source tree:
+vNext evolves the v1.24 transactional candidate into an evidence-carrying Work
+Loop:
+
+`Tech Lead -> Work Contract -> Build OS -> Worker grounding -> implementation -> proportional assurance -> ship`
+
+Point the repository-independent facade at a product repository; do not copy
+generated control state into product source:
 
 ```powershell
-python D:\path\to\build-os-v122-candidate\scripts\ai.py --root D:\path\to\product bootstrap `
-  --task-id TASK-001 --outcome "the change is correct" --allow src/app.py
+python scripts/ai.py --root D:\path\to\product contract `
+  --file .\WORK_CONTRACT.json --view worker-capsule
+
+python scripts/ai.py --root D:\path\to\product work `
+  --work-contract .\WORK_CONTRACT.json --grounding .\GROUNDING_REPORT.json
 ```
 
 The candidate reserves `.buildos/` in the target repository and adds that
@@ -18,17 +24,39 @@ policy uses the field-tested defaults.
 
 ## Worker flow
 
-The normal Worker facade exposes eight commands:
+The normal vNext surface is deliberately small:
 
-`bootstrap`, `status`, `next`, `record-commit`, `validate`, `rollover`,
-`close`, and `recover`.
+- `contract` validates typed handoff/grounding evidence without writes.
+- `work` starts or deterministically advances the normal lifecycle.
+- `inspect` reports current Git/lifecycle/packet truth without any writes.
 
-The administrative facade additionally exposes `new-revision`, `abort`, and
-`telemetry-ingest`.  A rollover always names a fresh disposable
+After implementation is committed, `work --assure` records the commit, runs
+the bound proportional assurance and closes when safe. It never auto-dispatches
+an external effect or adopts dirty/uncommitted product work. See
+[docs/WORK_CONTRACT.md](docs/WORK_CONTRACT.md),
+[docs/VNEXT_WORK_LOOP_ARCHITECTURE.md](docs/VNEXT_WORK_LOOP_ARCHITECTURE.md),
+[docs/VNEXT_MIGRATION.md](docs/VNEXT_MIGRATION.md), and
+[docs/VNEXT_PILOT_REPORT.md](docs/VNEXT_PILOT_REPORT.md).
+
+An open canonical Decision Request survives every same-Contract grounding
+refresh. The named authority may supply one trusted exact-request
+`--decision-resolution`, or issue the next trusted Contract revision linked to
+the active Contract and request hash. Both paths preserve immutable Decision
+history; neither grants provider dispatch.
+
+The detailed v1.24 commands remain compatibility and exceptional-operation
+surfaces:
+
+`admit`, `bootstrap`, `status`, `next`, `record-commit`, `validate`, `rollover`,
+`close`, `recover`, `block-for-source-fix`, `continue-task`, `report-blocker`,
+`replan`, `effect`, `review`, and `assurance-plan`.
+
+The administrative facade additionally exposes `adopt-existing-change`,
+`new-revision`, `abort`, and `telemetry-ingest`. A rollover always names a fresh disposable
 `--thread-id`; this makes a retry distinguishable from a new epoch. Rollover is
 a rare compact-failure fallback, not a normal request-count rhythm.
 
-Typical flow is:
+The legacy-compatible flow is:
 
 1. `bootstrap` once (one kernel action).
 2. Implement and commit product files with ordinary Git.
@@ -37,9 +65,71 @@ Typical flow is:
    reviewer, reference, and a distinct rollback/recovery check.
 5. `close` after evidence is verified.
 
+For expensive local work, set `--execution-class LOCAL_HIGH_COST`; for any
+provider-side action, set `--execution-class EXTERNAL_EFFECT`. Both require an
+`--execution-spec` that compiles assumptions, capabilities, field authority,
+provider constraints, plan/recovery families, trusted argv commands and
+acceptance claims before canonical task creation. Preview it without mutation:
+
+```powershell
+python scripts/ai.py --root D:\path\to\product admit `
+  --task-id TASK-001 --outcome "the change is correct" --accept "behavior passes" `
+  --execution-class LOCAL_HIGH_COST --execution-spec .\EXECUTION_SPEC.json `
+  --allow src\app.py
+```
+
+The enhanced flow is `Prevent -> Bound -> Execute -> Reconcile -> Verify`.
+Repeated blocker families invalidate the plan, unresolved provider effects
+block assurance, and unchanged claim dependencies may reuse intact immutable
+evidence while FINAL claims still execute. See
+[docs/EXECUTION_RUNTIME.md](docs/EXECUTION_RUNTIME.md) and
+[docs/VNEXT_ARCHITECTURE_AUDIT.md](docs/VNEXT_ARCHITECTURE_AUDIT.md).
+
+Validation freezes one exact product HEAD/tree before any check runs. Every
+executed check must leave that product identity unchanged; ignored `.buildos/`
+test output remains permitted. Evidence and assurance bind the frozen identity,
+and close may refresh only to a clean tree-equivalent descendant. In R3,
+ordinary unchanged `AFFECTED` acceptance/security/QC claims remain reusable,
+but `ROLLBACK_RECOVERY` always executes in the current revision.
+
+Replan keeps the immutable task-base commit as its trust source while recording
+the current allowed descendant/dirty product bytes separately as
+`IN_PROGRESS_UNADOPTED`. It can therefore preserve valid work in place without
+pretending that WIP is a trusted registry or adopted product commit. External
+effects bind real provider-request, canonical-input and adapter implementation
+artifacts; those bytes are rechecked before provider authority changes.
+
+An explicitly runtime-only task uses `--no-source-delta`. It captures the
+baseline product HEAD at bootstrap and may validate directly from `ACTIVE`
+only when that exact HEAD remains current, the product tree is clean, and
+`validate` receives a durable `--runtime-acceptance-reference`. Its canonical
+state and evidence say `NO_SOURCE_DELTA`; `product_commit` remains empty. Empty
+or synthetic commits, baseline-as-new-commit recording, and product drift all
+fail closed. Ordinary write-capable tasks still require `record-commit` and
+`PRODUCT_COMMITTED` before assurance.
+
+R3 rules are unchanged: owner authorization, an independent reviewer and
+reference, and a distinct rollback/recovery check remain mandatory. For a
+runtime-only task the immutable review scope is
+`NO_SOURCE_DELTA_RUNTIME_ASSURANCE`, so the review verifies runtime/lifecycle
+proof and does not claim a nonexistent product diff.
+
 There is no `reopen`.  A product change after assurance is preserved as proof
 of the prior revision and requires `new-revision`; a legitimate tree-equivalent
-descendant is simply recorded during close.
+descendant is simply recorded during close. For enrolled projects,
+`new-revision` passes the same execution-authority and project-policy admission
+as other authority mutations, plus context ownership when enabled. `abort` and
+`recover` remain break-glass operations; status/next/assurance-plan and
+telemetry ingestion remain diagnostic or observational.
+
+A live task blocked by a defect in its source system uses
+`block-for-source-fix`. This releases its lease without rewriting the event as
+an ordinary abort. After a bounded repair task is complete, `continue-task`
+creates a fresh identity with immutable lineage to the released task; it never
+resurrects that task. An already-existing clean Git change can be enrolled only
+through the admin `adopt-existing-change` path and is permanently labelled
+`EXTERNAL_PREEXISTING`, so Build OS does not claim to have supervised creation
+of that commit.
 
 ## Authority and crash model
 
@@ -61,8 +151,10 @@ atomicity.  POSIX directory flush is best effort; the Windows build does not
 claim sudden power-loss durability.
 
 Git proves commit/tree identity, ancestry, cleanliness, and changed paths.  It
-does not prove authorization, lifecycle, reviewer independence, telemetry, or
-context interception.  The Desktop governor is therefore explicitly
+does not prove human authorship, authorization, lifecycle, reviewer
+independence, telemetry, or context interception. Project Git-bound commands
+are therefore labelled `PROJECT_POLICY_TRUSTED`; historical `OWNER_AUTHORED`
+input is only a compatibility alias. The Desktop governor is explicitly
 SUPERVISORY/BOUNDARY: it makes the next action cheap and truthful, but cannot
 intercept an already-issued model request.
 
@@ -145,13 +237,27 @@ remains usable on its own.
 Run `adoption/initialize.ps1` to create a project policy and enroll a product
 repository. The generated policy sets `context_epoch.enabled` to `true`; only
 then does `scripts/ai.py` run the context-epoch preflight before mutating
-lifecycle actions. Unenrolled projects retain the original eight-command
-Worker behaviour. Set `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
+lifecycle actions. Unenrolled projects retain the same kernel lifecycle rules,
+including the two new public release/continuation commands. Set
+`BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` only for a deliberate
 one-off opt-in, or `=0` to override the policy for an isolated diagnostic run.
 
-See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md) and
-[docs/CONTEXT_EPOCH_RUNTIME.md](docs/CONTEXT_EPOCH_RUNTIME.md) for the
-adoption contract and runtime boundaries.
+New v1.24 policies also enable `execution_admission`: the normal Worker facade
+composes package authority, project-policy compatibility, context ownership
+where an existing epoch is required, and kernel execution-envelope admission.
+These are separate checks behind one public workflow, not one interchangeable
+admission object. Administrative recovery stays separately scoped;
+`adopt-existing-change` uses the same adoption preflight while `abort` and
+`recover` remain available to repair a broken adoption. Use
+`-QualityGateArgvJson` during adoption so gates run without a shell. The legacy
+`-QualityGate` string remains a clearly labeled compatibility path for existing
+single-owner projects.
+
+See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md),
+[docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md](docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md),
+[docs/SIDE_EFFECT_SPEC_CONTRACT.md](docs/SIDE_EFFECT_SPEC_CONTRACT.md), and
+[docs/CONTEXT_EPOCH_RUNTIME.md](docs/CONTEXT_EPOCH_RUNTIME.md) for the adoption
+contract and runtime boundaries.
 
 Run the deterministic proof suite from this directory:
 
@@ -159,5 +265,5 @@ Run the deterministic proof suite from this directory:
 python scripts/self_test.py
 ```
 
-The candidate is ready for one real field benchmark only after the final
-commit and clean-tree checks described in `docs/CANDIDATE_REPORT.md`.
+The candidate is ready for a real field benchmark only after the final
+commit and clean-tree checks described in `docs/V1.23_CANDIDATE_REPORT.md`.

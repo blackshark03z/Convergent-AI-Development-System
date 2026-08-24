@@ -59,6 +59,15 @@ def policy(*, profile: str = "small-tool", custom_paths: bool = False, modules: 
     }
 
 
+def trusted_policy() -> dict:
+    value = policy()
+    value["project_lifecycle"]["quality_gates"] = [{
+        "id": "python-smoke", "argv": [sys.executable, "-c", "print('trusted quality gate')"],
+        "provenance": "PROJECT_POLICY_TRUSTED",
+    }]
+    return value
+
+
 @contextmanager
 def fixture(name: str = "lifecycle"):
     with tempfile.TemporaryDirectory(prefix=f"{name}-") as raw:
@@ -94,6 +103,22 @@ class ProjectLifecycleTests(unittest.TestCase):
             self.assertEqual(result["quality_gates"][0]["exit_code"], 0)
             self.assertEqual(invoke(root, "check")[1]["status"], "PASS")
 
+    def test_trusted_argv_gate_avoids_shell_and_preserves_provenance(self):
+        with fixture("trusted-gate") as root:
+            self.write_policy(root, trusted_policy())
+            gate = invoke(root, "bootstrap", "--mode", "greenfield", "--verify-gates")[1]["quality_gates"][0]
+            self.assertEqual(gate["execution"], "ARGV_NO_SHELL")
+            self.assertEqual(gate["provenance"], "PROJECT_POLICY_TRUSTED")
+            self.assertEqual(gate["argv"][0], sys.executable)
+
+    def test_legacy_owner_authored_gate_normalizes_to_project_policy_trust(self):
+        with fixture("legacy-owner-gate") as root:
+            value = trusted_policy()
+            value["project_lifecycle"]["quality_gates"][0]["provenance"] = "OWNER_AUTHORED"
+            self.write_policy(root, value)
+            gate = invoke(root, "bootstrap", "--mode", "greenfield", "--verify-gates")[1]["quality_gates"][0]
+            self.assertEqual(gate["provenance"], "PROJECT_POLICY_TRUSTED")
+
     def test_existing_adoption_preserves_docs_and_marks_unknown(self):
         with fixture("existing") as root:
             (root / "README.md").write_text("# Existing reality\n", encoding="utf-8")
@@ -119,11 +144,29 @@ class ProjectLifecycleTests(unittest.TestCase):
         no_study = policy(); no_study["documentation_handoff"]["continuity"]["field_study"] = "DISABLED"; cases.append((no_study, "Field Study"))
         no_map = policy(); del no_map["documentation_handoff"]["category_authorities"]["API_CONFIG_SCHEMA"]; cases.append((no_map, "category_authorities"))
         no_boundary = policy(); no_boundary["project_lifecycle"]["safety_boundaries"]["data"] = ""; cases.append((no_boundary, "safety_boundaries.data"))
+        weak_admission = policy(); weak_admission["execution_admission"] = {"enabled": True, "require_authority_record": False}; cases.append((weak_admission, "cannot weaken"))
         for value, expected in cases:
             with self.subTest(expected=expected), fixture("reject") as root:
                 self.write_policy(root, value)
                 code, result = invoke(root, "check", check=False)
                 self.assertEqual(code, 2); self.assertIn(expected, result["message"])
+
+    def test_enabled_side_effect_contract_is_validated_by_policy_check(self):
+        with fixture("side-effect") as root:
+            value = policy()
+            value["side_effect_contract"] = {"enabled": True, "path": "SIDE_EFFECT_CONTRACT.json"}
+            template = (PACKAGE / "templates" / "project-lifecycle" / "SIDE_EFFECT_CONTRACT.json.tmpl").read_text(encoding="utf-8")
+            (root / "SIDE_EFFECT_CONTRACT.json").write_text(template, encoding="utf-8")
+            self.write_policy(root, value)
+            checked = invoke(root, "check")[1]
+            self.assertEqual(checked["side_effect_contract"]["status"], "PASS")
+
+            contract = json.loads((root / "SIDE_EFFECT_CONTRACT.json").read_text(encoding="utf-8"))
+            contract["dangerous_actions"][0]["unknown_is_barrier"] = False
+            (root / "SIDE_EFFECT_CONTRACT.json").write_text(json.dumps(contract), encoding="utf-8")
+            code, failed = invoke(root, "check", check=False)
+            self.assertEqual(code, 2)
+            self.assertIn("unknown a queue barrier", failed["message"])
 
     def test_reconciliation_distinguishes_closed_candidate_from_accepted_baseline(self):
         with fixture("reconcile") as root:
@@ -203,7 +246,7 @@ class ProjectLifecycleTests(unittest.TestCase):
 class ProjectLifecyclePackageTests(unittest.TestCase):
     def test_package_contains_lifecycle_assets_and_kernel_is_unchanged(self):
         manifest = json.loads((PACKAGE / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["project_lifecycle_kit"]["version"], "1.1.0")
+        self.assertEqual(manifest["project_lifecycle_kit"]["version"], "1.3.1")
         self.assertEqual(manifest["continuity_skill"]["version"], "1.1.0")
         self.assertTrue((PACKAGE / "templates" / "project-lifecycle" / "PROJECT_STATUS.md.tmpl").is_file())
         self.assertTrue((PACKAGE / "docs" / "PROJECT_LIFECYCLE_KIT.md").is_file())

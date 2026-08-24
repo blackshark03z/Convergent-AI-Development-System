@@ -1,0 +1,176 @@
+{
+  "schema": "buildos.execution-spec.v1",
+  "plan_id": "replace-with-plan-id",
+  "cost_class": "EXTERNAL",
+  "assumptions": [
+    {
+      "id": "canonical_input_is_complete",
+      "statement": "The canonical input contains every field required by the plan.",
+      "status": "PROVEN",
+      "critical": true,
+      "evidence": "Replace with immutable input validation evidence.",
+      "fallback": null
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "local_python",
+      "status": "AVAILABLE",
+      "source": "DETERMINISTIC_PROBE",
+      "evidence": "Replace with version/probe evidence.",
+      "constraints": {"major": 3}
+    },
+    {
+      "id": "provider_api",
+      "status": "RESTRICTED",
+      "source": "PROVIDER_CONTRACT",
+      "evidence": "Replace with authenticated provider capability evidence.",
+      "constraints": {"max_references": 2, "supports_idempotency_key": true}
+    }
+  ],
+  "authorities": [
+    {
+      "field": "canonical_input",
+      "owner": "product manifest",
+      "owner_kind": "PRODUCT",
+      "mode": "CANONICAL",
+      "evidence": "Replace with canonical path/schema reference."
+    },
+    {
+      "field": "execution_request",
+      "owner": "deterministic request compiler",
+      "owner_kind": "DETERMINISTIC_COMPILER",
+      "mode": "DERIVED",
+      "evidence": "Replace with compiler identity."
+    },
+    {
+      "field": "provider_result",
+      "owner": "provider adapter",
+      "owner_kind": "PROVIDER",
+      "mode": "EXECUTOR",
+      "evidence": "Replace with provider contract reference."
+    }
+  ],
+  "commands": [
+    {
+      "id": "focused_contract",
+      "argv": ["python", "-c", "print('replace with focused contract test')"],
+      "provenance": "PROJECT_POLICY_TRUSTED",
+      "source": {
+        "kind": "PROJECT_BASELINE",
+        "path": ".buildos-command-registry.json",
+        "sha256": "Replace with the SHA-256 of the tracked command registry."
+      }
+    },
+    {
+      "id": "final_assurance",
+      "argv": ["python", "-c", "print('replace with final assurance')"],
+      "provenance": "PROJECT_POLICY_TRUSTED",
+      "source": {
+        "kind": "PROJECT_BASELINE",
+        "path": ".buildos-command-registry.json",
+        "sha256": "Replace with the SHA-256 of the tracked command registry."
+      }
+    },
+    {
+      "id": "rollback_proof",
+      "argv": ["python", "-c", "print('replace with rollback or recovery proof')"],
+      "provenance": "PROJECT_POLICY_TRUSTED",
+      "source": {
+        "kind": "PROJECT_BASELINE",
+        "path": ".buildos-command-registry.json",
+        "sha256": "Replace with the SHA-256 of the tracked command registry."
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "focused_behavior",
+      "description": "The affected product behavior satisfies its criterion.",
+      "command_id": "focused_contract",
+      "dependencies": ["src/**", "tests/**"],
+      "mode": "AFFECTED",
+      "role": "ACCEPTANCE",
+      "acceptance": ["Replace with the exact bootstrap acceptance criterion."]
+    },
+    {
+      "id": "final_system_assurance",
+      "description": "The final integrated system remains acceptable.",
+      "command_id": "final_assurance",
+      "dependencies": ["*"],
+      "mode": "FINAL",
+      "role": "ACCEPTANCE",
+      "acceptance": ["Replace with the exact bootstrap acceptance criterion."]
+    },
+    {
+      "id": "recovery_remains_valid",
+      "description": "Rollback or recovery remains valid for the admitted operation.",
+      "command_id": "rollback_proof",
+      "dependencies": ["src/**", "tests/**"],
+      "mode": "FINAL",
+      "role": "ROLLBACK_RECOVERY",
+      "acceptance": ["Replace with the exact bootstrap acceptance criterion."]
+    }
+  ],
+  "effects": [
+    {
+      "id": "provider_submission",
+      "idempotency": "IDEMPOTENT_WITH_KEY",
+      "idempotency_key": "Replace with a stable provider-supported effect key.",
+      "no_effect_predicate": "canonical_no_effect",
+      "provider_capability": "provider_api",
+      "deadline_seconds": 300,
+      "required": true,
+      "effect_input": {
+        "kind": "PROJECT_ARTIFACT",
+        "path": "effect-input.json",
+        "sha256": "Replace with the SHA-256 of the canonical request artifact."
+      },
+      "adapter_contract": {
+        "kind": "PROJECT_BASELINE",
+        "path": "effect-adapter-contract.json",
+        "sha256": "Replace with the SHA-256 of the baseline adapter contract."
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile_request",
+      "kind": "LOCAL",
+      "after": [],
+      "requires_assumptions": ["canonical_input_is_complete"],
+      "requires_capabilities": ["local_python"],
+      "capability_constraints": {"local_python": {"major": 3}},
+      "reads": ["canonical_input"],
+      "writes": ["execution_request"],
+      "effect_id": null,
+      "failure_families": ["assumption_invalid"]
+    },
+    {
+      "id": "dispatch_provider",
+      "kind": "EXTERNAL_EFFECT",
+      "after": ["compile_request"],
+      "requires_assumptions": ["canonical_input_is_complete"],
+      "requires_capabilities": ["provider_api"],
+      "capability_constraints": {"provider_api": {"max_references": 2, "supports_idempotency_key": true}},
+      "reads": ["execution_request"],
+      "writes": ["provider_result"],
+      "effect_id": "provider_submission",
+      "failure_families": ["provider_uncertain"]
+    }
+  ],
+  "recovery": [
+    {
+      "family": "assumption_invalid",
+      "disposition": "REPLAN",
+      "max_bounded_occurrences": 0,
+      "evidence_required": true
+    },
+    {
+      "family": "provider_uncertain",
+      "disposition": "RECONCILE",
+      "max_bounded_occurrences": 1,
+      "evidence_required": true
+    }
+  ]
+}

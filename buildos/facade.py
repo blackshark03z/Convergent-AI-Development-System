@@ -1,6 +1,7 @@
 """Small orchestration facade over the pure model and transactional store."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -10,7 +11,21 @@ import time
 import uuid
 from typing import Any, Iterable, Mapping, Sequence
 
-from . import git_adapter
+from . import execution, git_adapter
+from .grounding import (
+    canonical_grounding_bytes,
+    decision_history_entry,
+    derive_action_rights,
+    grounding_claim_freshness,
+    grounding_hash,
+    load_decision_resolution,
+    load_grounding_report,
+    merge_decision_history,
+    task_request_from_work_loop,
+    validate_contract_supersession,
+    verify_work_loop_evidence,
+    work_loop_binding,
+)
 from .governor import decide as governor_decide, load_policy
 from .model import (
     KernelError,
@@ -18,11 +33,15 @@ from .model import (
     now_iso,
     sha256_bytes,
     transition_abort,
+    transition_adopt_existing_change,
+    transition_block_for_source_fix,
     transition_close,
+    transition_grounding_refresh,
     transition_new_revision,
     transition_record_commit,
     transition_rollover,
     transition_validate,
+    validate_in_progress_product_state,
     validate_task_request,
 )
 from .store import (
@@ -33,18 +52,163 @@ from .store import (
     commit_candidate,
     confirm_committed,
     failpoint,
+    ensure_layout,
+    find_task_revision,
     operation_id,
     paths,
     publish_immutable,
     read_current,
     recover as recover_store,
+    safe_repository_descendant,
+    task_id_exists,
     validate_operation_id,
 )
-from .telemetry import auto_refresh, ingest as telemetry_ingest
+from .telemetry import auto_refresh, ingest as telemetry_ingest, summarize as summarize_telemetry
+from .work_contract import canonical_contract_bytes, load_contract, require_trusted_contract_transport
 
 
 SKILL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MAX_EVIDENCE_OUTPUT = 16_000
+RELEASED_TASK_PHASES = {"CLOSED", "ABORTED", "BLOCKED_SOURCE_FIX"}
+
+
+def _work_loop_evidence_reference(task_id: str, kind: str, digest: str) -> dict[str, str]:
+    rel = Path(".buildos") / "evidence" / task_id / "r001" / f"{kind}-{digest[:24]}.json"
+    return {"path": rel.as_posix(), "sha256": digest}
+
+
+def _publish_work_loop_document(
+    root: Path, reference: Mapping[str, str], data: bytes, *, configured_failures: str | None,
+) -> None:
+    if hashlib.sha256(data).hexdigest() != reference["sha256"]:
+        raise KernelError("Work Loop evidence bytes do not match their semantic hash")
+    final = safe_repository_descendant(
+        root, reference["path"], label="Work Loop evidence target",
+    )
+    if final.is_file():
+        if final.read_bytes() != data:
+            raise KernelError("existing immutable Work Loop evidence path contains different bytes")
+        return
+    p = ensure_layout(root)
+    final.parent.mkdir(parents=True, exist_ok=True)
+    stage = p.staging / f"work-loop-{reference['sha256'][:24]}-{uuid.uuid4().hex}.tmp"
+    failpoint("before_work_loop_evidence_prepare", configured_failures)
+    atomic_write(stage, data)
+    failpoint("after_work_loop_evidence_prepare", configured_failures)
+    publish_immutable(stage, final)
+    failpoint("after_work_loop_evidence_publish", configured_failures)
+    if final.read_bytes() != data:
+        raise KernelError("immutable Work Loop evidence publication selected different bytes")
+
+
+def _decision_history_for_refresh(
+    current_work_loop: Mapping[str, Any], supplied_grounding: Mapping[str, Any], *,
+    task_id: str, decision_resolution: Path | str | None,
+) -> tuple[list[dict[str, Any]] | None, list[tuple[dict[str, str], bytes]]]:
+    prior_requests = {
+        str(item["request_id"]): item
+        for item in (current_work_loop.get("grounding") or {}).get("decision_requests") or []
+    }
+    next_requests = {
+        str(item["request_id"])
+        for item in supplied_grounding.get("decision_requests") or []
+    }
+    removed = sorted(set(prior_requests) - next_requests)
+    if not removed:
+        if decision_resolution is not None:
+            raise KernelError("Decision resolution does not correspond to a removed open request")
+        history = list(current_work_loop.get("decision_history") or [])
+        return (history if "decision_history" in current_work_loop else None), []
+    if len(removed) != 1:
+        raise KernelError("one grounding refresh may resolve only one exact Decision Request")
+    if decision_resolution is None:
+        raise KernelError(
+            "same-Contract grounding refresh cannot clear an unresolved Decision Request"
+        )
+    normalized, resolution_digest, resolution_bytes = load_decision_resolution(
+        decision_resolution, prior_requests,
+    )
+    request_id = str(normalized["request_id"])
+    if request_id != removed[0]:
+        raise KernelError("Decision resolution is not linked to the request removed by grounding")
+    resolution_reference = _work_loop_evidence_reference(
+        task_id, "decision-resolution", resolution_digest,
+    )
+    entry = decision_history_entry(
+        prior_requests[request_id], current_work_loop["work_contract"],
+        resolution_kind="DIRECT_AUTHORITY_DECISION",
+        resolution_hash=resolution_digest,
+        resolution_evidence=resolution_reference,
+    )
+    history = merge_decision_history(
+        list(current_work_loop.get("decision_history") or []), [entry],
+    )
+    return history, [(resolution_reference, resolution_bytes)]
+
+
+def _validate_decision_resolution_retry(
+    current_work_loop: Mapping[str, Any], decision_resolution: Path | str,
+) -> None:
+    recorded = [
+        item for item in current_work_loop.get("decision_history") or []
+        if item.get("resolution_kind") == "DIRECT_AUTHORITY_DECISION"
+    ]
+    requests = {
+        str((item.get("request") or {}).get("request_id") or ""): item["request"]
+        for item in recorded
+    }
+    _normalized, digest, _canonical = load_decision_resolution(
+        decision_resolution, requests,
+    )
+    if not any(item.get("resolution_hash") == digest for item in recorded):
+        raise KernelError("Decision resolution retry does not match immutable Decision history")
+
+
+def _stored_grounding_report(root: Path, state: Mapping[str, Any]) -> dict[str, Any]:
+    reference = ((((state.get("work_loop") or {}).get("grounding") or {}).get("evidence")) or {})
+    target = safe_repository_descendant(
+        root, str(reference.get("path") or ""), label="canonical grounding evidence",
+    )
+    try:
+        value = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise KernelError(f"canonical grounding evidence cannot be read: {exc}") from exc
+    if not isinstance(value, dict) or grounding_hash(value) != reference.get("sha256"):
+        raise KernelError("canonical grounding evidence hash is invalid")
+    return value
+
+
+def _work_loop_grounding_freshness(root: Path, state: Mapping[str, Any]) -> dict[str, list[str]]:
+    if not state.get("work_loop"):
+        return {"reused": [], "reexecute": []}
+    observed = git_adapter.snapshot(
+        root,
+        base_sha=(state.get("base_git") or {}).get("head"),
+        product_sha=(state.get("product_commit") or {}).get("sha"),
+    )
+    return grounding_claim_freshness(
+        _stored_grounding_report(root, state),
+        root=root, observed_repository=observed,
+    )
+
+
+def _compile_execution_runtime(
+    request: Mapping[str, Any], execution_spec: Path | str | Mapping[str, Any] | None, *,
+    root: Path, package_root: Path, trust_git_head: str, plan_revision: int = 1,
+) -> dict[str, Any]:
+    if execution_spec is None:
+        if execution.execution_required(request):
+            raise KernelError("this task class requires an admitted --execution-spec before implementation or external effects")
+        return execution.legacy_runtime(request)
+    value = dict(execution_spec) if isinstance(execution_spec, Mapping) else execution.load_spec(execution_spec)
+    runtime = execution.compile_spec(
+        value, request, plan_revision=plan_revision,
+        root=root, package_root=package_root, trust_git_head=trust_git_head,
+    )
+    if runtime.get("plan_validity") != "VALID":
+        details = ", ".join(f"{row['code']}:{row['subject']}" for row in runtime.get("admission_blockers") or [])
+        raise KernelError(f"execution admission blocked before implementation: {details}")
+    return runtime
 
 
 def _normalized_commands(commands: Sequence[str], *, label: str) -> list[str]:
@@ -68,14 +232,32 @@ def _assert_git_unchanged(
 ) -> None:
     actual = git_adapter.snapshot(root, base_sha=base_sha, product_sha=product_sha, validated_sha=validated_sha)
     fields = (
-        "available", "root", "head", "tree", "product_dirty", "product_dirty_paths",
+        "available", "root", "branch", "head", "tree", "product_dirty", "product_dirty_paths",
         "tracked_control_paths", "relation_to_base", "relation_to_product",
         "relation_to_validated", "changes_since_base", "changes_since_product",
         "changes_since_validated", "deletions_since_base", "type_changes_since_base",
-        "case_insensitive_paths",
+        "worktree_deletions", "worktree_type_changes", "product_worktree_fingerprint",
+        "product_state_digest", "case_insensitive_paths",
     )
     if any(actual.get(field) != expected.get(field) for field in fields):
         raise KernelError("Git product observation changed before canonical commit; retry from fresh status")
+
+
+def _assert_validation_target_unchanged(
+    root: Path,
+    expected: Mapping[str, Any],
+    *,
+    base_sha: str | None,
+    product_sha: str | None,
+) -> None:
+    try:
+        _assert_git_unchanged(
+            root, expected, base_sha=base_sha, product_sha=product_sha,
+        )
+    except KernelError as exc:
+        raise KernelError(
+            "validation command changed product identity; discard its result and validate the frozen target again"
+        ) from exc
 
 
 def _relative(root: Path, path: Path) -> str:
@@ -121,10 +303,14 @@ def _rollover_binding_blocked(state: Mapping[str, Any], telemetry: Mapping[str, 
 
 def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[str, Any], skill: Mapping[str, Any] | None) -> dict[str, Any]:
     state = snapshot.state
+    runtime = state.get("execution") or {}
     commit = state.get("product_commit") or {}
     assurance = state.get("assurance") or {}
     next_action = state["next_action"]
     context = state.get("context") or {}
+    work_loop = state.get("work_loop") or {}
+    work_contract = work_loop.get("work_contract") or {}
+    grounding = work_loop.get("grounding") or {}
     rollover_binding_blocked = _rollover_binding_blocked(state, telemetry)
     if state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
         if rollover_binding_blocked:
@@ -136,20 +322,85 @@ def _packet(snapshot: Snapshot, telemetry: Mapping[str, Any], governor: Mapping[
         elif governor.get("action") == "COMPACT_REQUIRED":
             next_action = "continue this outcome/chat; compact active context, re-measure latest prompt, then continue here if healthy"
     return {
-        "schema": "buildos.work_packet.v1.22",
+        "schema": "buildos.work_packet.v1.24",
         "task_id": state["task_id"],
         "revision": state["revision"],
         "lifecycle_state": state["phase"],
         "next_action": next_action,
         "risk": state["risk"],
+        "product_change_mode": state.get("product_change_mode", "NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA"),
         "authorization_state": (state.get("authorization") or {}).get("status", "NONE"),
         "base_sha": (state.get("base_git") or {}).get("head"),
         "product_commit_sha": commit.get("sha"),
+        "product_commit_origin": commit.get("origin", "NATIVE") if commit else None,
+        "lineage": state.get("lineage"),
+        "work_loop": {
+            "schema": work_loop.get("schema"),
+            "work_contract_hash": work_contract.get("hash"),
+            "work_contract_evidence": work_contract.get("evidence"),
+            "ship_mode": work_contract.get("ship_mode"),
+            "ship_readiness": (
+                "READY_FOR_DECLARED_MODE"
+                if state["phase"] == "CLOSED" else
+                "ASSURANCE_READY_TO_CLOSE"
+                if state["phase"] == "ASSURANCE_READY" else
+                "REQUIRES_CANONICAL_ASSURANCE"
+            ),
+            "grounding_hash": grounding.get("hash"),
+            "grounding_evidence": grounding.get("evidence"),
+            "repository": grounding.get("repository"),
+            "scope_claim_ids": grounding.get("scope_claim_ids") or [],
+            "local_adaptation_claim_ids": grounding.get("local_adaptation_claim_ids") or [],
+            "decision_requests": [
+                {
+                    "request_id": item.get("request_id"),
+                    "decision_type": item.get("decision_type"),
+                    "requested_from": item.get("requested_from"),
+                    "claim_id": item.get("claim_id"),
+                }
+                for item in grounding.get("decision_requests") or []
+            ],
+            "action_rights": work_loop.get("action_rights"),
+        } if work_loop else None,
+        "execution": {
+            "mode": runtime.get("mode", "LEGACY_LOCAL"),
+            "execution_class": state.get("execution_class", "LOCAL_REVERSIBLE"),
+            "plan_validity": runtime.get("plan_validity", "VALID"),
+            "plan_revision": runtime.get("plan_revision", 0),
+            "envelope_hash": runtime.get("envelope_hash"),
+            "blocker_count": len(runtime.get("blockers") or []),
+            "unresolved_effects": sorted(
+                effect_id for effect_id, row in (runtime.get("effect_ledger") or {}).items()
+                if row.get("state") not in execution.TERMINAL_EFFECT_STATES
+            ),
+            "last_assurance_plan": runtime.get("last_assurance_plan"),
+        },
         "target_sha": assurance.get("target_sha"),
+        "runtime_acceptance_reference": assurance.get("runtime_acceptance_reference"),
         "evidence_refs": [
             {"path": item.get("path"), "sha256": item.get("sha256"), "kind": item.get("kind")}
             for item in state.get("evidence") or []
         ],
+        "evidence_index": {
+            "handoff": [
+                work_contract.get("evidence"), grounding.get("evidence"),
+            ] if work_loop else [],
+            "assurance": [
+                {"path": item.get("path"), "sha256": item.get("sha256"), "kind": item.get("kind")}
+                for item in state.get("evidence") or []
+            ],
+            "external_effects": [
+                {
+                    "effect_id": effect_id,
+                    "state": row.get("state"),
+                    "provider_reference": row.get("provider_reference"),
+                    "result_reference": row.get("result_reference"),
+                    "result_sha256": row.get("result_sha256"),
+                    "local_commit_reference": row.get("local_commit_reference"),
+                }
+                for effect_id, row in sorted((runtime.get("effect_ledger") or {}).items())
+            ],
+        },
         "epoch": context.get("epoch"),
         "epoch_id": context.get("epoch_id"),
         "thread_id": context.get("thread_id"),
@@ -193,8 +444,11 @@ def _prepare_evidence(
     reviewer: str | None,
     review_reference: str | None,
     rollback_check: str | None,
+    runtime_acceptance_reference: str | None,
     timeout: int,
     configured_failures: str | None,
+    prepared_checks: Sequence[Mapping[str, Any]] | None = None,
+    execution_validation: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     state = snapshot.state
     operation = validate_operation_id(operation)
@@ -206,10 +460,18 @@ def _prepare_evidence(
     review_reference = review_reference or None
     rollback_check = str(rollback_check).strip() if rollback_check is not None else None
     rollback_check = rollback_check or None
-    if not checks:
+    runtime_acceptance_reference = str(runtime_acceptance_reference).strip() if runtime_acceptance_reference is not None else None
+    runtime_acceptance_reference = runtime_acceptance_reference or None
+    change_mode = str(state.get("product_change_mode") or ("NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA"))
+    runtime_no_source_delta = change_mode == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY"
+    assurance_scope = "NO_SOURCE_DELTA_RUNTIME_ASSURANCE" if runtime_no_source_delta else ("READ_ONLY_ASSURANCE" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA_ASSURANCE")
+    enhanced_validation = prepared_checks is not None
+    if not checks and not enhanced_validation:
         raise KernelError("validation requires at least one deterministic check")
     if not inspected_by:
-        raise KernelError("validation requires output/diff inspection identity")
+        raise KernelError("validation requires an assurance inspection identity")
+    if runtime_no_source_delta and not runtime_acceptance_reference:
+        raise KernelError("NO_SOURCE_DELTA runtime validation requires a runtime acceptance reference")
     if state["risk"] == "R3":
         if not reviewer or not review_reference:
             raise KernelError("R3 validation requires an independent reviewer and review reference")
@@ -217,14 +479,24 @@ def _prepare_evidence(
             raise KernelError("R3 reviewer must be independent from the Worker")
         if reviewer.upper() in {"WORKER", "AUTO", "SELF"}:
             raise KernelError("R3 reviewer identity cannot be WORKER, AUTO, or SELF")
-        if not rollback_check:
+        prepared_has_rollback = any(
+            str(item.get("role")) == "ROLLBACK_RECOVERY"
+            and item.get("reused") is not True
+            and item.get("returncode") == 0
+            for item in (prepared_checks or [])
+            if isinstance(item, Mapping)
+        )
+        if not rollback_check and not prepared_has_rollback:
             raise KernelError("R3 validation requires a rollback/recovery check")
-    commands = list(dict.fromkeys(checks))
+    commands = (
+        [str(item.get("command")) for item in (prepared_checks or [])]
+        if enhanced_validation else list(dict.fromkeys(checks))
+    )
     if rollback_check and rollback_check in commands:
         raise KernelError("rollback/recovery check must be distinct from acceptance checks")
     evidence_key = hashlib.sha256(operation.encode("utf-8")).hexdigest()[:24]
     rel = Path(".buildos") / "evidence" / state["task_id"] / f"r{int(state['revision']):03d}" / f"validation-{evidence_key}.json"
-    final = root / rel
+    final = safe_repository_descendant(root, rel, label="validation evidence target")
     # Retry after evidence publication but before CURRENT reuses exactly the
     # immutable proof.  It never regenerates or overwrites historical evidence.
     if final.is_file():
@@ -247,18 +519,32 @@ def _prepare_evidence(
             prior_revision = int(prior.get("revision", 0))
         except (TypeError, ValueError) as exc:
             raise KernelError("existing immutable evidence has invalid revision") from exc
+        prior_has_fresh_rollback = any(
+            isinstance(item, dict)
+            and item.get("role") == "ROLLBACK_RECOVERY"
+            and item.get("reused") is not True
+            and item.get("returncode") == 0
+            for item in prior_checks
+        )
         structurally_valid = (
             prior.get("schema") == "buildos.evidence.v1.22"
             and prior.get("operation_id") == operation
             and prior.get("task_id") == state["task_id"]
             and prior_revision == int(state["revision"])
             and prior.get("risk") == state["risk"]
+            and prior.get("product_change_mode", change_mode) == change_mode
+            and (not runtime_no_source_delta or prior.get("assurance_scope") == assurance_scope)
             and prior.get("target_sha") == git.get("head")
+            and prior.get("target_tree", git.get("tree")) == git.get("tree")
+            and prior.get("runtime_acceptance_reference") == runtime_acceptance_reference
             and prior.get("acceptance") == (state.get("acceptance") or [])
             and prior.get("inspected_by") == inspected_by
             and prior_commands == commands
+            and prior.get("execution_validation") == (dict(execution_validation) if execution_validation is not None else None)
             and all(
-                item.get("returncode") == 0 and item.get("role") == "ACCEPTANCE"
+                item.get("returncode") == 0 and (
+                    item.get("role") in execution.CLAIM_ROLES if enhanced_validation else item.get("role") == "ACCEPTANCE"
+                )
                 for item in prior_checks if isinstance(item, dict)
             )
             and (
@@ -270,16 +556,32 @@ def _prepare_evidence(
                     and prior_rollback.get("role") == "ROLLBACK_RECOVERY"
                 )
             )
-            and (state["risk"] != "R3" or (prior_review.get("reviewer") == reviewer and prior_review.get("reference") == review_reference))
+            and (state["risk"] != "R3" or (
+                prior_review.get("reviewer") == reviewer
+                and prior_review.get("reference") == review_reference
+                and (not runtime_no_source_delta or prior_review.get("scope") == assurance_scope)
+                and (rollback_check is not None or prior_has_fresh_rollback)
+            ))
         )
         if not structurally_valid:
             raise KernelError("existing immutable evidence path belongs to another transition")
-        return {"kind": "VALIDATION", "path": rel.as_posix(), "sha256": sha256_bytes(data), "target_sha": prior.get("target_sha")}
-    results = []
-    for command in commands:
-        result = _run_check(root, command, timeout)
-        result["role"] = "ACCEPTANCE"
-        results.append(result)
+        return {
+            "kind": "VALIDATION", "path": rel.as_posix(), "sha256": sha256_bytes(data),
+            "target_sha": prior.get("target_sha"),
+            "target_tree": prior.get("target_tree"),
+            "runtime_acceptance_reference": runtime_acceptance_reference,
+        }
+    results = [dict(item) for item in (prepared_checks or [])]
+    if not enhanced_validation:
+        for command in commands:
+            result = _run_check(root, command, timeout)
+            _assert_validation_target_unchanged(
+                root, git,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            )
+            result["role"] = "ACCEPTANCE"
+            results.append(result)
     rollback_result = None
     if rollback_check:
         rollback_result = _run_check(root, rollback_check, timeout)
@@ -287,6 +589,11 @@ def _prepare_evidence(
     failures = [item for item in [*results, *([rollback_result] if rollback_result else [])] if item["returncode"] != 0]
     if failures:
         raise KernelError(f"validation command failed: {failures[0]['command']} (rc={failures[0]['returncode']})")
+    _assert_validation_target_unchanged(
+        root, git,
+        base_sha=(state.get("base_git") or {}).get("head"),
+        product_sha=(state.get("product_commit") or {}).get("sha"),
+    )
     after_checks = git_adapter.snapshot(
         root,
         base_sha=(state.get("base_git") or {}).get("head"),
@@ -300,14 +607,22 @@ def _prepare_evidence(
         "task_id": state["task_id"],
         "revision": state["revision"],
         "risk": state["risk"],
-        "product_anchor_sha": (state.get("product_commit") or {}).get("sha"),
-        "target_sha": after_checks.get("head"),
-        "target_tree": after_checks.get("tree"),
+        "product_change_mode": change_mode,
+        "assurance_scope": assurance_scope,
+        "product_anchor_sha": ((state.get("base_git") or {}).get("head") if change_mode == "NO_SOURCE_DELTA" else (state.get("product_commit") or {}).get("sha")),
+        "target_sha": git.get("head"),
+        "target_tree": git.get("tree"),
         "acceptance": state.get("acceptance") or [],
+        "runtime_acceptance_reference": runtime_acceptance_reference,
         "checks": results,
+        "execution_validation": dict(execution_validation) if execution_validation is not None else None,
         "rollback_check": rollback_result,
         "inspected_by": inspected_by,
-        "review": {"reviewer": reviewer, "reference": review_reference} if reviewer else None,
+        "review": {
+            "reviewer": reviewer,
+            "reference": review_reference,
+            "scope": assurance_scope,
+        } if reviewer else None,
         "created_at": now_iso(),
         "operation_id": operation,
     }
@@ -324,7 +639,12 @@ def _prepare_evidence(
     if published != data:
         raise KernelError("immutable evidence publication selected different bytes")
     digest = sha256_bytes(published)
-    return {"kind": "VALIDATION", "path": rel.as_posix(), "sha256": digest, "target_sha": after_checks.get("head")}
+    return {
+        "kind": "VALIDATION", "path": rel.as_posix(), "sha256": digest,
+        "target_sha": git.get("head"),
+        "target_tree": git.get("tree"),
+        "runtime_acceptance_reference": runtime_acceptance_reference,
+    }
 
 
 class BuildOS:
@@ -335,6 +655,8 @@ class BuildOS:
     def _snapshot(self) -> Snapshot:
         value = read_current(self.root)
         assert value is not None
+        if value.state.get("work_loop") is not None:
+            verify_work_loop_evidence(self.root, value.state["work_loop"])
         return value
 
     def _skill(self, state: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -351,11 +673,15 @@ class BuildOS:
         override: Mapping[str, Any] | None = None,
         *,
         rollover_thread_id: str | None = None,
+        refresh: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        telemetry = auto_refresh(
-            self.root,
-            snapshot.state,
-            rollover_thread_id=rollover_thread_id,
+        telemetry = (
+            auto_refresh(
+                self.root,
+                snapshot.state,
+                rollover_thread_id=rollover_thread_id,
+            )
+            if refresh else summarize_telemetry(self.root, snapshot.state)
         )
         epoch_measured = telemetry.get("current_epoch_measurement") == "MEASURED"
         peak_measured = telemetry.get("current_epoch_peak_measurement") == "MEASURED"
@@ -416,13 +742,84 @@ class BuildOS:
             snapshot = after
         raise KernelError("canonical state changed repeatedly while deriving WORK_PACKET; retry status")
 
-    def bootstrap(self, request: Mapping[str, Any], *, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
+    def admit(self, request: Mapping[str, Any], *, execution_spec: Path | str | Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Compile the single pre-execution envelope without changing lifecycle state."""
+        validated = validate_task_request(request)
+        observed = git_adapter.snapshot(self.root)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=str(observed.get("head") or ""),
+        )
+        problems: list[str] = []
+        if not observed.get("available") or Path(str(observed.get("root"))).resolve() != self.root:
+            problems.append("GIT_TOP_LEVEL_REQUIRED")
+        if observed.get("product_dirty"):
+            problems.append("CLEAN_PRODUCT_BASELINE_REQUIRED")
+        if observed.get("tracked_control_paths"):
+            problems.append("TRACKED_CONTROL_PATH_FORBIDDEN")
+        return {
+            "status": "READY" if not problems else "BLOCKED",
+            "task_id": validated["task_id"], "execution_class": validated["execution_class"],
+            "risk": validated["risk"], "runtime": runtime, "git": observed,
+            "problems": problems,
+            "invariant": "PREVENT_BOUND_EXECUTE_RECONCILE_VERIFY",
+        }
+
+    def bootstrap(
+        self,
+        request: Mapping[str, Any],
+        *,
+        execution_spec: Path | str | Mapping[str, Any] | None = None,
+        work_contract: Path | str | None = None,
+        grounding_report: Path | str | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
         # Validate authorization/risk before touching runtime or Git excludes.
+        if (work_contract is None) != (grounding_report is None):
+            raise KernelError("Work Loop bootstrap requires both work_contract and grounding_report")
+        existing = read_current(self.root, allow_uninitialized=True)
+        if existing is not None and existing.state.get("work_loop") is not None:
+            verify_work_loop_evidence(self.root, existing.state["work_loop"])
+        if existing is not None and existing.state.get("phase") in RELEASED_TASK_PHASES:
+            execution.assert_no_unresolved_effects(existing.state, "bootstrap")
+        observed = git_adapter.snapshot(self.root)
+        work_loop_context: dict[str, Any] | None = None
+        work_contract_value: dict[str, Any] | None = None
+        grounding_value: dict[str, Any] | None = None
+        contract_digest: str | None = None
+        grounding_digest: str | None = None
+        if work_contract is not None and grounding_report is not None:
+            work_contract_value, contract_digest = load_contract(work_contract)
+            canonical_contract_hash = (
+                (((existing.state.get("work_loop") or {}).get("work_contract") or {}).get("hash"))
+                if existing else None
+            )
+            if canonical_contract_hash != contract_digest:
+                require_trusted_contract_transport(contract_digest)
+            grounding_value = load_grounding_report(
+                grounding_report, work_contract_value, contract_digest,
+                root=self.root, observed_repository=observed,
+            )
+            rights = derive_action_rights(grounding_value)
+            if rights["requested_action_status"] != "GRANTED":
+                requests = ",".join(
+                    str(item["request_id"]) for item in grounding_value.get("decision_requests") or []
+                )
+                raise KernelError(f"requested action is blocked by grounding; decision_requests={requests or 'none'}")
+            request = task_request_from_work_loop(
+                work_contract_value, grounding_value,
+                owner_authorization=str(request.get("owner_authorization") or "NONE"),
+                authorization_reference=str(request.get("authorization_reference") or ""),
+                authorization_actor=str(request.get("authorization_actor") or "OWNER"),
+            )
         validated = validate_task_request(request)
         if validated.get("skill"):
             _skill_reference(self.root, self.package_root, validated["skill"])
-        existing = read_current(self.root, allow_uninitialized=True)
-        observed = git_adapter.snapshot(self.root)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=str(observed.get("head") or ""),
+        )
         if observed.get("tracked_control_paths"):
             raise KernelError("bootstrap refuses a tracked .buildos control path; migrate or untrack that reserved path first")
         if observed.get("product_dirty"):
@@ -431,19 +828,49 @@ class BuildOS:
             raise KernelError("bootstrap requires a Git repository so product identity and ancestry are observable")
         if Path(str(observed.get("root"))).resolve() != self.root:
             raise KernelError("bootstrap --root must name the Git worktree top-level directory")
-        state = initial_state(request, observed)
+        if work_contract_value is not None and grounding_value is not None and contract_digest is not None:
+            grounding_digest = grounding_hash(grounding_value)
+            contract_reference = _work_loop_evidence_reference(
+                validated["task_id"], "work-contract", contract_digest,
+            )
+            grounding_reference = _work_loop_evidence_reference(
+                validated["task_id"], "grounding", grounding_digest,
+            )
+            work_loop_context = work_loop_binding(
+                work_contract_value, contract_digest, grounding_value,
+                contract_evidence=contract_reference, grounding_evidence=grounding_reference,
+            )
+        state = initial_state(request, observed, execution=runtime, work_loop=work_loop_context)
         if existing:
             if existing.state.get("contract_hash") == state.get("contract_hash"):
+                existing_grounding = ((((existing.state.get("work_loop") or {}).get("grounding") or {}).get("hash")))
+                supplied_grounding = ((((state.get("work_loop") or {}).get("grounding") or {}).get("hash")))
+                if existing_grounding != supplied_grounding:
+                    raise KernelError(
+                        "bootstrap retry supplied different grounding; use the Work Loop grounding refresh boundary"
+                    )
                 return self._idempotent(existing)
-            if existing.state.get("phase") not in {"CLOSED", "ABORTED"}:
+            if existing.state.get("phase") not in RELEASED_TASK_PHASES:
                 raise KernelError("a different live canonical task already exists")
             if existing.state.get("task_id") == state.get("task_id"):
                 raise KernelError("reuse of a terminal task id requires explicit new-revision semantics")
+            if task_id_exists(self.root, state["task_id"]):
+                raise KernelError("task_id was already used in canonical history; use a fresh task id with continuation lineage")
         failpoint("before_git_exclude", configured_failures)
         git_adapter.ensure_control_excluded(self.root)
         failpoint("after_git_exclude", configured_failures)
+        if work_contract_value is not None and grounding_value is not None and work_loop_context is not None:
+            _publish_work_loop_document(
+                self.root, work_loop_context["work_contract"]["evidence"],
+                canonical_contract_bytes(work_contract_value), configured_failures=configured_failures,
+            )
+            _publish_work_loop_document(
+                self.root, work_loop_context["grounding"]["evidence"],
+                canonical_grounding_bytes(grounding_value), configured_failures=configured_failures,
+            )
         operation = op_id or operation_id(
-            "BOOTSTRAP", state["task_id"], state["outcome"], state["risk"], observed.get("head"), observed.get("tree")
+            "BOOTSTRAP", state["task_id"], state["outcome"], state["risk"], runtime.get("envelope_hash"),
+            observed.get("head"), observed.get("tree"), contract_digest, grounding_digest,
         )
         return commit_candidate(
             self.root,
@@ -455,6 +882,9 @@ class BuildOS:
                 "risk": state["risk"],
                 "base_sha": observed.get("head"),
                 "base_tree": observed.get("tree"),
+                "execution_envelope_hash": runtime.get("envelope_hash"),
+                "work_contract_hash": contract_digest,
+                "grounding_hash": grounding_digest,
             },
             operation_id=operation,
             configured_failures=configured_failures,
@@ -462,13 +892,441 @@ class BuildOS:
             precommit_validator=lambda: _assert_git_unchanged(self.root, observed),
         )
 
-    def status(self, *, usage: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def continue_task(
+        self,
+        request: Mapping[str, Any],
+        *,
+        source_task_id: str,
+        source_revision: int | None,
+        reason: str,
+        resolution_reference: str | None = None,
+        execution_spec: Path | str | Mapping[str, Any] | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        """Create a fresh canonical task linked to one terminal historical task."""
+        validated = validate_task_request(request)
+        reason = str(reason).strip()
+        if not reason:
+            raise KernelError("continue-task requires a reason")
+        if validated.get("skill"):
+            _skill_reference(self.root, self.package_root, validated["skill"])
+        current = self._snapshot()
+        source = find_task_revision(self.root, source_task_id, source_revision)
+        if source.state.get("phase") not in RELEASED_TASK_PHASES:
+            raise KernelError("continue-task source must have a released lease")
+        execution.assert_no_unresolved_effects(source.state, "continue-task")
+        if current.state.get("phase") in RELEASED_TASK_PHASES:
+            execution.assert_no_unresolved_effects(current.state, "continue-task")
+        lineage = {
+            "kind": "CONTINUATION",
+            "source_task_id": source.state["task_id"],
+            "source_revision": int(source.state["revision"]),
+            "source_phase": source.state["phase"],
+            "source_generation": source.generation,
+            "source_generation_hash": source.generation_hash,
+            "reason": reason,
+            "resolution_reference": str(resolution_reference or "").strip() or None,
+        }
+        observed = git_adapter.snapshot(self.root)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=str(observed.get("head") or ""),
+        )
+        state = initial_state(request, observed, lineage=lineage, execution=runtime)
+        if (
+            current.state.get("task_id") == state["task_id"]
+            and current.state.get("contract_hash") == state["contract_hash"]
+            and current.state.get("lineage") == lineage
+        ):
+            return self._idempotent(current)
+        if current.state.get("phase") not in RELEASED_TASK_PHASES:
+            raise KernelError("continue-task requires the current canonical task to have a released lease")
+        if task_id_exists(self.root, state["task_id"]):
+            raise KernelError("continuation requires a fresh task_id")
+        if observed.get("tracked_control_paths") or observed.get("product_dirty"):
+            raise KernelError("continue-task requires a clean product tree with untracked Build OS control state")
+        if not observed.get("available") or Path(str(observed.get("root"))).resolve() != self.root:
+            raise KernelError("continue-task requires the Git worktree top-level")
+        operation = op_id or operation_id(
+            "CONTINUE_TASK", state["task_id"], state["contract_hash"], lineage,
+            runtime.get("envelope_hash"), observed.get("head"), observed.get("tree"),
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=current.generation_hash,
+            candidate_state=state,
+            event={"kind": "CONTINUE_TASK", "task_id": state["task_id"], "lineage": lineage, "base_sha": observed.get("head")},
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(self.root, observed),
+        )
+
+    def adopt_existing_change(
+        self,
+        request: Mapping[str, Any],
+        *,
+        base: str,
+        target: str,
+        reason: str,
+        execution_spec: Path | str | Mapping[str, Any] | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        """Atomically adopt a pre-existing clean HEAD with explicit provenance."""
+        validated = validate_task_request(request)
+        if validated.get("side_effect") == "READ_ONLY":
+            raise KernelError("adopt-existing-change requires a write-capable task")
+        if validated.get("skill"):
+            _skill_reference(self.root, self.package_root, validated["skill"])
+        current = read_current(self.root, allow_uninitialized=True)
+        if current is not None and current.state.get("work_loop") is not None:
+            verify_work_loop_evidence(self.root, current.state["work_loop"])
+        if current is not None and current.state.get("phase") in RELEASED_TASK_PHASES:
+            execution.assert_no_unresolved_effects(current.state, "adopt-existing-change")
+        base_sha = git_adapter.resolve_commit(self.root, base)
+        target_sha = git_adapter.resolve_commit(self.root, target)
+        observed = git_adapter.snapshot(self.root, base_sha=base_sha)
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=base_sha,
+        )
+        base_anchor = git_adapter.commit_anchor(self.root, base_sha)
+        state = initial_state(request, base_anchor, execution=runtime)
+        if current and (
+            current.state.get("task_id") == state["task_id"]
+            and current.state.get("contract_hash") == state["contract_hash"]
+            and (current.state.get("product_commit") or {}).get("origin") == "EXTERNAL_PREEXISTING"
+            and (current.state.get("product_commit") or {}).get("sha") == target_sha
+            and (current.state.get("product_commit") or {}).get("adoption_reason") == str(reason).strip()
+        ):
+            return self._idempotent(current)
+        if current and current.state.get("phase") not in RELEASED_TASK_PHASES:
+            raise KernelError("adopt-existing-change requires the current canonical task to have a released lease")
+        if task_id_exists(self.root, state["task_id"]):
+            raise KernelError("adopt-existing-change requires a fresh task_id")
+        if observed.get("head") != target_sha:
+            raise KernelError("adopt-existing-change target must equal the clean current HEAD")
+        if observed.get("tracked_control_paths") or observed.get("product_dirty"):
+            raise KernelError("adopt-existing-change requires a clean product tree with untracked Build OS control state")
+        if Path(str(observed.get("root"))).resolve() != self.root:
+            raise KernelError("adopt-existing-change requires the Git worktree top-level")
+        candidate, event = transition_adopt_existing_change(state, observed, reason=reason)
+        failpoint("before_git_exclude", configured_failures)
+        git_adapter.ensure_control_excluded(self.root)
+        failpoint("after_git_exclude", configured_failures)
+        operation = op_id or operation_id(
+            "ADOPT_EXISTING_CHANGE", candidate["task_id"], candidate["contract_hash"],
+            base_sha, target_sha, str(reason).strip(),
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=current.generation_hash if current else None,
+            candidate_state=candidate,
+            event=event,
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(self.root, observed, base_sha=base_sha),
+        )
+
+    def block_for_source_fix(
+        self,
+        *,
+        reason: str,
+        defect_reference: str,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        previous = self._snapshot()
+        execution.assert_no_unresolved_effects(previous.state, "block-for-source-fix")
+        if previous.event.get("kind") == "BLOCK_FOR_SOURCE_FIX":
+            prior = previous.state.get("source_defect") or {}
+            if prior.get("reason") == str(reason).strip() and prior.get("reference") == str(defect_reference).strip():
+                return self._idempotent(previous)
+        candidate, event = transition_block_for_source_fix(
+            previous.state, reason=reason, defect_reference=defect_reference,
+        )
+        operation = op_id or operation_id(
+            "BLOCK_FOR_SOURCE_FIX", previous.state["task_id"], previous.state["revision"],
+            str(reason).strip(), str(defect_reference).strip(),
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=previous.generation_hash,
+            candidate_state=candidate,
+            event=event,
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+        )
+
+    def report_blocker(
+        self,
+        *,
+        family: str,
+        evidence: str,
+        assumption_id: str | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        previous = self._snapshot()
+        prior_event = previous.event or {}
+        if (
+            prior_event.get("kind") == "BLOCKER_REPORTED"
+            and prior_event.get("family") == str(family).strip()
+            and prior_event.get("evidence") == str(evidence).strip()
+            and prior_event.get("assumption_id") == (str(assumption_id).strip() if assumption_id else None)
+            and (op_id is None or previous.operation_id == op_id)
+        ):
+            return self._idempotent(previous)
+        candidate, event = execution.report_blocker(
+            previous.state, family=family, evidence=evidence, assumption_id=assumption_id,
+        )
+        operation = op_id or operation_id(
+            "REPORT_BLOCKER", previous.state["task_id"], previous.state["revision"],
+            family, evidence, assumption_id,
+        )
+        return commit_candidate(
+            self.root, expected_hash=previous.generation_hash, candidate_state=candidate,
+            event=event, operation_id=operation, configured_failures=configured_failures,
+            projector=self.project,
+        )
+
+    def replan(
+        self,
+        *,
+        execution_spec: Path | str | Mapping[str, Any],
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        previous = self._snapshot()
+        state = previous.state
+        observed = git_adapter.snapshot(
+            self.root,
+            base_sha=(state.get("base_git") or {}).get("head"),
+            product_sha=(state.get("product_commit") or {}).get("sha"),
+        )
+        trust_head = str((state.get("base_git") or {}).get("head") or "")
+        if Path(str(observed.get("root") or "")).resolve() != self.root:
+            raise KernelError("replan requires the Git worktree top-level")
+        validate_in_progress_product_state(state, observed)
+        product_binding = execution.bind_replan_product_state(
+            observed, trust_baseline_head=trust_head,
+        )
+        runtime = _compile_execution_runtime(
+            state, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=trust_head,
+            plan_revision=int((state.get("execution") or {}).get("plan_revision", 1)) + 1,
+        )
+        prior_event = previous.event or {}
+        if (
+            prior_event.get("kind") == "PLAN_REPLACED"
+            and prior_event.get("to_envelope_hash") == runtime.get("envelope_hash")
+            and prior_event.get("product_state_binding_digest") == product_binding.get("binding_digest")
+            and (op_id is None or previous.operation_id == op_id)
+        ):
+            return self._idempotent(previous)
+        candidate, event = execution.apply_replan(
+            state, runtime, product_state_binding=product_binding,
+        )
+        operation = op_id or operation_id(
+            "REPLAN", state["task_id"], state["revision"], runtime.get("envelope_hash"),
+            product_binding.get("binding_digest"),
+        )
+        return commit_candidate(
+            self.root, expected_hash=previous.generation_hash, candidate_state=candidate,
+            event=event, operation_id=operation, configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(
+                self.root, observed,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            ),
+        )
+
+    def effect(
+        self,
+        *,
+        transition: str,
+        effect_id: str,
+        action_id: str | None = None,
+        reference: str | None = None,
+        sha256: str | None = None,
+        predicate: str | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        previous = self._snapshot()
+        state = previous.state
+        transition = str(transition).upper().strip()
+        if transition in {"PREPARE", "DISPATCH", "AUTHORIZE_RETRY"} and state.get("work_loop"):
+            rights = state["work_loop"]["action_rights"]
+            if rights["requested_action_status"] != "GRANTED":
+                raise KernelError(f"effect {transition} is blocked by canonical Work Loop action rights")
+            stale = _work_loop_grounding_freshness(self.root, state)["reexecute"]
+            if stale:
+                raise KernelError(
+                    f"effect {transition} requires fresh Worker grounding for changed claims: "
+                    + ", ".join(stale)
+                )
+        prior_event = previous.event or {}
+        if transition == "PREPARE" and prior_event.get("kind") == "EFFECT_INTENT_RECORDED" and prior_event.get("effect_id") == effect_id and prior_event.get("action_id") == action_id:
+            return self._idempotent(previous)
+        if (
+            prior_event.get("kind") == "EFFECT_TRANSITION"
+            and prior_event.get("effect_id") == effect_id
+            and prior_event.get("transition") == transition
+            and prior_event.get("reference") == (str(reference or "").strip() or None)
+            and prior_event.get("sha256") == (str(sha256 or "").strip().lower() or None)
+            and prior_event.get("predicate") == (str(predicate or "").strip() or None)
+            and (op_id is None or previous.operation_id == op_id)
+        ):
+            return self._idempotent(previous)
+        observed = git_adapter.snapshot(
+            self.root,
+            base_sha=(state.get("base_git") or {}).get("head"),
+            product_sha=(state.get("product_commit") or {}).get("sha"),
+        )
+        if not observed.get("available") or observed.get("tracked_control_paths"):
+            raise KernelError("external effect transitions require an observable product worktree with untracked control state")
+        if transition == "PREPARE":
+            if not action_id:
+                raise KernelError("effect PREPARE requires --action-id")
+            if state.get("phase") == "ACTIVE":
+                validate_in_progress_product_state(state, observed)
+            elif state.get("phase") == "PRODUCT_COMMITTED":
+                if observed.get("product_dirty"):
+                    raise KernelError("effect PREPARE after product adoption requires a clean product worktree")
+            else:
+                raise KernelError("effect PREPARE requires ACTIVE or PRODUCT_COMMITTED lifecycle state")
+            execution.verify_effect_sources(
+                root=self.root, package_root=self.package_root,
+                runtime=state.get("execution") or {}, action_id=action_id,
+            )
+            candidate, event = execution.prepare_effect(state, action_id=action_id, effect_id=effect_id)
+        else:
+            if transition in {"DISPATCH", "AUTHORIZE_RETRY"}:
+                if state.get("phase") == "ACTIVE":
+                    validate_in_progress_product_state(state, observed)
+                elif observed.get("product_dirty"):
+                    raise KernelError(f"effect {transition} after product adoption requires a clean product worktree")
+                record = (((state.get("execution") or {}).get("effect_ledger") or {}).get(effect_id) or {})
+                if not record:
+                    raise KernelError(f"effect intent is not recorded: {effect_id}")
+                admitted_action = str(record.get("action_id") or "")
+                execution.verify_effect_sources(
+                    root=self.root, package_root=self.package_root,
+                    runtime=state.get("execution") or {}, action_id=admitted_action,
+                )
+            candidate, event = execution.transition_effect(
+                state, effect_id=effect_id, transition=transition,
+                reference=reference, sha256=sha256, predicate=predicate,
+            )
+        operation = op_id or operation_id(
+            "EFFECT", state["task_id"], state["revision"], transition,
+            effect_id, action_id, reference, sha256, predicate,
+            ((state.get("execution") or {}).get("effect_ledger") or {}).get(effect_id, {}).get("attempt"),
+        )
+        return commit_candidate(
+            self.root, expected_hash=previous.generation_hash, candidate_state=candidate,
+            event=event, operation_id=operation, configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(
+                self.root, observed,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            ),
+        )
+
+    def review(
+        self,
+        *,
+        review_id: str,
+        asset_id: str,
+        content_sha256: str,
+        outcome: str,
+        evidence: str,
+        supersedes: str | None = None,
+        derived_from_review: str | None = None,
+        transformation_reference: str | None = None,
+        op_id: str | None = None,
+        configured_failures: str | None = None,
+    ) -> CommitResult:
+        previous = self._snapshot()
+        prior_event = previous.event or {}
+        if (
+            prior_event.get("kind") == "REVIEW_RECORDED"
+            and prior_event.get("review_id") == str(review_id).strip()
+            and prior_event.get("asset_id") == str(asset_id).strip()
+            and prior_event.get("content_sha256") == str(content_sha256).strip().lower()
+            and prior_event.get("outcome") == str(outcome).strip().upper()
+            and prior_event.get("evidence") == str(evidence).strip()
+            and prior_event.get("supersedes") == (str(supersedes).strip() if supersedes else None)
+            and prior_event.get("derived_from_review") == (str(derived_from_review).strip() if derived_from_review else None)
+            and prior_event.get("transformation_reference") == (str(transformation_reference).strip() if transformation_reference else None)
+            and (op_id is None or previous.operation_id == op_id)
+        ):
+            return self._idempotent(previous)
+        candidate, event = execution.record_review(
+            previous.state, review_id=review_id, asset_id=asset_id,
+            content_sha256=content_sha256, outcome=outcome, evidence=evidence,
+            supersedes=supersedes, derived_from_review=derived_from_review,
+            transformation_reference=transformation_reference,
+        )
+        operation = op_id or operation_id(
+            "REVIEW", previous.state["task_id"], previous.state["revision"],
+            review_id, asset_id, content_sha256, outcome, evidence, supersedes,
+            derived_from_review, transformation_reference,
+        )
+        return commit_candidate(
+            self.root, expected_hash=previous.generation_hash, candidate_state=candidate,
+            event=event, operation_id=operation, configured_failures=configured_failures,
+            projector=self.project,
+        )
+
+    def assurance_plan(self) -> dict[str, Any]:
+        snapshot = self._snapshot()
+        state = snapshot.state
+        target = (state.get("product_commit") or {}).get("sha") or (state.get("base_git") or {}).get("head")
+        previous_state = None
+        if int(state.get("revision", 1)) > 1:
+            previous_state = find_task_revision(self.root, state["task_id"], int(state["revision"]) - 1).state
+        plan = execution.claim_plan(self.root, state, target_sha=target, previous_state=previous_state)
+        work_loop = state.get("work_loop") or {}
+        if not work_loop:
+            return plan
+        grounding = work_loop.get("grounding") or {}
+        outcomes = grounding.get("outcomes") or {}
+        freshness = _work_loop_grounding_freshness(self.root, state)
+        risk = str(state.get("risk") or "R0")
+        return {
+            **plan,
+            "work_loop": {
+                "profile": "INDEPENDENT_HIGH_RISK" if risk == "R3" else "WORKER_PROPORTIONAL",
+                "risk": risk,
+                "acceptance_criteria": list(state.get("acceptance") or []),
+                "acceptance_commands": list(state.get("acceptance_commands") or []),
+                "grounding_claims_reused": freshness["reused"],
+                "grounding_claims_reexecuted": freshness["reexecute"],
+                "local_adaptation_claim_ids": list(grounding.get("local_adaptation_claim_ids") or []),
+                "independent_reviewer_required": risk == "R3",
+                "rollback_recovery_check_required": risk == "R3",
+                "ship_mode": ((work_loop.get("work_contract") or {}).get("ship_mode")),
+            },
+        }
+
+    def status(
+        self, *, usage: Mapping[str, Any] | None = None,
+        refresh_telemetry: bool = True, persist_projection: bool = True,
+    ) -> dict[str, Any]:
         # Derive the Git-aware packet optimistically, then verify CURRENT did
         # not move before returning.  This prevents a concurrent transition
         # from being followed by a stale status/next packet overwrite.
         for _ in range(4):
             snapshot = self._snapshot()
-            telemetry, governor = self._usage(snapshot, usage)
+            telemetry, governor = self._usage(snapshot, usage, refresh=refresh_telemetry)
             state = snapshot.state
             observed = git_adapter.snapshot(
                 self.root,
@@ -478,9 +1336,12 @@ class BuildOS:
             )
             head_advanced = observed.get("head") != (state.get("base_git") or {}).get("head")
             read_only_violation = state["phase"] == "ACTIVE" and state.get("side_effect") == "READ_ONLY" and (head_advanced or observed.get("product_dirty"))
+            runtime_no_source = state.get("product_change_mode") == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY"
+            no_source_violation = state["phase"] == "ACTIVE" and runtime_no_source and (head_advanced or observed.get("product_dirty"))
             unadopted = (
                 state["phase"] == "ACTIVE"
                 and state.get("side_effect") != "READ_ONLY"
+                and not runtime_no_source
                 and head_advanced
                 and observed.get("relation_to_base") == "DESCENDANT"
             )
@@ -500,10 +1361,21 @@ class BuildOS:
             )
             packet = _packet(snapshot, telemetry, governor, self._skill(state))
             next_action = packet["next_action"]
-            if not observed.get("available") and state["phase"] not in {"CLOSED", "ABORTED"}:
+            runtime = state.get("execution") or {}
+            unresolved_effects = [
+                effect_id for effect_id, row in (runtime.get("effect_ledger") or {}).items()
+                if row.get("state") not in execution.TERMINAL_EFFECT_STATES
+            ]
+            if runtime.get("plan_validity") in {"REPLAN_REQUIRED", "STOP_REQUIRED", "ADMISSION_BLOCKED"}:
+                next_action = "stop implementation and dispatch; replace or explicitly stop the invalid execution plan"
+            elif unresolved_effects:
+                next_action = f"reconcile external effects before retry or assurance: {sorted(unresolved_effects)}"
+            elif not observed.get("available") and state["phase"] not in RELEASED_TASK_PHASES:
                 next_action = "restore observable Git repository state before the next lifecycle action"
             elif read_only_violation:
                 next_action = "READ_ONLY baseline changed; restore it or abort without adopting product mutation"
+            elif no_source_violation:
+                next_action = "NO_SOURCE_DELTA baseline changed or is dirty; restore the exact clean baseline or block without recording a product commit"
             elif _rollover_binding_blocked(state, telemetry) and state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"}:
                 next_action = "stop model work; restore the expected rollover telemetry binding"
             elif state["phase"] in {"ACTIVE", "PRODUCT_COMMITTED"} and governor["action"] == "HARD_STOP":
@@ -517,7 +1389,8 @@ class BuildOS:
             elif unadopted:
                 next_action = "run record-commit to adopt the successful Git product commit"
             packet = {**packet, "next_action": next_action}
-            atomic_json(paths(self.root).runtime / "WORK_PACKET.json", packet)
+            if persist_projection:
+                atomic_json(paths(self.root).runtime / "WORK_PACKET.json", packet)
             after = self._snapshot()
             if after.generation_hash != snapshot.generation_hash:
                 continue
@@ -533,18 +1406,386 @@ class BuildOS:
                 "lifecycle_ready": state.get("lifecycle_ready", False),
                 "unadopted_product_commit": unadopted,
                 "read_only_baseline_violation": read_only_violation,
+                "no_source_delta_violation": no_source_violation,
                 "git_relation_problem": relation_problem,
                 "unvalidated_product_change": late_validated_change,
+                "execution_plan_validity": runtime.get("plan_validity", "VALID"),
+                "unresolved_external_effects": sorted(unresolved_effects),
                 "git": observed,
                 "governor": governor,
                 "telemetry": telemetry,
                 "work_packet": packet,
+                "read_only": not refresh_telemetry and not persist_projection,
             }
         raise KernelError("canonical state changed repeatedly while deriving status; retry")
+
+    def inspect(self) -> dict[str, Any]:
+        """Derive current Git/lifecycle truth without telemetry or projection writes."""
+        return self.status(refresh_telemetry=False, persist_projection=False)
+
+    def _supersede_work_contract(
+        self, current: Snapshot, contract_value: Mapping[str, Any],
+        contract_digest: str, grounding_report: Path | str, *,
+        execution_spec: Path | str | Mapping[str, Any] | None,
+        configured_failures: str | None,
+    ) -> CommitResult:
+        """Atomically replace one authority-blocked Contract with its exact successor."""
+        prior_binding = current.state.get("work_loop") or {}
+        prior_contract = prior_binding.get("work_contract") or {}
+        open_requests = list((prior_binding.get("grounding") or {}).get("decision_requests") or [])
+        validate_contract_supersession(
+            prior_contract, open_requests, contract_value, contract_digest,
+        )
+        require_trusted_contract_transport(contract_digest)
+        if current.state.get("phase") != "ACTIVE" or current.state.get("product_commit") is not None:
+            raise KernelError("Work Contract supersession is allowed only before product commit")
+        execution.assert_no_unresolved_effects(current.state, "Work Contract supersession")
+        observed = git_adapter.snapshot(self.root)
+        base = current.state.get("base_git") or {}
+        if (
+            observed.get("head") != base.get("head")
+            or observed.get("tree") != base.get("tree")
+            or observed.get("product_dirty")
+        ):
+            raise KernelError("Work Contract supersession requires the unchanged clean task baseline")
+        supplied_grounding = load_grounding_report(
+            grounding_report, contract_value, contract_digest,
+            root=self.root, observed_repository=observed,
+        )
+        rights = derive_action_rights(supplied_grounding)
+        if rights["requested_action_status"] != "GRANTED":
+            raise KernelError("superseding Work Contract grounding still has unresolved action rights")
+        authorization = current.state.get("authorization") or {}
+        request = task_request_from_work_loop(
+            contract_value, supplied_grounding,
+            owner_authorization=str(authorization.get("status") or "NONE"),
+            authorization_reference=str(authorization.get("reference") or ""),
+            authorization_actor=str(authorization.get("actor") or "OWNER"),
+        )
+        validated = validate_task_request(request)
+        if task_id_exists(self.root, validated["task_id"]):
+            raise KernelError("superseding Work Contract task identity already exists in canonical history")
+        runtime = _compile_execution_runtime(
+            validated, execution_spec, root=self.root, package_root=self.package_root,
+            trust_git_head=str(observed.get("head") or ""),
+        )
+        grounding_digest = grounding_hash(supplied_grounding)
+        contract_reference = _work_loop_evidence_reference(
+            validated["task_id"], "work-contract", contract_digest,
+        )
+        grounding_reference = _work_loop_evidence_reference(
+            validated["task_id"], "grounding", grounding_digest,
+        )
+        additions = [
+            decision_history_entry(
+                request_row, prior_contract,
+                resolution_kind="WORK_CONTRACT_SUPERSESSION",
+                resolution_hash=contract_digest,
+                resolution_evidence=contract_reference,
+            )
+            for request_row in open_requests
+        ]
+        history = merge_decision_history(
+            list(prior_binding.get("decision_history") or []), additions,
+        )
+        binding = work_loop_binding(
+            contract_value, contract_digest, supplied_grounding,
+            contract_evidence=contract_reference,
+            grounding_evidence=grounding_reference,
+            decision_history=history,
+        )
+        candidate = initial_state(
+            request, observed, execution=runtime, work_loop=binding,
+        )
+        _publish_work_loop_document(
+            self.root, contract_reference, canonical_contract_bytes(contract_value),
+            configured_failures=configured_failures,
+        )
+        _publish_work_loop_document(
+            self.root, grounding_reference, canonical_grounding_bytes(supplied_grounding),
+            configured_failures=configured_failures,
+        )
+        operation = operation_id(
+            "WORK_CONTRACT_SUPERSESSION", current.state["task_id"],
+            candidate["task_id"], prior_contract["hash"], contract_digest,
+        )
+        return commit_candidate(
+            self.root,
+            expected_hash=current.generation_hash,
+            candidate_state=candidate,
+            event={
+                "kind": "WORK_CONTRACT_SUPERSESSION",
+                "source_task_id": current.state["task_id"],
+                "source_generation": current.generation,
+                "source_generation_hash": current.generation_hash,
+                "prior_contract_hash": prior_contract["hash"],
+                "contract_hash": contract_digest,
+                "resolved_decision_request_ids": sorted(
+                    str(item["request_id"]) for item in open_requests
+                ),
+            },
+            operation_id=operation,
+            configured_failures=configured_failures,
+            projector=self.project,
+            precommit_validator=lambda: _assert_git_unchanged(self.root, observed),
+        )
+
+    def advance(
+        self, request: Mapping[str, Any] | None = None, *,
+        work_contract: Path | str | None = None,
+        grounding_report: Path | str | None = None,
+        decision_resolution: Path | str | None = None,
+        execution_spec: Path | str | Mapping[str, Any] | None = None,
+        run_assurance: bool = False,
+        inspected_by: str | None = None,
+        reviewer: str | None = None,
+        review_reference: str | None = None,
+        rollback_check: str | None = None,
+        runtime_acceptance_reference: str | None = None,
+        timeout: int = 120,
+        configured_failures: str | None = None,
+    ) -> dict[str, Any]:
+        """Advance only deterministic normal-loop boundaries.
+
+        External effects and ambiguous/dirty product states are never advanced
+        here.  Assurance commands run only with explicit ``run_assurance``.
+        """
+        transitions: list[dict[str, Any]] = []
+        current = read_current(self.root, allow_uninitialized=True)
+        if current is not None:
+            # A refresh extends the current immutable lineage; prove that lineage
+            # before accepting or publishing any replacement evidence.
+            current = self._snapshot()
+        if current is None:
+            if work_contract is None or grounding_report is None:
+                raise KernelError("uninitialized Work Loop requires --work-contract and --grounding")
+            created = self.bootstrap(
+                request or {}, execution_spec=execution_spec,
+                work_contract=work_contract, grounding_report=grounding_report,
+                configured_failures=configured_failures,
+            )
+            transitions.append({
+                "kind": created.snapshot.event.get("kind"),
+                "generation": created.snapshot.generation,
+                "generation_hash": created.snapshot.generation_hash,
+            })
+        elif work_contract is not None or grounding_report is not None:
+            if work_contract is None or grounding_report is None:
+                raise KernelError("continuing Work Loop accepts both handoff files or neither")
+            contract_value, contract_digest = load_contract(work_contract)
+            expected = (((current.state.get("work_loop") or {}).get("work_contract") or {}).get("hash"))
+            if contract_digest != expected:
+                if decision_resolution is not None:
+                    raise KernelError("Contract supersession does not accept a separate Decision resolution")
+                superseded = self._supersede_work_contract(
+                    current, contract_value, contract_digest, grounding_report,
+                    execution_spec=execution_spec,
+                    configured_failures=configured_failures,
+                )
+                transitions.append({
+                    "kind": "WORK_CONTRACT_SUPERSESSION",
+                    "generation": superseded.snapshot.generation,
+                    "generation_hash": superseded.snapshot.generation_hash,
+                })
+            else:
+                observed = git_adapter.snapshot(self.root)
+                transition_observed = git_adapter.snapshot(
+                    self.root,
+                    base_sha=(current.state.get("base_git") or {}).get("head"),
+                    product_sha=(current.state.get("product_commit") or {}).get("sha"),
+                )
+                supplied_grounding = load_grounding_report(
+                    grounding_report, contract_value, contract_digest,
+                    root=self.root, observed_repository=observed,
+                )
+                expected_grounding = (((current.state.get("work_loop") or {}).get("grounding") or {}).get("hash"))
+                if grounding_hash(supplied_grounding) != expected_grounding:
+                    if current.state.get("phase") not in {"ACTIVE", "PRODUCT_COMMITTED"}:
+                        raise KernelError("grounding can refresh only before assurance is recorded")
+                    refreshed_digest = grounding_hash(supplied_grounding)
+                    grounding_reference = _work_loop_evidence_reference(
+                        current.state["task_id"], "grounding", refreshed_digest,
+                    )
+                    contract_reference = current.state["work_loop"]["work_contract"]["evidence"]
+                    decision_history, resolution_publications = _decision_history_for_refresh(
+                        current.state["work_loop"], supplied_grounding,
+                        task_id=current.state["task_id"],
+                        decision_resolution=decision_resolution,
+                    )
+                    refreshed_binding = work_loop_binding(
+                        contract_value, contract_digest, supplied_grounding,
+                        contract_evidence=contract_reference,
+                        grounding_evidence=grounding_reference,
+                        decision_history=decision_history,
+                    )
+                    authorization = current.state.get("authorization") or {}
+                    refreshed_request = task_request_from_work_loop(
+                        contract_value, supplied_grounding,
+                        owner_authorization=str(authorization.get("status") or "NONE"),
+                        authorization_reference=str(authorization.get("reference") or ""),
+                        authorization_actor=str(authorization.get("actor") or "OWNER"),
+                    )
+                    candidate, refresh_event = transition_grounding_refresh(
+                        current.state, refreshed_request, refreshed_binding,
+                        preaction_product_state=(
+                            transition_observed.get("head") == (current.state.get("base_git") or {}).get("head")
+                            and transition_observed.get("tree") == (current.state.get("base_git") or {}).get("tree")
+                            and not transition_observed.get("product_dirty")
+                        ),
+                    )
+                    for resolution_reference, resolution_bytes in resolution_publications:
+                        _publish_work_loop_document(
+                            self.root, resolution_reference, resolution_bytes,
+                            configured_failures=configured_failures,
+                        )
+                    _publish_work_loop_document(
+                        self.root, grounding_reference,
+                        canonical_grounding_bytes(supplied_grounding),
+                        configured_failures=configured_failures,
+                    )
+                    refreshed = commit_candidate(
+                        self.root,
+                        expected_hash=current.generation_hash,
+                        candidate_state=candidate,
+                        event={
+                            **refresh_event,
+                            "prior_grounding_hash": expected_grounding,
+                            "grounding_hash": refreshed_digest,
+                            "repository_head": supplied_grounding["repository"]["head"],
+                            "repository_tree": supplied_grounding["repository"]["tree"],
+                        },
+                        operation_id=operation_id(
+                            "GROUNDING_REFRESH", candidate["task_id"], candidate["revision"],
+                            expected_grounding, refreshed_digest,
+                        ),
+                        configured_failures=configured_failures,
+                        projector=self.project,
+                        precommit_validator=lambda: _assert_git_unchanged(
+                            self.root, transition_observed,
+                            base_sha=(candidate.get("base_git") or {}).get("head"),
+                            product_sha=(candidate.get("product_commit") or {}).get("sha"),
+                        ),
+                    )
+                    transitions.append({
+                        "kind": "GROUNDING_REFRESH",
+                        "generation": refreshed.snapshot.generation,
+                        "generation_hash": refreshed.snapshot.generation_hash,
+                    })
+                elif decision_resolution is not None:
+                    _validate_decision_resolution_retry(
+                        current.state["work_loop"], decision_resolution,
+                    )
+        elif decision_resolution is not None:
+            raise KernelError("Decision resolution requires Work Contract and grounding evidence")
+
+        for _ in range(4):
+            snapshot = self._snapshot()
+            state = snapshot.state
+            if state.get("work_loop") is None:
+                raise KernelError("work advance is available only for evidence-carrying Work Loop tasks")
+            if state["work_loop"]["action_rights"]["requested_action_status"] != "GRANTED":
+                break
+            if _work_loop_grounding_freshness(self.root, state)["reexecute"]:
+                break
+            phase = state["phase"]
+            runtime = state.get("execution") or {}
+            unresolved_effects = [
+                effect_id for effect_id, row in (runtime.get("effect_ledger") or {}).items()
+                if row.get("state") not in execution.TERMINAL_EFFECT_STATES
+            ]
+            if state.get("execution_class") == "EXTERNAL_EFFECT" or unresolved_effects:
+                break
+            if phase == "ACTIVE":
+                change_mode = state.get("product_change_mode") or (
+                    "NO_SOURCE_DELTA" if state.get("side_effect") == "READ_ONLY" else "PRODUCT_DELTA"
+                )
+                if change_mode == "PRODUCT_DELTA":
+                    observed = git_adapter.snapshot(
+                        self.root, base_sha=(state.get("base_git") or {}).get("head"),
+                    )
+                    if (
+                        observed.get("product_dirty")
+                        or observed.get("head") == (state.get("base_git") or {}).get("head")
+                        or observed.get("relation_to_base") != "DESCENDANT"
+                    ):
+                        break
+                    committed = self.record_commit(configured_failures=configured_failures)
+                    transitions.append({
+                        "kind": committed.snapshot.event.get("kind"),
+                        "generation": committed.snapshot.generation,
+                        "generation_hash": committed.snapshot.generation_hash,
+                    })
+                    if not run_assurance:
+                        break
+                    continue
+                if not run_assurance:
+                    break
+            elif phase == "PRODUCT_COMMITTED" and not run_assurance:
+                break
+            elif phase == "PRODUCT_COMMITTED":
+                pass
+            elif phase == "ASSURANCE_READY":
+                if not run_assurance:
+                    break
+                closed = self.close(configured_failures=configured_failures)
+                transitions.append({
+                    "kind": closed.snapshot.event.get("kind"),
+                    "generation": closed.snapshot.generation,
+                    "generation_hash": closed.snapshot.generation_hash,
+                })
+                break
+            else:
+                break
+
+            snapshot = self._snapshot()
+            state = snapshot.state
+            if state["phase"] not in {"ACTIVE", "PRODUCT_COMMITTED"}:
+                continue
+            checks = list(state.get("acceptance_commands") or [])
+            assured = self.validate(
+                checks=checks,
+                inspected_by=str(inspected_by or state.get("worker_id") or "WORKER"),
+                reviewer=reviewer,
+                review_reference=review_reference,
+                rollback_check=rollback_check,
+                runtime_acceptance_reference=runtime_acceptance_reference,
+                timeout=timeout,
+                configured_failures=configured_failures,
+            )
+            transitions.append({
+                "kind": assured.snapshot.event.get("kind"),
+                "generation": assured.snapshot.generation,
+                "generation_hash": assured.snapshot.generation_hash,
+            })
+
+        final = self.inspect()
+        state = self._snapshot().state
+        if state["phase"] == "CLOSED":
+            status = "COMPLETE"
+        elif state["work_loop"]["action_rights"]["requested_action_status"] != "GRANTED":
+            status = "DECISION_REQUIRED"
+        elif _work_loop_grounding_freshness(self.root, state)["reexecute"]:
+            status = "GROUNDING_REFRESH_REQUIRED"
+        elif state["phase"] == "PRODUCT_COMMITTED":
+            status = "ASSURANCE_REQUIRED"
+        elif state.get("execution_class") == "EXTERNAL_EFFECT":
+            status = "EFFECT_ACTION_REQUIRED"
+        elif state["phase"] == "ACTIVE":
+            status = "READY_FOR_WORK"
+        else:
+            status = state["phase"]
+        return {"status": status, "transitions": transitions, "current": final}
 
     def record_commit(self, *, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
         previous = self._snapshot()
         state = previous.state
+        stale = _work_loop_grounding_freshness(self.root, state)["reexecute"]
+        if stale:
+            raise KernelError(
+                "record-commit requires fresh Worker grounding for changed claims: "
+                + ", ".join(stale)
+            )
+        execution.assert_plan_valid(state, "record-commit")
         observed = git_adapter.snapshot(self.root, base_sha=(state.get("base_git") or {}).get("head"))
         if state.get("phase") == "PRODUCT_COMMITTED":
             same_head = (state.get("product_commit") or {}).get("sha") == observed.get("head")
@@ -574,6 +1815,7 @@ class BuildOS:
         reviewer: str | None = None,
         review_reference: str | None = None,
         rollback_check: str | None = None,
+        runtime_acceptance_reference: str | None = None,
         timeout: int = 120,
         op_id: str | None = None,
         configured_failures: str | None = None,
@@ -582,6 +1824,17 @@ class BuildOS:
             raise KernelError("validation timeout must be a positive number of seconds")
         previous = self._snapshot()
         state = previous.state
+        if state.get("work_loop") and state["work_loop"]["action_rights"]["requested_action_status"] != "GRANTED":
+            raise KernelError("validation is blocked by canonical Work Loop action rights")
+        freshness = _work_loop_grounding_freshness(self.root, state)
+        if freshness["reexecute"]:
+            raise KernelError(
+                "validation requires fresh Worker grounding for changed claims: "
+                + ", ".join(freshness["reexecute"])
+            )
+        execution.assert_plan_valid(state, "validation")
+        execution.assert_effects_resolved(state)
+        enhanced = (state.get("execution") or {}).get("mode") == "ENHANCED"
         requested_checks = _normalized_commands(checks, label="validation")
         combined = _normalized_commands([*(state.get("acceptance_commands") or []), *requested_checks], label="validation")
         inspected_by = str(inspected_by).strip()
@@ -591,6 +1844,10 @@ class BuildOS:
         review_reference = review_reference or None
         rollback_check = str(rollback_check).strip() if rollback_check is not None else None
         rollback_check = rollback_check or None
+        runtime_acceptance_reference = str(runtime_acceptance_reference).strip() if runtime_acceptance_reference is not None else None
+        runtime_acceptance_reference = runtime_acceptance_reference or None
+        if enhanced and (combined or rollback_check):
+            raise KernelError("enhanced execution validation uses only admitted shell-free claim commands")
         if state.get("phase") == "ASSURANCE_READY" and previous.event.get("kind") == "VALIDATION":
             if op_id is not None and previous.operation_id != op_id:
                 raise KernelError("task is already assured under a different validation operation")
@@ -599,6 +1856,16 @@ class BuildOS:
                 base_sha=(state.get("base_git") or {}).get("head"),
                 product_sha=(state.get("product_commit") or {}).get("sha"),
             )
+            prepared = None
+            validation_plan = None
+            if enhanced:
+                evidence_ref = (state.get("evidence") or [])[-1]
+                prior_path = safe_repository_descendant(
+                    self.root, evidence_ref["path"], label="validation evidence target",
+                )
+                prior_payload = json.loads(prior_path.read_text(encoding="utf-8"))
+                prepared = prior_payload.get("checks") or []
+                validation_plan = prior_payload.get("execution_validation")
             _prepare_evidence(
                 self.root,
                 previous,
@@ -609,8 +1876,11 @@ class BuildOS:
                 reviewer=reviewer,
                 review_reference=review_reference,
                 rollback_check=rollback_check,
+                runtime_acceptance_reference=runtime_acceptance_reference,
                 timeout=timeout,
                 configured_failures=configured_failures,
+                prepared_checks=prepared,
+                execution_validation=validation_plan,
             )
             return self._idempotent(previous)
         observed = git_adapter.snapshot(
@@ -624,11 +1894,34 @@ class BuildOS:
         transition_validate(
             state,
             observed,
-            {"path": "PRECONDITION_ONLY", "sha256": "PRECONDITION_ONLY", "target_sha": observed.get("head")},
+            {
+                "path": "PRECONDITION_ONLY", "sha256": "PRECONDITION_ONLY",
+                "target_sha": observed.get("head"),
+                "target_tree": observed.get("tree"),
+                "runtime_acceptance_reference": runtime_acceptance_reference,
+            },
         )
+        validation_plan = None
+        prepared = None
+        if enhanced:
+            prior_state = None
+            if int(state.get("revision", 1)) > 1:
+                prior_state = find_task_revision(self.root, state["task_id"], int(state["revision"]) - 1).state
+            validation_plan = execution.claim_plan(
+                self.root, state, target_sha=str(observed.get("head")), previous_state=prior_state,
+            )
+            guard = lambda: _assert_validation_target_unchanged(
+                self.root, observed,
+                base_sha=(state.get("base_git") or {}).get("head"),
+                product_sha=(state.get("product_commit") or {}).get("sha"),
+            )
+            prepared = execution.execute_claim_plan(
+                self.root, state, validation_plan, timeout=timeout,
+                command_guard=guard,
+            )
         operation = op_id or operation_id(
-            "VALIDATE", state["task_id"], state["revision"], observed.get("head"), combined,
-            inspected_by, reviewer, review_reference, rollback_check,
+            "VALIDATE", state["task_id"], state["revision"], observed.get("head"), combined, validation_plan,
+            inspected_by, reviewer, review_reference, rollback_check, runtime_acceptance_reference,
         )
         evidence = _prepare_evidence(
             self.root,
@@ -640,8 +1933,11 @@ class BuildOS:
             reviewer=reviewer,
             review_reference=review_reference,
             rollback_check=rollback_check,
+            runtime_acceptance_reference=runtime_acceptance_reference,
             timeout=timeout,
             configured_failures=configured_failures,
+            prepared_checks=prepared,
+            execution_validation=validation_plan,
         )
         refreshed = git_adapter.snapshot(
             self.root,
@@ -649,6 +1945,14 @@ class BuildOS:
             product_sha=(state.get("product_commit") or {}).get("sha"),
         )
         candidate, event = transition_validate(state, refreshed, evidence)
+        if enhanced:
+            candidate = execution.attach_claim_results(
+                candidate, validation_plan or {}, prepared or [], evidence=evidence,
+            )
+            event["claim_plan"] = {
+                "executed": list((validation_plan or {}).get("execute") or []),
+                "reused": list((validation_plan or {}).get("reuse") or []),
+            }
         return commit_candidate(
             self.root,
             expected_hash=previous.generation_hash,
@@ -668,6 +1972,15 @@ class BuildOS:
     def close(self, *, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
         previous = self._snapshot()
         state = previous.state
+        if state.get("work_loop") is not None:
+            stale = _work_loop_grounding_freshness(self.root, state)["reexecute"]
+            if stale:
+                raise KernelError(
+                    "close requires fresh Worker grounding for changed claims: "
+                    + ",".join(stale)
+                )
+        execution.assert_plan_valid(state, "close")
+        execution.assert_effects_resolved(state)
         if state.get("phase") == "CLOSED" and previous.event.get("kind") == "CLOSE" and (op_id is None or previous.operation_id == op_id):
             assurance = state.get("assurance") or {}
             observed_closed = git_adapter.snapshot(
@@ -676,17 +1989,22 @@ class BuildOS:
                 validated_sha=assurance.get("target_sha"),
             )
             relation = str(observed_closed.get("relation_to_validated", "UNKNOWN")).upper()
+            runtime_no_source = assurance.get("mode") == "NO_SOURCE_DELTA" and state.get("side_effect") != "READ_ONLY"
             if (
                 not observed_closed.get("available")
                 or observed_closed.get("product_dirty")
                 or relation not in {"SAME", "DESCENDANT"}
                 or bool(observed_closed.get("changes_since_validated"))
+                or (runtime_no_source and (observed_closed.get("head") != assurance.get("target_sha") or relation != "SAME"))
             ):
                 raise KernelError("closed proof does not cover the current product state; start an explicit new revision")
             return self._idempotent(previous)
         assurance = state.get("assurance") or {}
         for evidence in state.get("evidence") or []:
-            evidence_path = self.root / str(evidence.get("path"))
+            evidence_path = safe_repository_descendant(
+                self.root, str(evidence.get("path") or ""),
+                label="close evidence target",
+            )
             if not evidence_path.is_file() or sha256_bytes(evidence_path.read_bytes()) != evidence.get("sha256"):
                 raise KernelError("close requires intact immutable evidence; no evidence was deleted")
         observed = git_adapter.snapshot(
@@ -802,6 +2120,7 @@ class BuildOS:
         configured_failures: str | None = None,
     ) -> CommitResult:
         previous = self._snapshot()
+        execution.assert_no_unresolved_effects(previous.state, "revise")
         request_intent = {
             "reason": str(reason).strip(),
             "risk": str(risk).upper() if risk else None,
@@ -840,6 +2159,7 @@ class BuildOS:
 
     def abort(self, *, reason: str, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
         previous = self._snapshot()
+        execution.assert_no_unresolved_effects(previous.state, "abort")
         if previous.event.get("kind") == "ABORT" and previous.state.get("abort_reason") == reason and (op_id is None or previous.operation_id == op_id):
             return self._idempotent(previous)
         candidate, event = transition_abort(previous.state, reason=reason)

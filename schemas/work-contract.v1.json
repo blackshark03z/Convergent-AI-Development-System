@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildos.invalid/schemas/work-contract.v1.json",
+  "title": "Build OS evidence-carrying Work Contract",
+  "type": "object",
+  "required": [
+    "schema", "contract_id", "revision", "issuer", "target", "objective",
+    "non_goals", "claims", "acceptance_ids", "open_question_ids", "action_basis_ids", "ship", "metadata"
+  ],
+  "properties": {
+    "schema": {"const": "buildos.work-contract.v1"},
+    "contract_id": {"$ref": "#/$defs/id"},
+    "revision": {"type": "integer", "minimum": 1},
+    "issuer": {
+      "type": "object",
+      "required": ["role", "identity", "authority_reference", "issued_at"],
+      "properties": {
+        "role": {"enum": ["OWNER", "TECH_LEAD"]},
+        "identity": {"type": "string", "minLength": 1, "maxLength": 256},
+        "authority_reference": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "issued_at": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "required": ["repository", "ref", "head", "tree"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^(?:[A-Za-z]:[\\\\/]|\\\\\\\\|/)"},
+        "ref": {"type": ["string", "null"], "maxLength": 512},
+        "head": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "tree": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"}
+      },
+      "additionalProperties": false
+    },
+    "objective": {"type": "string", "minLength": 1, "maxLength": 4000},
+    "non_goals": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+    "claims": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/claim"}},
+    "acceptance_ids": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "open_question_ids": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "action_basis_ids": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "ship": {
+      "type": "object",
+      "required": ["mode", "authority_reference"],
+      "properties": {
+        "mode": {"enum": ["HANDOFF_ONLY", "COMMIT_ONLY", "PULL_REQUEST", "MERGE", "RELEASE", "DEPLOY", "RUNTIME_ACTIVATION"]},
+        "authority_reference": {"type": ["string", "null"], "maxLength": 2048}
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["parent_contract_hash", "source_context_refs"],
+      "properties": {
+        "parent_contract_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "source_context_refs": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 2048}}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "sourceRef": {
+      "type": "object",
+      "required": ["id", "kind", "locator", "sha256", "observed_at"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["FILE", "URL", "EVIDENCE", "REPOSITORY", "PROVIDER"]},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "observed_at": {"type": ["string", "null"], "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "repoBinding": {
+      "type": ["object", "null"],
+      "required": ["head", "tree", "paths"],
+      "properties": {
+        "head": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "tree": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$"},
+        "paths": {"type": "array", "maxItems": 128, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^*?\\[]+$"}}
+      },
+      "additionalProperties": false
+    },
+    "claim": {
+      "type": "object",
+      "required": [
+        "id", "kind", "statement", "authority", "binding", "status",
+        "source_refs", "repo_binding", "observed_at", "invalidators", "verification_owner"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["INTENT", "CONSTRAINT", "DECISION", "ACCEPTANCE", "REPO_CLAIM", "EXTERNAL_FACT", "ARTIFACT", "HYPOTHESIS", "OPEN_QUESTION"]},
+        "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "authority": {"enum": ["OWNER", "TECH_LEAD", "REPOSITORY", "PROVIDER", "DETERMINISTIC_TOOL", "WORKER", "ADVISORY_MODEL"]},
+        "binding": {"enum": ["CANONICAL", "CONSTRAINT", "ADVISORY", "VERIFY_IN_REPO"]},
+        "status": {"enum": ["DECIDED", "VERIFIED", "SUPPORTED", "HYPOTHESIS", "UNKNOWN", "CONTRADICTED", "SUPERSEDED"]},
+        "source_refs": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/sourceRef"}},
+        "repo_binding": {"$ref": "#/$defs/repoBinding"},
+        "observed_at": {"type": ["string", "null"], "maxLength": 128},
+        "invalidators": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+        "verification_owner": {"enum": ["NONE", "WORKER", "DETERMINISTIC_TOOL", "TECH_LEAD", "OWNER"]}
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "buildos.side-effect-contract.v1",
+  "system_id": "replace-with-system-id",
+  "state_dimensions": [
+    {"id": "dispatch", "states": ["PRE_DISPATCH", "EFFECT_POSSIBLE", "EFFECT_CONFIRMED"]},
+    {"id": "acquisition", "states": ["NOT_OBSERVED", "CANDIDATE", "ACQUIRED"]}
+  ],
+  "canonical_predicates": [
+    {
+      "id": "effect_submission_authorized",
+      "semantics": "All required preconditions and immutable authority evidence are satisfied.",
+      "verifier": "Replace with one deterministic verifier command or authority reference."
+    },
+    {
+      "id": "no_prior_effect",
+      "semantics": "Canonical evidence positively proves that no earlier external effect exists.",
+      "verifier": "Replace with the single deterministic no-effect verifier shared by every retry and replay path."
+    }
+  ],
+  "semantic_consumers": [
+    {
+      "id": "effect_authority_gate",
+      "action_id": "submit_external_effect",
+      "role": "AUTHORITY",
+      "predicate_id": "effect_submission_authorized",
+      "purpose": "Authorize the first external effect."
+    },
+    {
+      "id": "retry_authority_gate",
+      "action_id": "submit_external_effect",
+      "role": "RETRY",
+      "predicate_id": "no_prior_effect",
+      "purpose": "Authorize retry only after positive no-effect proof."
+    },
+    {
+      "id": "replay_validator",
+      "action_id": "submit_external_effect",
+      "role": "REPLAY",
+      "predicate_id": "no_prior_effect",
+      "purpose": "Use the same semantic proof during replay validation."
+    }
+  ],
+  "dangerous_actions": [
+    {
+      "id": "submit_external_effect",
+      "effect": "Describe the externally visible or billable effect.",
+      "idempotency": "NON_IDEMPOTENT",
+      "authority_predicate": "effect_submission_authorized",
+      "required_evidence": ["Describe the immutable evidence required before acting."],
+      "unknown_is_barrier": true,
+      "retry_policy": "POSITIVE_NO_EFFECT_PROOF_ONLY",
+      "positive_no_effect_proof": "no_prior_effect"
+    }
+  ],
+  "crash_recovery": [
+    {
+      "action_id": "submit_external_effect",
+      "crash_point": "before_effect_possible",
+      "effect_state": "NOT_POSSIBLE",
+      "retry_authority": "POSITIVE_NO_EFFECT_PROOF",
+      "proof_predicate": "no_prior_effect",
+      "recovery_action": "Verify canonical no-effect proof before retry."
+    },
+    {
+      "action_id": "submit_external_effect",
+      "crash_point": "after_effect_possible",
+      "effect_state": "POSSIBLE",
+      "retry_authority": "NEVER",
+      "proof_predicate": null,
+      "recovery_action": "Stop the queue and reconcile the existing effect."
+    }
+  ],
+  "schema_compatibility": [
+    {"schema": "current.v1", "policy": "CURRENT_SCHEMA", "verifier": ""},
+    {"schema": "legacy.v0", "policy": "VERIFIED_LEGACY_EQUIVALENT", "verifier": "Replace with a deterministic verifier command or authority reference."}
+  ]
+}

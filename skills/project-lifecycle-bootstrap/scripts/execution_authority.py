@@ -9,9 +9,8 @@ from pathlib import Path
 import re
 import sys
 
-KERNEL_VERSION = "1.22"
-KERNEL_COMMIT = "e41ca10826b32b2d46a3b859345f734c113e00ae"
-LIFECYCLE_KIT_VERSION = "1.1.0"
+KERNEL_VERSION = "1.25"
+LIFECYCLE_KIT_VERSION = "1.3.1"
 CONTINUITY_SKILL_VERSION = "1.1.0"
 RECORD = ".buildos-authority.json"
 LEGACY_EXECUTABLES = ("scripts/ai.py", "scripts/ai_os.py")
@@ -22,6 +21,14 @@ WORKER_FILES = ("AGENTS.md", "WORKER_INSTRUCTIONS.md", "prompts/03_WORKER.md")
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def kernel_commit(package_root: Path) -> str:
+    manifest = json.loads((package_root / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
+    value = manifest.get("frozen_kernel_commit") if isinstance(manifest, dict) else None
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value):
+        raise ValueError("package manifest frozen_kernel_commit is invalid")
+    return value
 
 
 def fail(errors: list[str], **extra: object) -> int:
@@ -36,7 +43,7 @@ def expected_record(package_root: Path) -> dict[str, object]:
         "schema": "buildos.execution-authority.v1",
         "invariant": "SINGLE_ACTIVE_EXECUTION_AUTHORITY",
         "kernel_version": KERNEL_VERSION,
-        "kernel_commit": KERNEL_COMMIT,
+        "kernel_commit": kernel_commit(package_root),
         "project_lifecycle_kit_version": LIFECYCLE_KIT_VERSION,
         "continuity_skill_version": CONTINUITY_SKILL_VERSION,
         "package_root": str(package_root.resolve()),
@@ -90,16 +97,20 @@ def check(root: Path) -> int:
             errors.append(f"CONFLICTING_WORKER_INSTRUCTION: {relative}")
     if errors:
         return fail(errors, canonical_executor=expected["canonical_executor"], cleanup_required=any(error.startswith(("LEGACY_EXECUTABLE_CALLABLE", "LEGACY_STATE_AUTHORITATIVE", "CONFLICTING_WORKER_INSTRUCTION")) for error in errors))
-    print(json.dumps({"status": "PASS", "invariant": "SINGLE_ACTIVE_EXECUTION_AUTHORITY", "canonical_executor": expected["canonical_executor"], "kernel_commit": KERNEL_COMMIT, "legacy_archive_ignored": True}, sort_keys=True))
+    print(json.dumps({"status": "PASS", "invariant": "SINGLE_ACTIVE_EXECUTION_AUTHORITY", "canonical_executor": expected["canonical_executor"], "kernel_commit": expected["kernel_commit"], "legacy_archive_ignored": True}, sort_keys=True))
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv == ["--version"]:
-        print(json.dumps({"component": "execution-authority", "kernel_commit": KERNEL_COMMIT, "kernel_version": KERNEL_VERSION, "project_lifecycle_kit_version": LIFECYCLE_KIT_VERSION, "continuity_skill_version": CONTINUITY_SKILL_VERSION}, sort_keys=True))
+        try:
+            commit = kernel_commit(Path(__file__).resolve().parents[3])
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            return fail([f"PACKAGE_MANIFEST_INVALID: {exc}"])
+        print(json.dumps({"component": "execution-authority", "kernel_commit": commit, "kernel_version": KERNEL_VERSION, "project_lifecycle_kit_version": LIFECYCLE_KIT_VERSION, "continuity_skill_version": CONTINUITY_SKILL_VERSION}, sort_keys=True))
         return 0
-    parser = argparse.ArgumentParser(description="Build OS v1.22 execution authority preflight")
+    parser = argparse.ArgumentParser(description="Build OS v1.25 execution authority preflight")
     parser.add_argument("--root", required=True)
     parser.add_argument("--package-root")
     parser.add_argument("command", choices=("write-record", "check"))

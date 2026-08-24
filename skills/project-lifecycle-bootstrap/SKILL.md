@@ -1,13 +1,13 @@
 ---
 name: project-lifecycle-bootstrap
-description: Establish or adopt the bounded Project Lifecycle Kit operating contract around frozen Build OS v1.22. Use for greenfield setup, existing-project adoption, accepted-baseline reconciliation, quality-gate verification, and explicitly requested project retirement.
+description: Establish or adopt the bounded Project Lifecycle Kit operating contract around Build OS v1.25 Work Loop candidate. Use for greenfield setup, existing-project adoption, accepted-baseline reconciliation, integrated execution admission, quality-gate verification, and explicitly requested project retirement.
 ---
 
 # Project lifecycle bootstrap
 
-Project Lifecycle Kit v1.1.0 is mandatory by the portable adoption contract,
-not kernel-enforced security. It does not modify frozen `buildos/` and it does
-not replace `documentation-handoff-continuity v1.1.0`, which remains the sole
+Project Lifecycle Kit v1.3.1 is mandatory by the portable adoption contract,
+not kernel-enforced security. It does not replace
+`documentation-handoff-continuity v1.1.0`, which remains the sole
 authority for active operational intent.
 
 Read `docs/PROJECT_LIFECYCLE_KIT.md` for the authority model and the bounded
@@ -48,8 +48,10 @@ fix relevant failures, integrated relevant validation, final acceptance, close.
 Re-run only after relevant change, failure, staleness or a final clean-pass
 requirement. Batch adjacent safe deterministic operations, never risky actions.
 
-Before a Worker takes over, run the portable execution-authority preflight.
-Use only its recorded v1.22 executor; legacy project CLIs and `.ai` state are
+Before a Worker takes over, use the public `scripts/ai.py` facade. A v1.25
+policy enables integrated admission so this one path composes execution
+authority, project policy and context ownership before mutation. Use only its
+recorded v1.25 executor; legacy project CLIs and `.ai` state are
 never fallback authorities, and version mismatch or ambiguity is a Tech Lead
 blocker. Archives and historical documents are provenance only.
 
@@ -69,6 +71,19 @@ accepted baseline, meaningful executable gates, all required documentation
 impact mappings, defined runtime/data/production safety boundaries, enabled
 continuity, or default-on external Field Study. Tech Lead decisions must be
 made in that policy, explicitly and durably.
+
+Prefer quality gates as a trusted `argv` list with `PROJECT_POLICY_TRUSTED` or
+`PACKAGE_OWNED` provenance. The exact legacy shell-command shape remains a
+labeled migration path only; an autonomous model must not silently author it.
+
+Projects with externally visible, destructive, billable, or non-idempotent
+effects must use `--execution-class EXTERNAL_EFFECT` and a compiled execution
+spec. The canonical effect ledger makes unknown dispatch a queue barrier;
+retry requires provider-enforced same-key idempotency or positive canonical
+no-effect proof. The older `side_effect_contract` policy remains a static
+compatibility contract, not a runtime ledger. A project-specific provider
+name, request ID, status string, or heuristic is evidence input, never a
+replacement for the semantic authority predicate.
 
 For an existing repository, inspect Git and source first. Bootstrap writes only
 missing canonical templates and labels unverified history/capabilities as

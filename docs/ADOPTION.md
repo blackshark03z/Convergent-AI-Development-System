@@ -54,6 +54,12 @@ is the explicit enrollment path: it writes `.buildos-policy.json` with
 the single active execution authority.
 
 When that policy flag is absent or false, the regular Worker facade does not
-run the context-epoch preflight. This preserves the original v1.22 flow for
+run the context-epoch preflight. This preserves the compact kernel flow for
 small projects and trials. An operator may explicitly enable or disable the
 guard for one invocation with `BUILDOS_CONTEXT_EPOCH_PREFLIGHT=1` or `=0`.
+
+Projects with external, destructive, billable, or non-idempotent effects can
+also enable the independent `side_effect_contract` policy entry. This adds a
+deterministic design/spec check for canonical predicates, retry/replay
+consumers, crash recovery, and schema compatibility; it does not add a second
+lifecycle authority.

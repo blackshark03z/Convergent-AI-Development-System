@@ -11,7 +11,9 @@ import subprocess
 import sys
 from typing import Any
 
-KIT_VERSION = "1.1.0"
+from side_effect_contract import ContractError, validate_file as validate_side_effect_contract
+
+KIT_VERSION = "1.3.1"
 POLICY_FILE = ".buildos-policy.json"
 REQUIRED_CATEGORIES = {
     "USER_BEHAVIOR", "ARCHITECTURE_OWNERSHIP_BOUNDARY", "API_CONFIG_SCHEMA",
@@ -99,7 +101,33 @@ def lifecycle(policy: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def side_effect_contract(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
+    """Validate an optional, provider-neutral side-effect contract."""
+    value = policy.get("side_effect_contract", {"enabled": False})
+    if not isinstance(value, dict) or not isinstance(value.get("enabled"), bool):
+        raise LifecycleError("side_effect_contract must declare enabled as a boolean")
+    if not value["enabled"]:
+        return {"enabled": False, "status": "NOT_CONFIGURED"}
+    contract_path = safe_path(value.get("path"), "side_effect_contract.path")
+    path = root / contract_path
+    if not path.is_file():
+        raise LifecycleError(f"enabled side-effect contract is missing: {contract_path}")
+    try:
+        result = validate_side_effect_contract(path)
+    except ContractError as exc:
+        raise LifecycleError(f"side-effect contract failed: {exc}") from exc
+    return {"enabled": True, "path": contract_path, **result}
+
+
 def validate_policy(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
+    admission = policy.get("execution_admission")
+    if admission is not None:
+        if not isinstance(admission, dict) or set(admission) != {"enabled", "require_authority_record"}:
+            raise LifecycleError("execution_admission must use the exact enabled/require_authority_record shape")
+        if not isinstance(admission.get("enabled"), bool) or not isinstance(admission.get("require_authority_record"), bool):
+            raise LifecycleError("execution_admission values must be booleans")
+        if admission["enabled"] and not admission["require_authority_record"]:
+            raise LifecycleError("integrated execution admission cannot weaken the authority-record requirement")
     handoff = policy.get("documentation_handoff")
     if not isinstance(handoff, dict):
         raise LifecycleError("documentation_handoff policy object is required")
@@ -132,12 +160,26 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(gates, list) or not gates:
         raise LifecycleError("at least one executable quality gate is mandatory by adoption contract")
     gate_ids: set[str] = set()
+    normalized_gates: list[dict[str, Any]] = []
     for gate in gates:
         if not isinstance(gate, dict): raise LifecycleError("quality gate must be an object")
         gate_id = required_string(gate.get("id"), "quality gate id")
-        command = required_string(gate.get("command"), f"quality gate {gate_id}.command")
         if gate_id in gate_ids: raise LifecycleError("quality gate ids must be unique")
-        if any(token in command for token in ("\n", "\r")): raise LifecycleError("quality gate commands must be one line")
+        if set(gate) == {"id", "argv", "provenance"}:
+            argv = gate.get("argv")
+            provenance = str(gate.get("provenance") or "").upper()
+            if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) or not arg or "\x00" in arg for arg in argv):
+                raise LifecycleError(f"quality gate {gate_id}.argv must be a non-empty argument list")
+            if provenance not in {"PROJECT_POLICY_TRUSTED", "OWNER_AUTHORED", "PACKAGE_OWNED"}:
+                raise LifecycleError(f"quality gate {gate_id} has untrusted command provenance")
+            normalized = "PROJECT_POLICY_TRUSTED" if provenance == "OWNER_AUTHORED" else provenance
+            normalized_gates.append({"id": gate_id, "argv": list(argv), "provenance": normalized, "execution": "ARGV_NO_SHELL"})
+        elif set(gate) == {"id", "command"}:
+            command = required_string(gate.get("command"), f"quality gate {gate_id}.command")
+            if any(token in command for token in ("\n", "\r")): raise LifecycleError("quality gate commands must be one line")
+            normalized_gates.append({"id": gate_id, "command": command, "provenance": "LEGACY_OWNER_POLICY", "execution": "LEGACY_SHELL"})
+        else:
+            raise LifecycleError(f"quality gate {gate_id} must use trusted argv or the exact legacy command shape")
         gate_ids.add(gate_id)
     boundaries = cfg.get("safety_boundaries")
     if not isinstance(boundaries, dict): raise LifecycleError("project_lifecycle.safety_boundaries is required")
@@ -150,7 +192,8 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(intent, dict): raise LifecycleError("project_intent is required; do not silently invent project purpose")
     for name in ("purpose", "intended_use", "success_definition", "non_goals", "constraints"):
         required_string(intent.get(name), f"project_intent.{name}")
-    return {"accepted_ref": accepted_ref, "accepted_sha": sha, "handoff": handoff, "profile": profile, "pack": pack, "gates": gates, "boundaries": boundaries, "modules": modules, "intent": intent, "testing_strategy": required_string(cfg.get("testing_strategy"), "testing_strategy"), "engineering_conventions": required_string(cfg.get("engineering_conventions"), "engineering_conventions")}
+    effect_contract = side_effect_contract(root, policy)
+    return {"accepted_ref": accepted_ref, "accepted_sha": sha, "handoff": handoff, "profile": profile, "pack": pack, "gates": normalized_gates, "boundaries": boundaries, "modules": modules, "intent": intent, "side_effect_contract": effect_contract, "execution_admission": admission or {"enabled": False, "require_authority_record": False}, "testing_strategy": required_string(cfg.get("testing_strategy"), "testing_strategy"), "engineering_conventions": required_string(cfg.get("engineering_conventions"), "engineering_conventions")}
 
 
 def package_root() -> Path:
@@ -224,8 +267,17 @@ def bootstrap(root: Path, facts: dict[str, Any], mode: str, verify_gates: bool) 
 def verify_gates_fn(root: Path, gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     results = []
     for gate in gates:
-        completed = subprocess.run(gate["command"], cwd=root, shell=True, text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=180)
-        results.append({"id": gate["id"], "command": gate["command"], "exit_code": completed.returncode, "output_tail": (completed.stdout + completed.stderr)[-500:]})
+        if gate["execution"] == "ARGV_NO_SHELL":
+            completed = subprocess.run(gate["argv"], cwd=root, shell=False, text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=180)
+            command = json.dumps(gate["argv"], ensure_ascii=False)
+        else:
+            completed = subprocess.run(gate["command"], cwd=root, shell=True, text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=180)
+            command = gate["command"]
+        results.append({
+            "id": gate["id"], "command": command, "argv": gate.get("argv"),
+            "provenance": gate["provenance"], "execution": gate["execution"],
+            "exit_code": completed.returncode, "output_tail": (completed.stdout + completed.stderr)[-500:],
+        })
     failed = [item["id"] for item in results if item["exit_code"] != 0]
     if failed: raise LifecycleError(f"quality gates failed: {failed}")
     return results
@@ -301,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         root = git_root(Path(args.root).resolve()); policy, _ = read_policy(root); facts = validate_policy(root, policy)
-        if args.command == "check": return emit("PASS", kit_version=KIT_VERSION, accepted_ref=facts["accepted_ref"], resolved_accepted_sha=facts["accepted_sha"], profile=facts["profile"], mandatory_by_adoption_contract=True, kernel_enforced=False)
+        if args.command == "check": return emit("PASS", kit_version=KIT_VERSION, accepted_ref=facts["accepted_ref"], resolved_accepted_sha=facts["accepted_sha"], profile=facts["profile"], side_effect_contract=facts["side_effect_contract"], mandatory_by_adoption_contract=True, kernel_enforced=False)
         if args.command == "bootstrap": return emit("PASS", kit_version=KIT_VERSION, **bootstrap(root, facts, args.mode, args.verify_gates))
         if args.command == "verify-gates": return emit("PASS", kit_version=KIT_VERSION, quality_gates=verify_gates_fn(root, facts["gates"]))
         if args.command == "reconcile": return emit("PASS", kit_version=KIT_VERSION, **reconcile(root, facts, args.candidate_sha))
