@@ -9,9 +9,17 @@ import sys
 from typing import Any
 
 from .facade import BuildOS
+from . import git_adapter
+from .grounding import GroundingError, grounding_projection, load_grounding_report
 from .model import KernelError
 from .store import InjectedFailure, RecoveryRequired
 from .telemetry import TelemetryError
+from .work_contract import (
+    WorkContractError,
+    load_contract,
+    validation_projection,
+    worker_capsule,
+)
 
 
 def _json(value: Any) -> None:
@@ -60,9 +68,9 @@ def _governor_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--compaction-evidence", help="reference proving compact failure or persistent post-compact loss")
 
 
-def _task_args(command: argparse.ArgumentParser) -> None:
-    command.add_argument("--task-id", required=True)
-    command.add_argument("--outcome", required=True)
+def _task_args(command: argparse.ArgumentParser, *, required: bool = True) -> None:
+    command.add_argument("--task-id", required=required)
+    command.add_argument("--outcome", required=required)
     command.add_argument("--accept", action="append", default=[])
     command.add_argument("--check", action="append", default=[])
     command.add_argument("--risk", default="auto", choices=["auto", "R0", "R1", "R2", "R3"])
@@ -102,15 +110,46 @@ def _task_request(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def parser(*, admin: bool = False) -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Build OS v1.24 candidate transactional facade")
+    p = argparse.ArgumentParser(
+        description="Build OS vNext evidence-carrying Work Loop",
+        epilog="Normal flow uses contract, work and inspect; remaining commands preserve v1.24 compatibility or explicit effect/recovery boundaries.",
+    )
     p.add_argument("--root", type=Path, default=Path.cwd(), help="target repository")
     commands = p.add_subparsers(dest="command", required=True)
+
+    contract = commands.add_parser(
+        "contract",
+        help="validate or project an evidence-carrying Work Contract without mutation",
+    )
+    contract.add_argument("--file", type=Path, required=True)
+    contract.add_argument(
+        "--view", choices=["validation", "worker-capsule", "grounding"], default="validation",
+    )
+    contract.add_argument("--grounding", type=Path)
+
+    work = commands.add_parser("work", help="advance the normal evidence-carrying Work Loop")
+    work.add_argument("--work-contract", type=Path)
+    work.add_argument("--grounding", type=Path)
+    work.add_argument("--execution-spec", type=Path)
+    work.add_argument("--assure", action="store_true", help="explicitly run bound assurance and close when safe")
+    work.add_argument("--inspected-by")
+    work.add_argument("--reviewer")
+    work.add_argument("--review-reference")
+    work.add_argument("--rollback-check")
+    work.add_argument("--runtime-acceptance-reference")
+    work.add_argument("--timeout", type=int, default=120)
+    work.add_argument("--owner-authorization", default="NONE", choices=["NONE", "APPROVED"])
+    work.add_argument("--authorization-reference", default="")
+    work.add_argument("--authorization-actor", default="OWNER")
+    work.add_argument("--failure-at", help=argparse.SUPPRESS)
 
     admit = commands.add_parser("admit", help="compile the pre-execution envelope without lifecycle mutation")
     _task_args(admit)
 
     bootstrap = commands.add_parser("bootstrap", help="materialize one task atomically")
-    _task_args(bootstrap)
+    _task_args(bootstrap, required=False)
+    bootstrap.add_argument("--work-contract", type=Path)
+    bootstrap.add_argument("--grounding", type=Path)
     _failure_arg(bootstrap)
 
     status = commands.add_parser("status", help="derive status, governor, telemetry and packet")
@@ -118,6 +157,8 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
 
     nxt = commands.add_parser("next", help="print the minimal generated continuation packet")
     _governor_args(nxt)
+
+    commands.add_parser("inspect", help="derive lifecycle, Git and packet truth without any writes")
 
     record = commands.add_parser("record-commit", help="adopt the normal Git product commit")
     _failure_arg(record)
@@ -220,6 +261,27 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
     args = parser(admin=admin).parse_args(argv)
+    if args.command == "contract":
+        try:
+            contract, contract_hash = load_contract(args.file)
+            if args.view == "grounding":
+                if args.grounding is None:
+                    raise GroundingError("--view grounding requires --grounding <report.json>")
+                observed = git_adapter.snapshot(args.root)
+                report = load_grounding_report(
+                    args.grounding, contract, contract_hash,
+                    root=args.root.resolve(), observed_repository=observed,
+                )
+                value = grounding_projection(report)
+            elif args.view == "worker-capsule":
+                value = worker_capsule(contract, contract_hash)
+            else:
+                value = validation_projection(contract, contract_hash)
+            _json(value)
+            return 0
+        except (WorkContractError, OSError, RuntimeError) as exc:
+            _json({"status": "ACTION_REQUIRED", "error": type(exc).__name__, "message": str(exc)})
+            return 2
     os = BuildOS(args.root)
     outcome = "ACTION_REQUIRED"
     try:
@@ -227,12 +289,35 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
             value = os.bootstrap(
                 _task_request(args),
                 execution_spec=args.execution_spec,
+                work_contract=args.work_contract,
+                grounding_report=args.grounding,
                 op_id=args.operation_id,
                 configured_failures=args.failure_at,
             )
             _json(_result(value))
+        elif args.command == "work":
+            _json(os.advance(
+                {
+                    "owner_authorization": args.owner_authorization,
+                    "authorization_reference": args.authorization_reference,
+                    "authorization_actor": args.authorization_actor,
+                },
+                work_contract=args.work_contract,
+                grounding_report=args.grounding,
+                execution_spec=args.execution_spec,
+                run_assurance=args.assure,
+                inspected_by=args.inspected_by,
+                reviewer=args.reviewer,
+                review_reference=args.review_reference,
+                rollback_check=args.rollback_check,
+                runtime_acceptance_reference=args.runtime_acceptance_reference,
+                timeout=args.timeout,
+                configured_failures=args.failure_at,
+            ))
         elif args.command == "admit":
             _json(os.admit(_task_request(args), execution_spec=args.execution_spec))
+        elif args.command == "inspect":
+            _json(os.inspect())
         elif args.command in {"status", "next"}:
             usage = {
                 key: value for key, value in {

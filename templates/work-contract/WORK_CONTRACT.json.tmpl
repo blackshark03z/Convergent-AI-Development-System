@@ -1,0 +1,76 @@
+{
+  "schema": "buildos.work-contract.v1",
+  "contract_id": "TASK-001-WORK-CONTRACT",
+  "revision": 1,
+  "issuer": {
+    "role": "TECH_LEAD",
+    "identity": "replace-with-authenticated-tech-lead-role",
+    "authority_reference": "replace-with-durable-authority-reference",
+    "issued_at": "2026-01-01T00:00:00Z"
+  },
+  "target": {
+    "repository": "replace-with-repository-locator",
+    "ref": "main",
+    "head": null,
+    "tree": null
+  },
+  "objective": "Replace with the canonical product outcome.",
+  "non_goals": [
+    "Replace with a material non-goal."
+  ],
+  "claims": [
+    {
+      "id": "intent.outcome",
+      "kind": "INTENT",
+      "statement": "Replace with the canonical outcome decision.",
+      "authority": "TECH_LEAD",
+      "binding": "CANONICAL",
+      "status": "DECIDED",
+      "source_refs": [],
+      "repo_binding": null,
+      "observed_at": null,
+      "invalidators": [],
+      "verification_owner": "NONE"
+    },
+    {
+      "id": "acceptance.behavior",
+      "kind": "ACCEPTANCE",
+      "statement": "Replace with one verifiable acceptance criterion.",
+      "authority": "TECH_LEAD",
+      "binding": "CANONICAL",
+      "status": "DECIDED",
+      "source_refs": [],
+      "repo_binding": null,
+      "observed_at": null,
+      "invalidators": [],
+      "verification_owner": "WORKER"
+    },
+    {
+      "id": "repo.entrypoint",
+      "kind": "REPO_CLAIM",
+      "statement": "The named component is the current implementation entrypoint.",
+      "authority": "TECH_LEAD",
+      "binding": "VERIFY_IN_REPO",
+      "status": "SUPPORTED",
+      "source_refs": [],
+      "repo_binding": null,
+      "observed_at": null,
+      "invalidators": [
+        "Target repository HEAD changes."
+      ],
+      "verification_owner": "WORKER"
+    }
+  ],
+  "acceptance_ids": [
+    "acceptance.behavior"
+  ],
+  "open_question_ids": [],
+  "ship": {
+    "mode": "HANDOFF_ONLY",
+    "authority_reference": null
+  },
+  "metadata": {
+    "parent_contract_hash": null,
+    "source_context_refs": []
+  }
+}

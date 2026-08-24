@@ -197,6 +197,7 @@ def initial_state(
     *,
     lineage: Mapping[str, Any] | None = None,
     execution: Mapping[str, Any] | None = None,
+    work_loop: Mapping[str, Any] | None = None,
     at: str | None = None,
 ) -> dict[str, Any]:
     req = validate_task_request(request)
@@ -226,6 +227,7 @@ def initial_state(
         "skill": req["skill"],
         "lineage": normalized_lineage,
         "execution_envelope_hash": (execution or {}).get("envelope_hash"),
+        "work_contract_hash": ((work_loop or {}).get("work_contract") or {}).get("hash"),
     }
     state: dict[str, Any] = {
         "schema": SCHEMA,
@@ -252,6 +254,7 @@ def initial_state(
         "skill": req["skill"],
         "lineage": normalized_lineage,
         "execution": deepcopy(dict(execution)) if execution is not None else None,
+        "work_loop": deepcopy(dict(work_loop)) if work_loop is not None else None,
         "contract_hash": sha256_json(contract),
         "lease": {"status": "CLAIMED", "holder": req["worker_id"]},
         "base_git": _git_anchor(git),
@@ -306,6 +309,9 @@ def validate_state(state: Mapping[str, Any]) -> None:
     if state.get("execution") is not None:
         from .execution import validate_runtime_state
         validate_runtime_state(state["execution"])
+    if state.get("work_loop") is not None:
+        from .grounding import validate_work_loop_binding
+        validate_work_loop_binding(state["work_loop"])
     auth = state.get("authorization") or {}
     if risk in AUTH_REQUIRED and (auth.get("status") != "APPROVED" or not auth.get("reference")):
         raise KernelError("canonical R3 state is missing owner authorization")
@@ -384,6 +390,9 @@ def transition_rollover(prev: Mapping[str, Any], signal: Mapping[str, Any], *, t
 
 def transition_record_commit(prev: Mapping[str, Any], git: Mapping[str, Any], *, at: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     validate_state(prev)
+    rights = ((prev.get("work_loop") or {}).get("action_rights") or {})
+    if rights and rights.get("requested_action_status") != "GRANTED":
+        raise KernelError("record-commit is blocked by unresolved Work Loop action rights")
     if prev["phase"] != "ACTIVE":
         if prev["phase"] == "PRODUCT_COMMITTED" and (prev.get("product_commit") or {}).get("sha") == git.get("head"):
             return deepcopy(dict(prev)), {"kind": "COMMIT_ALREADY_RECORDED", "sha": git.get("head")}
@@ -672,6 +681,11 @@ def transition_new_revision(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Create an explicit new revision without deleting the prior proof."""
     validate_state(prev)
+    if prev.get("work_loop") is not None:
+        raise KernelError(
+            "Work Loop revision requires a fresh Work Contract and grounding report; "
+            "the prior handoff remains immutable"
+        )
     if prev["phase"] not in {"PRODUCT_COMMITTED", "ASSURANCE_READY", "CLOSED", "ABORTED"}:
         raise KernelError("new revision requires a completed or committed prior revision")
     if not str(reason).strip():
@@ -750,6 +764,7 @@ def transition_new_revision(
         "authorization": result["authorization"],
         "skill": result.get("skill"),
         "execution_envelope_hash": ((result.get("execution") or {}).get("envelope_hash")),
+        "work_contract_hash": (((result.get("work_loop") or {}).get("work_contract") or {}).get("hash")),
     })
     validate_state(result)
     return result, {

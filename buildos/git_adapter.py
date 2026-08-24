@@ -15,9 +15,12 @@ CONTROL_PREFIXES = (".buildos/",)
 
 
 def _run(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
     proc = subprocess.run(
         ["git", *args],
         cwd=root,
+        env=environment,
         text=True,
         capture_output=True,
         timeout=30,

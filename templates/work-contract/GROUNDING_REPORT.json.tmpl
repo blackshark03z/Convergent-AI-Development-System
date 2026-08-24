@@ -1,0 +1,38 @@
+{
+  "schema": "buildos.grounding-report.v1",
+  "contract_hash": "REPLACE_WITH_VALIDATED_CONTRACT_HASH",
+  "worker": {"id": "worker-role", "observed_at": "2026-08-24T00:00:00Z"},
+  "repository": {
+    "root": "REPLACE_WITH_GIT_TOPLEVEL",
+    "head": "REPLACE_WITH_GIT_HEAD",
+    "tree": "REPLACE_WITH_GIT_TREE",
+    "product_state_digest": "REPLACE_WITH_BUILDOS_PRODUCT_STATE_DIGEST"
+  },
+  "scope_claim_ids": ["repo.current_cli"],
+  "execution_request": {
+    "requested_action": "LOCAL_MUTATION",
+    "product_change_mode": "PRODUCT_DELTA",
+    "risk": "AUTO",
+    "allowed_paths": ["buildos/**", "tests/**"],
+    "prohibited_paths": [".buildos/**"],
+    "acceptance_commands": ["python -m unittest tests.test_work_contract tests.test_grounding -v"]
+  },
+  "evidence": [
+    {
+      "id": "evidence.current_cli",
+      "kind": "REPO_FILE",
+      "locator": "scripts/ai.py",
+      "digest": "REPLACE_WITH_SHA256",
+      "observed_at": "2026-08-24T00:00:00Z"
+    }
+  ],
+  "results": [
+    {
+      "claim_id": "repo.current_cli",
+      "outcome": "VERIFIED",
+      "summary": "The facade exists at the claimed path and delegates into Build OS.",
+      "evidence_refs": ["evidence.current_cli"]
+    }
+  ],
+  "discoveries": []
+}

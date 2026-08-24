@@ -1,13 +1,19 @@
-# Build OS v1.24 candidate
+# Build OS vNext release candidate
 
-This is the isolated candidate produced for `BUILD-OS-FINAL-ULTRA-CANDIDATE`.
-It is a small, repository-independent control plane.  Point the external
-facade at a product repository; do not copy generated control state into the
-product source tree:
+vNext evolves the v1.24 transactional candidate into an evidence-carrying Work
+Loop:
+
+`Tech Lead -> Work Contract -> Build OS -> Worker grounding -> implementation -> proportional assurance -> ship`
+
+Point the repository-independent facade at a product repository; do not copy
+generated control state into product source:
 
 ```powershell
-python D:\path\to\build-os-v124-candidate\scripts\ai.py --root D:\path\to\product bootstrap `
-  --task-id TASK-001 --outcome "the change is correct" --allow src/app.py
+python scripts/ai.py --root D:\path\to\product contract `
+  --file .\WORK_CONTRACT.json --view worker-capsule
+
+python scripts/ai.py --root D:\path\to\product work `
+  --work-contract .\WORK_CONTRACT.json --grounding .\GROUNDING_REPORT.json
 ```
 
 The candidate reserves `.buildos/` in the target repository and adds that
@@ -18,8 +24,22 @@ policy uses the field-tested defaults.
 
 ## Worker flow
 
-The normal Worker facade preserves the original lifecycle commands and adds a
-compiled execution/effect runtime:
+The normal vNext surface is deliberately small:
+
+- `contract` validates typed handoff/grounding evidence without writes.
+- `work` starts or deterministically advances the normal lifecycle.
+- `inspect` reports current Git/lifecycle/packet truth without any writes.
+
+After implementation is committed, `work --assure` records the commit, runs
+the bound proportional assurance and closes when safe. It never auto-dispatches
+an external effect or adopts dirty/uncommitted product work. See
+[docs/WORK_CONTRACT.md](docs/WORK_CONTRACT.md),
+[docs/VNEXT_WORK_LOOP_ARCHITECTURE.md](docs/VNEXT_WORK_LOOP_ARCHITECTURE.md),
+[docs/VNEXT_MIGRATION.md](docs/VNEXT_MIGRATION.md), and
+[docs/VNEXT_PILOT_REPORT.md](docs/VNEXT_PILOT_REPORT.md).
+
+The detailed v1.24 commands remain compatibility and exceptional-operation
+surfaces:
 
 `admit`, `bootstrap`, `status`, `next`, `record-commit`, `validate`, `rollover`,
 `close`, `recover`, `block-for-source-fix`, `continue-task`, `report-blocker`,
@@ -30,7 +50,7 @@ The administrative facade additionally exposes `adopt-existing-change`,
 `--thread-id`; this makes a retry distinguishable from a new epoch. Rollover is
 a rare compact-failure fallback, not a normal request-count rhythm.
 
-Typical flow is:
+The legacy-compatible flow is:
 
 1. `bootstrap` once (one kernel action).
 2. Implement and commit product files with ordinary Git.

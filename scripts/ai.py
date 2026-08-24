@@ -14,7 +14,7 @@ from buildos.cli import main
 
 
 EXECUTION_AUTHORITY_CREATORS = {
-    "admit", "bootstrap", "continue-task", "adopt-existing-change",
+    "work", "admit", "bootstrap", "continue-task", "adopt-existing-change",
 }
 EXECUTION_AUTHORITY_MUTATORS = {
     "record-commit", "validate", "rollover", "close", "block-for-source-fix",
@@ -25,7 +25,7 @@ DIAGNOSTIC_TELEMETRY_COMMANDS = {"status", "next", "assurance-plan", "telemetry-
 ADMISSION_COMMANDS = EXECUTION_AUTHORITY_CREATORS | EXECUTION_AUTHORITY_MUTATORS
 MUTATING_COMMANDS = {
     *EXECUTION_AUTHORITY_MUTATORS,
-    "continue-task",
+    "work", "continue-task",
 }
 
 
@@ -38,7 +38,7 @@ def _requested_root(argv: list[str]) -> Path:
 
 def _requested_command(argv: list[str]) -> str | None:
     known = {
-        "admit", "bootstrap", "status", "next", "record-commit", "validate",
+        "contract", "work", "admit", "bootstrap", "inspect", "status", "next", "record-commit", "validate",
         "rollover", "close", "recover", "block-for-source-fix", "continue-task",
         "report-blocker", "replan", "effect", "review", "assurance-plan",
         "adopt-existing-change", "new-revision", "abort", "telemetry-ingest",

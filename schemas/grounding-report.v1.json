@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildos.local/schemas/grounding-report.v1.json",
+  "title": "Build OS Worker Grounding Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "contract_hash", "worker", "repository", "scope_claim_ids", "execution_request", "evidence", "results", "discoveries"],
+  "properties": {
+    "schema": {"const": "buildos.grounding-report.v1"},
+    "contract_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "worker": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "observed_at"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "observed_at": {"type": "string", "minLength": 1, "maxLength": 128}}
+    },
+    "repository": {
+      "type": "object", "additionalProperties": false,
+      "required": ["root", "head", "tree", "product_state_digest"],
+      "properties": {
+        "root": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "head": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "tree": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "product_state_digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "scope_claim_ids": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "execution_request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requested_action", "product_change_mode", "risk", "allowed_paths", "prohibited_paths", "acceptance_commands"],
+      "properties": {
+        "requested_action": {"enum": ["READ_ONLY", "LOCAL_MUTATION", "LOCAL_HIGH_COST", "EXTERNAL_EFFECT"]},
+        "product_change_mode": {"enum": ["PRODUCT_DELTA", "NO_SOURCE_DELTA"]},
+        "risk": {"enum": ["AUTO", "R0", "R1", "R2", "R3"]},
+        "allowed_paths": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+        "prohibited_paths": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+        "acceptance_commands": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 2048}}
+      }
+    },
+    "evidence": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/evidence"}},
+    "results": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/result"}},
+    "discoveries": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/discovery"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ids": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "locator", "digest", "observed_at"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["REPO_FILE", "REPO_OBSERVATION", "EXTERNAL_REFERENCE"]},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "digest": {"type": ["string", "null"], "maxLength": 128},
+        "observed_at": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "result": {
+      "type": "object", "additionalProperties": false,
+      "required": ["claim_id", "outcome", "summary", "evidence_refs"],
+      "properties": {
+        "claim_id": {"$ref": "#/$defs/id"},
+        "outcome": {"enum": ["VERIFIED", "CONTRADICTED", "UNKNOWN"]},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "evidence_refs": {"$ref": "#/$defs/ids"}
+      }
+    },
+    "discovery": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "statement", "status", "conflicts_with", "evidence_refs"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "statement": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "status": {"enum": ["VERIFIED", "HYPOTHESIS", "UNKNOWN"]},
+        "conflicts_with": {"$ref": "#/$defs/ids"},
+        "evidence_refs": {"$ref": "#/$defs/ids"}
+      }
+    }
+  }
+}
