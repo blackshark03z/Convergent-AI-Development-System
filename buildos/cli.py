@@ -445,7 +445,11 @@ def main(argv: list[str] | None = None, *, admin: bool = False) -> int:
         _json({"status": "ACTION_REQUIRED", "error": type(exc).__name__, "message": str(exc)})
         return 2
     finally:
-        os.record_control_action(args.command, outcome)
+        # `inspect` is an audit surface, so its read-only guarantee includes
+        # the CLI wrapper.  Recording observational telemetry here would make
+        # the command mutate `.buildos` even though BuildOS.inspect() is pure.
+        if args.command != "inspect":
+            os.record_control_action(args.command, outcome)
 
 
 if __name__ == "__main__":

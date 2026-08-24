@@ -125,6 +125,10 @@ def _repo_file(root: Path, locator: str) -> Path:
     relative = Path(locator.replace("\\", "/"))
     if relative.is_absolute() or ".." in relative.parts:
         raise GroundingError(f"repository evidence path escapes the target repository: {locator}")
+    if relative.parts and relative.parts[0].casefold() == ".buildos":
+        raise GroundingError(
+            f"repository evidence cannot cite Build OS control state: {locator}"
+        )
     target = (root / relative).resolve()
     try:
         target.relative_to(root)

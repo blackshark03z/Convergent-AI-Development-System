@@ -153,6 +153,26 @@ class GroundingTests(unittest.TestCase):
             with self.assertRaisesRegex(GroundingError, "locally verified"):
                 validate_grounding_report(work_contract, digest, value, root=root, observed_repository=observed)
 
+    def test_repo_evidence_cannot_cite_buildos_control_state(self):
+        with tempfile.TemporaryDirectory(prefix="grounding-") as raw:
+            root = Path(raw) / "repo"
+            repository(root)
+            (root / ".buildos").mkdir()
+            control = root / ".buildos" / "CURRENT"
+            control.write_text("not product truth\n", encoding="utf-8")
+            observed = git_adapter.snapshot(root)
+            work_contract, digest = self._contract(root)
+            value = report(root, observed, digest)
+            value["evidence"][0].update({
+                "locator": ".buildos/CURRENT",
+                "digest": hashlib.sha256(control.read_bytes()).hexdigest(),
+            })
+            with self.assertRaisesRegex(GroundingError, "control state"):
+                validate_grounding_report(
+                    work_contract, digest, value,
+                    root=root, observed_repository=observed,
+                )
+
     def test_grounding_cli_is_read_only(self):
         with tempfile.TemporaryDirectory(prefix="grounding-cli-") as raw:
             base = Path(raw)

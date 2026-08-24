@@ -169,6 +169,33 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             self.assertTrue(value["read_only"])
             self.assertEqual(before, after)
 
+    def test_inspect_cli_is_strictly_read_only_for_entire_repository(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
+            root, contract_path, grounding_path = self._inputs(Path(raw))
+            completed = self._bootstrap(root, contract_path, grounding_path)
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+            def snapshot_files() -> dict[str, tuple[int, int, str]]:
+                return {
+                    path.relative_to(root).as_posix(): (
+                        path.stat().st_size,
+                        path.stat().st_mtime_ns,
+                        hashlib.sha256(path.read_bytes()).hexdigest(),
+                    )
+                    for path in root.rglob("*") if path.is_file()
+                }
+
+            before = snapshot_files()
+            inspected = subprocess.run(
+                [sys.executable, str(AI), "--root", str(root), "inspect"],
+                text=True, encoding="utf-8", errors="replace",
+                capture_output=True, timeout=30,
+            )
+            after = snapshot_files()
+            self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)
+            self.assertTrue(json.loads(inspected.stdout)["read_only"])
+            self.assertEqual(before, after)
+
     def test_one_normal_work_facade_bootstraps_then_assures_and_closes(self):
         with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
             root, contract_path, grounding_path = self._inputs(Path(raw))
