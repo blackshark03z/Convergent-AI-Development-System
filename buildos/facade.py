@@ -55,6 +55,7 @@ from .store import (
     publish_immutable,
     read_current,
     recover as recover_store,
+    safe_repository_descendant,
     task_id_exists,
     validate_operation_id,
 )
@@ -77,7 +78,9 @@ def _publish_work_loop_document(
 ) -> None:
     if hashlib.sha256(data).hexdigest() != reference["sha256"]:
         raise KernelError("Work Loop evidence bytes do not match their semantic hash")
-    final = (root / reference["path"]).resolve()
+    final = safe_repository_descendant(
+        root, reference["path"], label="Work Loop evidence target",
+    )
     if final.is_file():
         if final.read_bytes() != data:
             raise KernelError("existing immutable Work Loop evidence path contains different bytes")
@@ -96,11 +99,9 @@ def _publish_work_loop_document(
 
 def _stored_grounding_report(root: Path, state: Mapping[str, Any]) -> dict[str, Any]:
     reference = ((((state.get("work_loop") or {}).get("grounding") or {}).get("evidence")) or {})
-    target = (root / str(reference.get("path") or "")).resolve()
-    try:
-        target.relative_to(root)
-    except ValueError as exc:
-        raise KernelError("canonical grounding evidence escapes repository root") from exc
+    target = safe_repository_descendant(
+        root, str(reference.get("path") or ""), label="canonical grounding evidence",
+    )
     try:
         value = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -164,7 +165,7 @@ def _assert_git_unchanged(
 ) -> None:
     actual = git_adapter.snapshot(root, base_sha=base_sha, product_sha=product_sha, validated_sha=validated_sha)
     fields = (
-        "available", "root", "head", "tree", "product_dirty", "product_dirty_paths",
+        "available", "root", "branch", "head", "tree", "product_dirty", "product_dirty_paths",
         "tracked_control_paths", "relation_to_base", "relation_to_product",
         "relation_to_validated", "changes_since_base", "changes_since_product",
         "changes_since_validated", "deletions_since_base", "type_changes_since_base",
@@ -428,7 +429,7 @@ def _prepare_evidence(
         raise KernelError("rollback/recovery check must be distinct from acceptance checks")
     evidence_key = hashlib.sha256(operation.encode("utf-8")).hexdigest()[:24]
     rel = Path(".buildos") / "evidence" / state["task_id"] / f"r{int(state['revision']):03d}" / f"validation-{evidence_key}.json"
-    final = root / rel
+    final = safe_repository_descendant(root, rel, label="validation evidence target")
     # Retry after evidence publication but before CURRENT reuses exactly the
     # immutable proof.  It never regenerates or overwrites historical evidence.
     if final.is_file():
@@ -713,6 +714,8 @@ class BuildOS:
         existing = read_current(self.root, allow_uninitialized=True)
         if existing is not None and existing.state.get("work_loop") is not None:
             verify_work_loop_evidence(self.root, existing.state["work_loop"])
+        if existing is not None and existing.state.get("phase") in RELEASED_TASK_PHASES:
+            execution.assert_no_unresolved_effects(existing.state, "bootstrap")
         observed = git_adapter.snapshot(self.root)
         work_loop_context: dict[str, Any] | None = None
         work_contract_value: dict[str, Any] | None = None
@@ -845,6 +848,9 @@ class BuildOS:
         source = find_task_revision(self.root, source_task_id, source_revision)
         if source.state.get("phase") not in RELEASED_TASK_PHASES:
             raise KernelError("continue-task source must have a released lease")
+        execution.assert_no_unresolved_effects(source.state, "continue-task")
+        if current.state.get("phase") in RELEASED_TASK_PHASES:
+            execution.assert_no_unresolved_effects(current.state, "continue-task")
         lineage = {
             "kind": "CONTINUATION",
             "source_task_id": source.state["task_id"],
@@ -908,6 +914,10 @@ class BuildOS:
         if validated.get("skill"):
             _skill_reference(self.root, self.package_root, validated["skill"])
         current = read_current(self.root, allow_uninitialized=True)
+        if current is not None and current.state.get("work_loop") is not None:
+            verify_work_loop_evidence(self.root, current.state["work_loop"])
+        if current is not None and current.state.get("phase") in RELEASED_TASK_PHASES:
+            execution.assert_no_unresolved_effects(current.state, "adopt-existing-change")
         base_sha = git_adapter.resolve_commit(self.root, base)
         target_sha = git_adapter.resolve_commit(self.root, target)
         observed = git_adapter.snapshot(self.root, base_sha=base_sha)
@@ -963,6 +973,7 @@ class BuildOS:
         configured_failures: str | None = None,
     ) -> CommitResult:
         previous = self._snapshot()
+        execution.assert_no_unresolved_effects(previous.state, "block-for-source-fix")
         if previous.event.get("kind") == "BLOCK_FOR_SOURCE_FIX":
             prior = previous.state.get("source_defect") or {}
             if prior.get("reason") == str(reason).strip() and prior.get("reference") == str(defect_reference).strip():
@@ -1366,6 +1377,10 @@ class BuildOS:
         """
         transitions: list[dict[str, Any]] = []
         current = read_current(self.root, allow_uninitialized=True)
+        if current is not None:
+            # A refresh extends the current immutable lineage; prove that lineage
+            # before accepting or publishing any replacement evidence.
+            current = self._snapshot()
         if current is None:
             if work_contract is None or grounding_report is None:
                 raise KernelError("uninitialized Work Loop requires --work-contract and --grounding")
@@ -1642,7 +1657,10 @@ class BuildOS:
             validation_plan = None
             if enhanced:
                 evidence_ref = (state.get("evidence") or [])[-1]
-                prior_payload = json.loads((self.root / evidence_ref["path"]).read_text(encoding="utf-8"))
+                prior_path = safe_repository_descendant(
+                    self.root, evidence_ref["path"], label="validation evidence target",
+                )
+                prior_payload = json.loads(prior_path.read_text(encoding="utf-8"))
                 prepared = prior_payload.get("checks") or []
                 validation_plan = prior_payload.get("execution_validation")
             _prepare_evidence(
@@ -1751,6 +1769,13 @@ class BuildOS:
     def close(self, *, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
         previous = self._snapshot()
         state = previous.state
+        if state.get("work_loop") is not None:
+            stale = _work_loop_grounding_freshness(self.root, state)["reexecute"]
+            if stale:
+                raise KernelError(
+                    "close requires fresh Worker grounding for changed claims: "
+                    + ",".join(stale)
+                )
         execution.assert_plan_valid(state, "close")
         execution.assert_effects_resolved(state)
         if state.get("phase") == "CLOSED" and previous.event.get("kind") == "CLOSE" and (op_id is None or previous.operation_id == op_id):
@@ -1773,7 +1798,10 @@ class BuildOS:
             return self._idempotent(previous)
         assurance = state.get("assurance") or {}
         for evidence in state.get("evidence") or []:
-            evidence_path = self.root / str(evidence.get("path"))
+            evidence_path = safe_repository_descendant(
+                self.root, str(evidence.get("path") or ""),
+                label="close evidence target",
+            )
             if not evidence_path.is_file() or sha256_bytes(evidence_path.read_bytes()) != evidence.get("sha256"):
                 raise KernelError("close requires intact immutable evidence; no evidence was deleted")
         observed = git_adapter.snapshot(
@@ -1889,6 +1917,7 @@ class BuildOS:
         configured_failures: str | None = None,
     ) -> CommitResult:
         previous = self._snapshot()
+        execution.assert_no_unresolved_effects(previous.state, "revise")
         request_intent = {
             "reason": str(reason).strip(),
             "risk": str(risk).upper() if risk else None,
@@ -1927,6 +1956,7 @@ class BuildOS:
 
     def abort(self, *, reason: str, op_id: str | None = None, configured_failures: str | None = None) -> CommitResult:
         previous = self._snapshot()
+        execution.assert_no_unresolved_effects(previous.state, "abort")
         if previous.event.get("kind") == "ABORT" and previous.state.get("abort_reason") == reason and (op_id is None or previous.operation_id == op_id):
             return self._idempotent(previous)
         candidate, event = transition_abort(previous.state, reason=reason)

@@ -13,8 +13,8 @@ import unittest
 from unittest.mock import patch
 
 from buildos.facade import BuildOS
-from buildos.model import KernelError, sha256_json
-from buildos.store import InjectedFailure
+from buildos.model import KernelError, sha256_json, transition_abort
+from buildos.store import InjectedFailure, commit_candidate, operation_id
 
 
 COMMAND_REGISTRY_PATH = ".buildos-command-registry.json"
@@ -667,6 +667,77 @@ class ExternalEffectTests(unittest.TestCase):
             record = resolved.state["execution"]["effect_ledger"]["attempt_one"]
             self.assertEqual(record["state"], "RESOLVED_NO_EFFECT")
             self.assertEqual(record["reconciliation"]["outcome"], "PRE_PROVIDER_FAILURE")
+
+    def test_lease_release_cannot_abandon_unresolved_external_effect(self):
+        with repository("effect-release-barrier") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-RELEASE-BARRIER", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(transition="DISPATCH", effect_id="attempt_one")
+            with self.assertRaisesRegex(KernelError, "external effects require reconciliation"):
+                osys.abort(reason="must not abandon provider ownership")
+            with self.assertRaisesRegex(KernelError, "external effects require reconciliation"):
+                osys.block_for_source_fix(
+                    reason="source issue discovered", defect_reference="defect/one",
+                )
+            current = osys._snapshot().state
+            self.assertEqual(current["phase"], "ACTIVE")
+            self.assertEqual(
+                current["execution"]["effect_ledger"]["attempt_one"]["state"],
+                "DISPATCH_UNCONFIRMED",
+            )
+
+        with repository("effect-safe-release") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("EFFECT-SAFE-RELEASE", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(
+                transition="FAIL_BEFORE_DISPATCH", effect_id="attempt_one",
+                reference="preflight/no-effect",
+            )
+            aborted = osys.abort(reason="safe after canonical no-effect proof").snapshot
+            self.assertEqual(aborted.state["phase"], "ABORTED")
+
+    def test_historical_released_task_with_unresolved_effect_cannot_create_new_authority(self):
+        with repository("historical-effect-release") as root:
+            osys = BuildOS(root)
+            osys.bootstrap(
+                request("HISTORICAL-EFFECT", execution_class="EXTERNAL_EFFECT", no_source=True),
+                execution_spec=spec(external=True),
+            )
+            osys.effect(transition="PREPARE", effect_id="attempt_one", action_id="submit_job")
+            osys.effect(transition="DISPATCH", effect_id="attempt_one")
+            previous = osys._snapshot()
+            historical, event = transition_abort(
+                previous.state, reason="simulated v1.24 released state",
+            )
+            commit_candidate(
+                root, expected_hash=previous.generation_hash,
+                candidate_state=historical, event=event,
+                operation_id=operation_id("HISTORICAL_ABORT", previous.generation_hash),
+                projector=osys.project,
+            )
+            with self.assertRaisesRegex(KernelError, "external effects require reconciliation"):
+                osys.bootstrap(request("NEW-AUTHORITY"))
+            with self.assertRaisesRegex(KernelError, "external effects require reconciliation"):
+                osys.continue_task(
+                    request("NEW-CONTINUATION"), source_task_id="HISTORICAL-EFFECT",
+                    source_revision=1, reason="must not escape unresolved provider state",
+                )
+            head = git(root, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(KernelError, "external effects require reconciliation"):
+                osys.adopt_existing_change(
+                    request("NEW-ADOPTION"), base=head, target=head,
+                    reason="must not replace unresolved provider state",
+                )
+            with self.assertRaisesRegex(KernelError, "external effects require reconciliation"):
+                osys.revise(reason="must not reopen unresolved provider state")
 
     def test_product_committed_flow_can_still_prepare_and_dispatch(self):
         with repository("effect-product-committed") as root:

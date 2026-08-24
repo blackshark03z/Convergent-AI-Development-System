@@ -66,7 +66,8 @@ def report(root: Path, observed: dict, contract_hash: str, *, claim_id: str = "r
         "contract_hash": contract_hash,
         "worker": {"id": "worker-role", "observed_at": "2026-08-24T00:00:00Z"},
         "repository": {
-            "root": str(root.resolve()), "head": observed["head"], "tree": observed["tree"],
+            "root": str(root.resolve()), "branch": observed["branch"],
+            "head": observed["head"], "tree": observed["tree"],
             "product_state_digest": observed["product_state_digest"],
         },
         "scope_claim_ids": scope,

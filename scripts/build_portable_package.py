@@ -16,18 +16,46 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "PACKAGE_MANIFEST.json"
 PACKAGE_STORE = Path(os.environ.get("BUILDOS_PACKAGE_STORE", r"D:\Youtube\_packages"))
-FROZEN_KERNEL_COMMIT = "d1271325e31f6e568d033cbdb45bbc5294573efb"
 FROZEN_KERNEL = ROOT / "FROZEN_KERNEL.sha256"
 IDENTITY = ROOT / "scripts" / "package_identity.py"
 GENERATED_MEMBERS = {"PACKAGE_VALIDATION.json", "PACKAGE_CONTENTS.sha256"}
+POST_FREEZE_METADATA_ALLOWLIST = {
+    "FROZEN_KERNEL.sha256", "PACKAGE_MANIFEST.json", "docs/V1.25_RC2_REPORT.md",
+}
 PRIVATE_KEY_BEGIN = b"-----" + b"BEGIN "
 PRIVATE_KEY_END = b"PRIVATE " + b"KEY-----"
-TOKEN_PATTERN = re.compile(rb"\b(?:s" + rb"k-[A-Za-z0-9]{20,}|A" + rb"KIA[0-9A-Z]{16})\b")
+TOKEN_PATTERNS = (
+    re.compile(rb"\b" + b"s" + rb"k-(?:(?:proj|svcacct)-)?[A-Za-z0-9_-]{20,}\b"),
+    re.compile(rb"\b" + b"A" + rb"KIA[0-9A-Z]{16}\b"),
+    re.compile(rb"\b" + b"gh" + rb"[pousr]_[A-Za-z0-9]{30,}\b"),
+    re.compile(rb"\b" + b"AI" + rb"za[0-9A-Za-z_-]{30,}\b"),
+)
 WINDOWS_DEVICES = {
     "CON", "PRN", "AUX", "NUL",
     *(f"COM{index}" for index in range(1, 10)),
     *(f"LPT{index}" for index in range(1, 10)),
 }
+
+
+def strict_json_loads(payload: str | bytes) -> object:
+    def pairs(rows: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in rows:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            result[key] = value
+        return result
+
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"non-finite JSON constant is forbidden: {value}")
+
+    return json.loads(payload, object_pairs_hook=pairs, parse_constant=reject_constant)
+
+
+def contains_secret_like(payload: bytes) -> bool:
+    return (
+        PRIVATE_KEY_BEGIN in payload and PRIVATE_KEY_END in payload
+    ) or any(pattern.search(payload) for pattern in TOKEN_PATTERNS)
 
 
 def _run(command: list[str], *, timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -111,14 +139,14 @@ def parse_frozen_kernel(payload: bytes) -> dict[str, str]:
     return rows
 
 
-def frozen_kernel_matches(source_root: Path = ROOT) -> bool:
+def frozen_kernel_matches(frozen_commit: str, source_root: Path = ROOT) -> bool:
     try:
         expected = parse_frozen_kernel((source_root / "FROZEN_KERNEL.sha256").read_bytes())
-        committed_names = set(_git_lines("ls-tree", "-r", "--name-only", FROZEN_KERNEL_COMMIT, "--", "buildos"))
+        committed_names = set(_git_lines("ls-tree", "-r", "--name-only", frozen_commit, "--", "buildos"))
         if set(expected) != committed_names:
             return False
         committed = {
-            name: hashlib.sha256(_git_bytes(FROZEN_KERNEL_COMMIT, name)).hexdigest()
+            name: hashlib.sha256(_git_bytes(frozen_commit, name)).hexdigest()
             for name in expected
         }
         observed = {
@@ -138,9 +166,25 @@ def source_snapshot() -> tuple[str, str, list[str], dict]:
     commit = _git_lines("rev-parse", "HEAD")[0]
     tree = _git_lines("rev-parse", f"{commit}^{{tree}}")[0]
     try:
-        manifest = json.loads(_git_bytes(commit, "PACKAGE_MANIFEST.json"))
-    except json.JSONDecodeError as exc:
+        manifest = strict_json_loads(_git_bytes(commit, "PACKAGE_MANIFEST.json"))
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
         raise RuntimeError("frozen package manifest JSON is invalid") from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeError("frozen package manifest must be an object")
+    frozen_commit = manifest.get("frozen_kernel_commit")
+    if not isinstance(frozen_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", frozen_commit):
+        raise RuntimeError("package manifest frozen kernel commit is invalid")
+    ancestry = _run(["git", "merge-base", "--is-ancestor", frozen_commit, commit])
+    if ancestry.returncode:
+        raise RuntimeError("package source commit does not descend from the frozen kernel commit")
+    changed = set(_git_lines("diff", "--name-only", frozen_commit, commit, "--"))
+    additions = set(_git_lines("diff", "--name-only", "--diff-filter=A", frozen_commit, commit, "--"))
+    if additions or not changed.issubset(POST_FREEZE_METADATA_ALLOWLIST):
+        unexpected = sorted(additions | (changed - POST_FREEZE_METADATA_ALLOWLIST))
+        raise RuntimeError(
+            "package source contains unreviewed post-freeze additions or executable/content changes: "
+            + ", ".join(unexpected)
+        )
     tracked = _git_lines("ls-tree", "-r", "--name-only", commit)
     included = manifest.get("included")
     if not isinstance(included, list) or not included or any(not isinstance(item, str) for item in included):
@@ -188,8 +232,8 @@ def _identity_pass(completed: subprocess.CompletedProcess[str]) -> bool:
     if completed.returncode:
         return False
     try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError:
+        payload = strict_json_loads(completed.stdout)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return False
     return (
         isinstance(payload, dict)
@@ -209,17 +253,18 @@ def validate(
         [sys.executable, str(source_root / "scripts" / "package_identity.py"), "--root", str(source_root)],
     )
     try:
-        suite_result = json.loads(completed.stdout)
-    except json.JSONDecodeError:
+        suite_result = strict_json_loads(completed.stdout)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         suite_result = {}
     test_count = suite_result.get("tests_run") if isinstance(suite_result, dict) else None
     inventory = sorted(path.name for path in (source_root / "tests").glob("test_*.py") if path.is_file())
     assurance = manifest.get("release_assurance") or {}
+    frozen_commit = str(manifest.get("frozen_kernel_commit") or "")
     expected_count = assurance.get("expected_test_count")
     expected_inventory = assurance.get("expected_test_modules")
     allowed_skips = set(assurance.get("allowed_skip_tests") or [])
     observed_skip_ids = suite_result.get("skipped_test_ids") if isinstance(suite_result, dict) else []
-    observed_skips = [str(item).rsplit(".", 1)[-1] for item in observed_skip_ids or []]
+    observed_skips = [str(item) for item in observed_skip_ids or []]
     manifest_hash = hashlib.sha256((source_root / "PACKAGE_MANIFEST.json").read_bytes()).hexdigest()
     result = {
         "schema": "buildos.portable-validation-evidence.v2",
@@ -227,9 +272,10 @@ def validate(
         "package_id": manifest.get("package_id"),
         "archive_name": manifest.get("archive_name"),
         "manifest_sha256": manifest_hash,
-        "frozen_kernel_commit": FROZEN_KERNEL_COMMIT,
+        "frozen_kernel_commit": frozen_commit,
         "package_source_commit": source_commit,
         "package_source_tree": source_tree,
+        "frozen_kernel_ancestor_of_package_source": True,
         "command": command,
         "exit_code": completed.returncode,
         "test_count": test_count,
@@ -237,8 +283,8 @@ def validate(
         "skipped_tests": observed_skips,
         "suite_result": suite_result,
         "output_tail": completed.stderr[-4000:],
-        "frozen_kernel_byte_identical": frozen_kernel_matches(source_root),
-        "manifest_valid": manifest.get("frozen_kernel_commit") == FROZEN_KERNEL_COMMIT,
+        "frozen_kernel_byte_identical": frozen_kernel_matches(frozen_commit, source_root),
+        "manifest_valid": bool(re.fullmatch(r"[0-9a-f]{40}", frozen_commit)),
         "package_identity_consistent": _identity_pass(identity),
         "identity_output": identity.stdout[-1000:] + identity.stderr[-1000:],
         "final_zip_sha256": "BOUND_BY_EXTERNAL_FINAL_RECEIPT",
@@ -251,6 +297,7 @@ def validate(
         or suite_result.get("failure_count") != 0 or suite_result.get("error_count") != 0
         or suite_result.get("expected_failure_count") != 0
         or suite_result.get("unexpected_success_count") != 0
+        or len(observed_skips) != len(set(observed_skips))
         or not set(observed_skips).issubset(allowed_skips)
         or not result["frozen_kernel_byte_identical"]
         or not result["manifest_valid"]
@@ -310,12 +357,12 @@ def verify_zip(
         if set(names) != expected_members:
             raise RuntimeError("ZIP member set differs from frozen manifest allowlist")
         verify_checksum_index(archive)
-        zipped_manifest = json.loads(archive.read("PACKAGE_MANIFEST.json"))
+        zipped_manifest = strict_json_loads(archive.read("PACKAGE_MANIFEST.json"))
         if zipped_manifest != manifest:
             raise RuntimeError("ZIP manifest does not match package manifest")
         if hashlib.sha256(archive.read("PACKAGE_MANIFEST.json")).hexdigest() != validation.get("manifest_sha256"):
             raise RuntimeError("ZIP manifest hash does not match validation evidence")
-        zipped_validation = json.loads(archive.read("PACKAGE_VALIDATION.json"))
+        zipped_validation = strict_json_loads(archive.read("PACKAGE_VALIDATION.json"))
         if zipped_validation != validation:
             raise RuntimeError("ZIP validation evidence does not match verified build evidence")
         kernel_hashes = parse_frozen_kernel(archive.read("FROZEN_KERNEL.sha256"))
@@ -324,9 +371,7 @@ def verify_zip(
                 raise RuntimeError(f"ZIP frozen kernel mismatch: {name}")
         for name in names:
             payload = archive.read(name)
-            if (
-                PRIVATE_KEY_BEGIN in payload and PRIVATE_KEY_END in payload
-            ) or TOKEN_PATTERN.search(payload):
+            if contains_secret_like(payload):
                 raise RuntimeError(f"ZIP contains secret-like material: {name}")
     with tempfile.TemporaryDirectory(prefix="buildos-package-identity-") as raw:
         extraction_root = Path(raw)
@@ -351,7 +396,7 @@ def verify_zip(
         "content_index_exhaustive": True,
         "canonical_member_names": True,
         "source_bytes_git_frozen": True,
-        "secret_scan": True,
+        "bounded_secret_pattern_scan": True,
     }
 
 

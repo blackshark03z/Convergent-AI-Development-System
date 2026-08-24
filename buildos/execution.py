@@ -963,6 +963,23 @@ def assert_effects_resolved(state: Mapping[str, Any]) -> None:
             raise KernelError(f"required external effect is not durably committed: {action_id}")
 
 
+def assert_no_unresolved_effects(state: Mapping[str, Any], action: str) -> None:
+    """Forbid releasing lifecycle ownership while any effect needs reconciliation."""
+    runtime = state.get("execution") or {}
+    if runtime.get("mode") != "ENHANCED":
+        return
+    validate_runtime_state(runtime)
+    unresolved = [
+        effect_id for effect_id, row in (runtime.get("effect_ledger") or {}).items()
+        if row.get("state") not in TERMINAL_EFFECT_STATES
+    ]
+    if unresolved:
+        raise KernelError(
+            f"{action} cannot release the task while external effects require reconciliation: "
+            f"{sorted(unresolved)}"
+        )
+
+
 def report_blocker(state: Mapping[str, Any], *, family: str, evidence: str, assumption_id: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     assert_plan_valid(state, "report-blocker")
     family = _id(family, "blocker family")

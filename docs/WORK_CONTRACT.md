@@ -51,8 +51,8 @@ but any mutation request must cover the full declared action basis. This keeps
 unrelated questions non-blocking without letting the Worker selectively omit a
 difficult repository premise.
 
-The grounding report is bound to the exact repository HEAD, tree and dirty
-product-state digest. Build OS independently re-reads those anchors, hashes
+The grounding report is bound to the exact repository branch, HEAD, tree and
+dirty product-state digest. Build OS independently re-reads those anchors, hashes
 repository files, and requires claim evidence to cover its declared path/HEAD/
 tree binding. Stale, unrelated-file, Build OS control-state, or external-only
 proof cannot verify a repository claim.

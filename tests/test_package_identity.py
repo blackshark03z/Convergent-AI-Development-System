@@ -13,7 +13,8 @@ import zipfile
 
 import scripts.build_portable_package as package_builder
 from scripts.build_portable_package import (
-    parse_frozen_kernel, validate_archive_names, verify_checksum_index,
+    contains_secret_like, parse_frozen_kernel, strict_json_loads,
+    validate_archive_names, verify_checksum_index,
 )
 
 
@@ -170,6 +171,17 @@ class PackageIdentityTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "duplicate path"):
             parse_frozen_kernel(payload)
 
+    def test_release_json_rejects_duplicate_keys_and_nonfinite_constants(self):
+        with self.assertRaisesRegex(ValueError, "duplicate JSON object key"):
+            strict_json_loads('{"package_id":"forged","package_id":"trusted"}')
+        with self.assertRaisesRegex(ValueError, "non-finite JSON constant"):
+            strict_json_loads('{"value":NaN}')
+
+    def test_bounded_secret_scan_covers_hyphenated_provider_token_families(self):
+        self.assertTrue(contains_secret_like(b"credential=" + b"s" + b"k-proj-" + b"A" * 24))
+        self.assertTrue(contains_secret_like(b"credential=" + b"s" + b"k-svcacct-" + b"B" * 24))
+        self.assertFalse(contains_secret_like(b"documentation mentions a redacted provider token"))
+
     def test_manifest_package_id_and_included_allowlist_are_identity_bound(self):
         with tempfile.TemporaryDirectory(prefix="package-manifest-identity-") as raw:
             root = Path(raw) / "package"
@@ -236,6 +248,7 @@ class PackageIdentityTests(unittest.TestCase):
             (root / "PACKAGE_VALIDATION.json").write_text("{}\n", encoding="utf-8")
             (root / "PACKAGE_CONTENTS.sha256").write_text("placeholder\n", encoding="utf-8")
             manifest = {
+                "frozen_kernel_commit": "0" * 40,
                 "included": [
                     "PACKAGE_CONTENTS.sha256", "PACKAGE_MANIFEST.json",
                     "PACKAGE_VALIDATION.json", "payload.txt",
@@ -244,6 +257,11 @@ class PackageIdentityTests(unittest.TestCase):
             (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
             self._git(root, "add", ".")
             self._git(root, "commit", "-m", "frozen package source")
+            frozen_commit = self._git(root, "rev-parse", "HEAD")
+            manifest["frozen_kernel_commit"] = frozen_commit
+            (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self._git(root, "add", "PACKAGE_MANIFEST.json")
+            self._git(root, "commit", "-m", "bind release metadata")
             with mock.patch.object(package_builder, "ROOT", root):
                 commit, _, paths, frozen_manifest = package_builder.source_snapshot()
                 self.assertEqual(frozen_manifest, manifest)
@@ -253,6 +271,33 @@ class PackageIdentityTests(unittest.TestCase):
                 )
                 self.assertEqual(payloads["payload.txt"], b"committed\n")
                 with self.assertRaisesRegex(RuntimeError, "clean Git worktree"):
+                    package_builder.source_snapshot()
+
+    def test_package_source_rejects_unreviewed_post_freeze_content_delta(self):
+        with tempfile.TemporaryDirectory(prefix="package-post-freeze-delta-") as raw:
+            root = Path(raw)
+            self._git(root, "init")
+            self._git(root, "config", "user.name", "Package Test")
+            self._git(root, "config", "user.email", "package@example.invalid")
+            (root / "payload.txt").write_text("reviewed\n", encoding="utf-8")
+            manifest = {
+                "frozen_kernel_commit": "0" * 40,
+                "included": [
+                    "PACKAGE_CONTENTS.sha256", "PACKAGE_MANIFEST.json",
+                    "PACKAGE_VALIDATION.json", "payload.txt",
+                ],
+            }
+            (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-m", "reviewed freeze")
+            frozen_commit = self._git(root, "rev-parse", "HEAD")
+            manifest["frozen_kernel_commit"] = frozen_commit
+            (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (root / "payload.txt").write_text("unreviewed executable/content change\n", encoding="utf-8")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-m", "unreviewed descendant")
+            with mock.patch.object(package_builder, "ROOT", root):
+                with self.assertRaisesRegex(RuntimeError, "unreviewed post-freeze"):
                     package_builder.source_snapshot()
 
     def test_failed_staged_verification_never_publishes_release_named_zip(self):

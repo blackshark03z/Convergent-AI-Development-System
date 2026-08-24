@@ -75,8 +75,91 @@ class CommitResult:
     recovered_orphan: bool = False
 
 
+def _is_reparse_point(path: Path) -> bool:
+    try:
+        stat = path.lstat()
+    except OSError:
+        return False
+    return path.is_symlink() or bool(getattr(stat, "st_file_attributes", 0) & 0x400)
+
+
+def _normalized_absolute(path: Path) -> str:
+    value = os.path.normcase(os.path.abspath(str(path)))
+    if os.name == "nt" and value.startswith("\\\\?\\"):
+        value = value[4:]
+    return value
+
+
+def _is_within(root: Path, target: Path) -> bool:
+    normalized_root = _normalized_absolute(root)
+    normalized_target = _normalized_absolute(target)
+    try:
+        return os.path.commonpath([normalized_root, normalized_target]) == normalized_root
+    except ValueError:
+        return False
+
+
+def _assert_control_paths_safe(root: Path) -> None:
+    """Reject pre-existing aliases that could redirect canonical control bytes."""
+    relative_paths = (
+        Path(".buildos"), Path(".buildos/control"),
+        Path(".buildos/control/generations"), Path(".buildos/control/staging"),
+        Path(".buildos/control/receipts"), Path(".buildos/evidence"),
+        Path(".buildos/runtime"),
+    )
+    for relative in relative_paths:
+        current = root
+        for part in relative.parts:
+            current = current / part
+            if _is_reparse_point(current):
+                raise KernelError(
+                    f"Build OS control path must not be a symlink, junction, or reparse point: {current}"
+                )
+            if not current.exists():
+                break
+            try:
+                resolved = current.resolve(strict=True)
+            except OSError as exc:
+                raise KernelError("Build OS control path escapes the repository root") from exc
+            if not _is_within(root, resolved):
+                raise KernelError("Build OS control path escapes the repository root")
+
+
+def safe_repository_descendant(root: Path | str, relative: Path | str, *, label: str) -> Path:
+    """Resolve one repository-relative target without following an existing alias.
+
+    Dynamic evidence paths contain task-controlled segments, so checking only the
+    fixed ``.buildos`` directories is insufficient: any existing child junction
+    could redirect an otherwise valid-looking publication outside the repository.
+    """
+    root = Path(root).resolve()
+    relative = Path(relative)
+    if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+        raise KernelError(f"{label} must be a canonical repository-relative path")
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if _is_reparse_point(current):
+            raise KernelError(f"{label} must not traverse a symlink, junction, or reparse point: {current}")
+        if current.exists():
+            try:
+                resolved = current.resolve(strict=True)
+            except OSError as exc:
+                raise KernelError(f"{label} escapes the repository root") from exc
+            if not _is_within(root, resolved):
+                raise KernelError(f"{label} escapes the repository root")
+    try:
+        resolved = current.resolve(strict=False)
+    except OSError as exc:
+        raise KernelError(f"{label} escapes the repository root") from exc
+    if not _is_within(root, resolved):
+        raise KernelError(f"{label} escapes the repository root")
+    return current
+
+
 def paths(root: Path | str) -> StorePaths:
     root = Path(root).resolve()
+    _assert_control_paths_safe(root)
     buildos = root / ".buildos"
     control = buildos / "control"
     return StorePaths(
@@ -96,6 +179,7 @@ def ensure_layout(root: Path | str) -> StorePaths:
     p = paths(root)
     for directory in (p.generations, p.staging, p.receipts, p.evidence, p.runtime):
         directory.mkdir(parents=True, exist_ok=True)
+    _assert_control_paths_safe(p.root)
     return p
 
 

@@ -43,7 +43,8 @@ def handoff(root: Path, directory: Path, *, requested_action: str) -> tuple[Path
         "contract_hash": digest,
         "worker": {"id": "WORKER", "observed_at": "2026-08-24T00:00:00Z"},
         "repository": {
-            "root": str(root.resolve()), "head": observed["head"], "tree": observed["tree"],
+            "root": str(root.resolve()), "branch": observed["branch"],
+            "head": observed["head"], "tree": observed["tree"],
             "product_state_digest": observed["product_state_digest"],
         },
         "scope_claim_ids": ["repo.app"],
@@ -80,7 +81,8 @@ def refresh_grounding(root: Path, contract_path: Path, grounding_path: Path) -> 
     prior = json.loads(grounding_path.read_text(encoding="utf-8"))
     prior["contract_hash"] = digest
     prior["repository"] = {
-        "root": str(root.resolve()), "head": observed["head"], "tree": observed["tree"],
+        "root": str(root.resolve()), "branch": observed["branch"],
+        "head": observed["head"], "tree": observed["tree"],
         "product_state_digest": observed["product_state_digest"],
     }
     prior["evidence"][0]["digest"] = app_digest
@@ -170,7 +172,8 @@ class VNextRepresentativePilots(unittest.TestCase):
             observed = git_adapter.snapshot(root)
             blocked = json.loads(grounding_path.read_text(encoding="utf-8"))
             blocked["repository"] = {
-                "root": str(root.resolve()), "head": observed["head"], "tree": observed["tree"],
+                "root": str(root.resolve()), "branch": observed["branch"],
+                "head": observed["head"], "tree": observed["tree"],
                 "product_state_digest": observed["product_state_digest"],
             }
             blocked["scope_claim_ids"].append("acceptance.contract")

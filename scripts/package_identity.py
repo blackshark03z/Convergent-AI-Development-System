@@ -12,12 +12,11 @@ import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.25"
-KERNEL_COMMIT = "d1271325e31f6e568d033cbdb45bbc5294573efb"
 PACKAGE_ID = "build-os-v1.25-rc2-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.3.0-continuity-1.1.0-context-epoch-1.0.1"
 ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc2_work_loop_v1.0.0_execution_runtime_v1.0.3_project_lifecycle_kit_v1.3.0_continuity_v1.1.0_context_epoch_v1.0.1.zip"
 RELEASE_EVIDENCE_PATH = "docs/V1.25_RC2_REPORT.md"
 RELEASE_REFERENCE = "BUILDOS-V1.25-WORK-LOOP-RC2"
-EXPECTED_TEST_COUNT = 286
+EXPECTED_TEST_COUNT = 295
 EXPECTED_TEST_MODULES = [
     "test_acceptance_contract.py", "test_adversarial.py", "test_candidate.py",
     "test_context_epoch.py", "test_continuity_sidecar.py", "test_execution_authority.py",
@@ -28,10 +27,10 @@ EXPECTED_TEST_MODULES = [
     "test_work_loop.py",
 ]
 ALLOWED_SKIP_TESTS = [
-    "test_repo_evidence_alias_cannot_resolve_into_buildos_control_state",
-    "test_failed_rollover_field_trace_would_bind_via_read_only_handoff_proof",
-    "test_recovered_field_trace_is_parsed_read_only_with_exact_full_turn_usage",
-    "test_editorial_request_twenty_replays_without_request_count_rollover",
+    "tests.test_grounding.GroundingTests.test_repo_evidence_alias_cannot_resolve_into_buildos_control_state",
+    "tests.test_telemetry_binding.DesktopBindingTests.test_failed_rollover_field_trace_would_bind_via_read_only_handoff_proof",
+    "tests.test_telemetry_binding.DesktopBindingTests.test_recovered_field_trace_is_parsed_read_only_with_exact_full_turn_usage",
+    "tests.test_telemetry_binding.DesktopBindingTests.test_editorial_request_twenty_replays_without_request_count_rollover",
 ]
 MANIFEST_KEYS = {
     "schema", "package_id", "archive_name", "frozen_kernel_commit",
@@ -49,11 +48,26 @@ INCLUDED = [
 ]
 
 
+def strict_json_loads(payload: str | bytes) -> object:
+    def pairs(rows: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in rows:
+            if key in result:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            result[key] = value
+        return result
+
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"non-finite JSON constant is forbidden: {value}")
+
+    return json.loads(payload, object_pairs_hook=pairs, parse_constant=reject_constant)
+
+
 def invoke(path: Path) -> dict[str, object]:
     completed = subprocess.run([sys.executable, str(path), "--version"], text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30)
     if completed.returncode:
         raise ValueError(f"identity command failed: {path.relative_to(path.parents[3])}")
-    value = json.loads(completed.stdout)
+    value = strict_json_loads(completed.stdout)
     if not isinstance(value, dict):
         raise ValueError("identity command did not return an object")
     return value
@@ -66,7 +80,7 @@ def exact_fields(value: object, fields: set[str]) -> bool:
 def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
     errors: list[str] = []
     try:
-        manifest = json.loads((root / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
+        manifest = strict_json_loads((root / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         return False, [f"MANIFEST_INVALID:{exc}"], {}
     if not isinstance(manifest, dict):
@@ -81,6 +95,10 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         errors.append("MANIFEST_ARCHIVE_NAME_MISMATCH")
     if manifest.get("included") != INCLUDED:
         errors.append("MANIFEST_INCLUDED_ALLOWLIST_MISMATCH")
+    kernel_commit = manifest.get("frozen_kernel_commit")
+    if not isinstance(kernel_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", kernel_commit):
+        errors.append("MANIFEST_KERNEL_COMMIT_INVALID")
+        kernel_commit = "INVALID"
     lifecycle_raw = manifest.get("project_lifecycle_kit")
     continuity_raw = manifest.get("continuity_skill")
     runtime_raw = manifest.get("runtime_context_epoch_capability")
@@ -100,7 +118,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
     if continuity.get("mandatory_by_adoption_contract") is not True or continuity.get("kernel_enforced") is not False:
         errors.append("MANIFEST_CONTINUITY_AUTHORITY_FLAGS_INVALID")
     expected = {
-        "kernel_version": KERNEL_VERSION, "kernel_commit": KERNEL_COMMIT,
+        "kernel_version": KERNEL_VERSION, "kernel_commit": kernel_commit,
         "lifecycle_version": lifecycle.get("version"), "continuity_version": continuity.get("version"),
         "runtime_capability": runtime.get("identity"), "runtime_version": runtime.get("version"),
     }
@@ -119,11 +137,10 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         library_version = None
     if library_version != manifest.get("frozen_kernel_version"):
         errors.append("BUILDOS_LIBRARY_IDENTITY_MISMATCH")
-    if manifest.get("frozen_kernel_commit") != KERNEL_COMMIT: errors.append("MANIFEST_KERNEL_COMMIT_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("version") != expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_SKILL_MISMATCH")
-    if continuity.get("name") != "documentation-handoff-continuity" or not expected["continuity_version"]: errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")
-    if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or not expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
-    if runtime.get("name") != "codex-app-server-context-epoch" or not expected["runtime_capability"] or not expected["runtime_version"]:
+    if continuity.get("name") != "documentation-handoff-continuity" or expected["continuity_version"] != "1.1.0": errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")
+    if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or expected["lifecycle_version"] != "1.3.0": errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
+    if runtime.get("name") != "codex-app-server-context-epoch" or expected["runtime_capability"] != "codex-app-server-context-epoch.v1" or expected["runtime_version"] != "1.0.1":
         errors.append("MANIFEST_RUNTIME_CONTEXT_EPOCH_IDENTITY_MISMATCH")
     execution_runtime_raw = manifest.get("execution_runtime")
     execution_runtime = execution_runtime_raw if isinstance(execution_runtime_raw, dict) else {}
@@ -180,7 +197,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         errors.append("MANIFEST_RELEASE_EVIDENCE_FIELDS_INVALID")
     if (
         release.get("status") != "CANDIDATE_AWAITING_INDEPENDENT_R3"
-        or release.get("review_target") != KERNEL_COMMIT
+        or release.get("review_target") != kernel_commit
         or release.get("path") != RELEASE_EVIDENCE_PATH
         or release.get("reference") != RELEASE_REFERENCE
     ):
@@ -198,12 +215,19 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
             release_text = release_file.read_text(encoding="utf-8")
         except OSError:
             release_text = ""
-        if (
-            not release_text
-            or RELEASE_REFERENCE not in release_text
-            or KERNEL_COMMIT not in release_text
-            or "Status: `CANDIDATE_AWAITING_INDEPENDENT_R3`" not in release_text
-            or PACKAGE_ID not in release_text
+        release_lines = release_text.splitlines()
+        required_lines = {
+            0: "# Build OS v1.25 Work Loop RC2 report",
+            2: "Status: `CANDIDATE_AWAITING_INDEPENDENT_R3`",
+            4: "Frozen kernel target:",
+            5: f"`{kernel_commit}`",
+            7: "Package identity:",
+            8: f"`{PACKAGE_ID}`",
+            10: f"Release evidence reference: `{RELEASE_REFERENCE}`",
+        }
+        if any(
+            len(release_lines) <= index or release_lines[index] != expected_line
+            for index, expected_line in required_lines.items()
         ):
             errors.append("MANIFEST_RELEASE_EVIDENCE_UNBOUND")
     assurance_raw = manifest.get("release_assurance")

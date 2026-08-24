@@ -15,9 +15,10 @@
     },
     "repository": {
       "type": "object", "additionalProperties": false,
-      "required": ["root", "head", "tree", "product_state_digest"],
+      "required": ["root", "branch", "head", "tree", "product_state_digest"],
       "properties": {
         "root": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "branch": {"type": "string", "minLength": 1, "maxLength": 128},
         "head": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
         "tree": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
         "product_state_digest": {"$ref": "#/$defs/sha256"}

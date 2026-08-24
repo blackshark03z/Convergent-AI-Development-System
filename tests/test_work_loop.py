@@ -105,6 +105,29 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             self.assertIn("does not match validated handoff", mismatch.stdout + mismatch.stderr)
             self.assertFalse((root / ".buildos").exists())
 
+    def test_preexisting_buildos_junction_cannot_redirect_control_writes(self):
+        if os.name != "nt":
+            self.skipTest("Windows junction regression")
+        with tempfile.TemporaryDirectory(prefix="work-loop-junction-") as raw:
+            base = Path(raw)
+            root, contract_path, grounding_path = self._inputs(base)
+            outside = base / "outside-control"
+            outside.mkdir()
+            junction = root / ".buildos"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+                text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30,
+            )
+            if created.returncode:
+                self.skipTest(f"directory junction unavailable: {created.stderr or created.stdout}")
+            try:
+                blocked = self._bootstrap(root, contract_path, grounding_path)
+                self.assertNotEqual(blocked.returncode, 0)
+                self.assertIn("junction, or reparse point", blocked.stdout + blocked.stderr)
+                self.assertEqual(list(outside.iterdir()), [])
+            finally:
+                os.rmdir(junction)
+
     def test_contract_and_grounding_compile_one_canonical_task_without_relay_args(self):
         with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
             root, contract_path, grounding_path = self._inputs(Path(raw))
@@ -173,6 +196,27 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             after = read_current(root)
             assert after is not None
             self.assertEqual(after.generation_hash, before.generation_hash)
+
+    def test_grounding_refresh_cannot_replace_missing_prior_immutable_evidence(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-refresh-lineage-") as raw:
+            root, contract_path, grounding_path = self._inputs(Path(raw))
+            started = self._bootstrap(root, contract_path, grounding_path)
+            self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+            prior = read_current(root)
+            assert prior is not None
+            prior_reference = prior.state["work_loop"]["grounding"]["evidence"]
+            (root / prior_reference["path"]).unlink()
+            refreshed_value = json.loads(grounding_path.read_text(encoding="utf-8"))
+            refreshed_value["worker"]["observed_at"] = "2026-08-24T12:01:00Z"
+            refreshed_path = Path(raw) / "grounding-refresh.json"
+            refreshed_path.write_text(json.dumps(refreshed_value), encoding="utf-8")
+            with self.assertRaisesRegex(GroundingError, "missing or changed"):
+                BuildOS(root).advance(
+                    work_contract=contract_path, grounding_report=refreshed_path,
+                )
+            after = read_current(root)
+            assert after is not None
+            self.assertEqual(after.generation_hash, prior.generation_hash)
 
     def test_material_decision_blocks_before_control_state_or_product_mutation(self):
         with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
@@ -412,6 +456,50 @@ class WorkLoopBootstrapTests(unittest.TestCase):
             self.assertEqual(blocked["transitions"], [])
             with self.assertRaisesRegex(KernelError, "fresh Worker grounding"):
                 BuildOS(root).validate(checks=[], inspected_by="WORKER")
+
+    def test_close_cannot_ship_after_grounding_becomes_stale_post_assurance(self):
+        with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:
+            base = Path(raw)
+            root, contract_path, grounding_path = self._inputs(base)
+            started = self._work(
+                root, "--work-contract", str(contract_path), "--grounding", str(grounding_path),
+            )
+            self.assertEqual(started.returncode, 0, started.stdout + started.stderr)
+            current = read_current(root)
+            assert current is not None
+
+            (root / "scripts" / "ai.py").write_text("print('implemented')\n", encoding="utf-8")
+            run_git(root, "add", "scripts/ai.py")
+            run_git(root, "commit", "-m", "implement before assurance")
+            fresh = report(
+                root, git_adapter.snapshot(root),
+                current.state["work_loop"]["work_contract"]["hash"],
+            )
+            grounded_head = git_adapter.snapshot(root)["head"]
+            fresh["evidence"].append({
+                "id": "evidence.head", "kind": "REPO_OBSERVATION", "locator": "HEAD",
+                "digest": grounded_head, "observed_at": "2026-08-24T00:00:00Z",
+            })
+            fresh["results"][0]["evidence_refs"].append("evidence.head")
+            fresh_path = base / "fresh-before-assurance.json"
+            fresh_path.write_text(json.dumps(fresh), encoding="utf-8")
+            advanced = BuildOS(root).advance(
+                work_contract=contract_path, grounding_report=fresh_path,
+            )
+            self.assertEqual(advanced["status"], "ASSURANCE_REQUIRED")
+            BuildOS(root).validate(checks=[], inspected_by="WORKER")
+            original_branch = git_adapter.snapshot(root)["branch"]
+            run_git(root, "checkout", "-b", "wrong-branch-same-head")
+            with self.assertRaisesRegex(KernelError, "close requires fresh Worker grounding"):
+                BuildOS(root).close()
+            run_git(root, "checkout", original_branch)
+            run_git(root, "commit", "--allow-empty", "-m", "tree-equivalent descendant")
+
+            with self.assertRaisesRegex(KernelError, "close requires fresh Worker grounding"):
+                BuildOS(root).close()
+            after = read_current(root)
+            assert after is not None
+            self.assertEqual(after.state["phase"], "ASSURANCE_READY")
 
     def test_worker_can_monotonically_adapt_local_action_boundary_from_fresh_grounding(self):
         with tempfile.TemporaryDirectory(prefix="work-loop-") as raw:

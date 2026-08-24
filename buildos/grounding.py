@@ -372,16 +372,16 @@ def validate_grounding_report(
 
     repository = _object(
         report["repository"], label="repository",
-        keys={"root", "head", "tree", "product_state_digest"},
+        keys={"root", "branch", "head", "tree", "product_state_digest"},
     )
     normalized_repository: dict[str, str] = {}
-    for key in ("root", "head", "tree", "product_state_digest"):
+    for key in ("root", "branch", "head", "tree", "product_state_digest"):
         value_text = _text(repository[key], label=f"repository.{key}", maximum=2_048 if key == "root" else 128)
         assert isinstance(value_text, str)
         normalized_repository[key] = value_text
     if Path(normalized_repository["root"]).resolve() != root:
         raise GroundingError("grounding report names a different repository root")
-    for key in ("head", "tree", "product_state_digest"):
+    for key in ("branch", "head", "tree", "product_state_digest"):
         if normalized_repository[key] != observed_repository.get(key):
             raise GroundingError(f"grounding report is stale: repository.{key} changed")
     if not GIT_OBJECT_RE.fullmatch(normalized_repository["head"]) or not GIT_OBJECT_RE.fullmatch(normalized_repository["tree"]):
@@ -626,6 +626,10 @@ def grounding_claim_freshness(
     root = Path(root).resolve()
     evidence = {str(row["id"]): row for row in report.get("evidence") or []}
     stale_evidence: set[str] = set()
+    branch_changed = (
+        str((report.get("repository") or {}).get("branch") or "")
+        != str(observed_repository.get("branch") or "")
+    )
     for evidence_id, row in evidence.items():
         kind = row.get("kind")
         if kind == "REPO_FILE":
@@ -651,7 +655,7 @@ def grounding_claim_freshness(
             continue
         claim_id = str(result.get("claim_id") or "")
         refs = [str(item) for item in result.get("evidence_refs") or []]
-        if any(item in stale_evidence for item in refs):
+        if branch_changed or any(item in stale_evidence for item in refs):
             reexecute.append(claim_id)
         else:
             reused.append(claim_id)
@@ -660,7 +664,7 @@ def grounding_claim_freshness(
             continue
         refs = [str(item) for item in discovery.get("evidence_refs") or []]
         targets = [str(item) for item in discovery.get("conflicts_with") or []]
-        destination = reexecute if any(item in stale_evidence for item in refs) else reused
+        destination = reexecute if branch_changed or any(item in stale_evidence for item in refs) else reused
         destination.extend(targets)
     return {"reused": sorted(set(reused)), "reexecute": sorted(set(reexecute))}
 
@@ -733,7 +737,7 @@ def replay_canonical_grounding(
     recorded_observation = {
         "available": True,
         "root": repository.get("root"),
-        "branch": target_ref.removeprefix("refs/heads/"),
+        "branch": repository.get("branch"),
         "head": repository.get("head"),
         "tree": repository.get("tree"),
         "product_state_digest": repository.get("product_state_digest"),
@@ -809,9 +813,9 @@ def validate_work_loop_binding(value: Any) -> None:
             raise GroundingError(f"work_loop {label} evidence hash does not match its semantic binding")
     repository = _object(
         grounding["repository"], label="work_loop.grounding.repository",
-        keys={"root", "head", "tree", "product_state_digest"},
+        keys={"root", "branch", "head", "tree", "product_state_digest"},
     )
-    for key in ("root", "head", "tree", "product_state_digest"):
+    for key in ("root", "branch", "head", "tree", "product_state_digest"):
         _text(repository[key], label=f"work_loop.grounding.repository.{key}", maximum=2_048 if key == "root" else 128)
     scope = _ids(grounding["scope_claim_ids"], label="work_loop.grounding.scope_claim_ids")
     if not scope:

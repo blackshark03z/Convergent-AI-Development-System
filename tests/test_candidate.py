@@ -73,6 +73,31 @@ def product_commit(root: Path, marker: str = "# product change\n") -> str:
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_nested_evidence_junction_cannot_redirect_validation_publication(self):
+        if os.name != "nt":
+            self.skipTest("Windows junction regression")
+        with generic_repo("nested-evidence-junction") as root, tempfile.TemporaryDirectory(
+            prefix="buildos-outside-evidence-",
+        ) as raw_outside:
+            osys = BuildOS(root, package_root=PACKAGE)
+            osys.bootstrap(request("NESTED-EVIDENCE-JUNCTION"))
+            product_commit(root)
+            osys.record_commit()
+            outside = Path(raw_outside)
+            junction = root / ".buildos" / "evidence" / "NESTED-EVIDENCE-JUNCTION"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+                text=True, encoding="utf-8", errors="replace", capture_output=True, timeout=30,
+            )
+            if created.returncode:
+                self.skipTest(f"directory junction unavailable: {created.stderr or created.stdout}")
+            try:
+                with self.assertRaisesRegex(KernelError, "junction, or reparse point"):
+                    osys.validate(checks=[check_command()], inspected_by="agent:worker-a")
+                self.assertEqual(list(outside.iterdir()), [])
+            finally:
+                os.rmdir(junction)
+
     def test_low_risk_product_commit_validation_and_descendant_close(self):
         with generic_repo("low-risk") as root:
             osys = BuildOS(root, package_root=PACKAGE)
