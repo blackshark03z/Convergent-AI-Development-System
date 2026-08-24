@@ -22,6 +22,7 @@ GENERATED_MEMBERS = {"PACKAGE_VALIDATION.json", "PACKAGE_CONTENTS.sha256"}
 POST_FREEZE_METADATA_ALLOWLIST = {
     "FROZEN_KERNEL.sha256", "PACKAGE_MANIFEST.json", "docs/V1.25_RC2_REPORT.md",
 }
+RELEASE_SUITE_TIMEOUT_SECONDS = 2_400
 PRIVATE_KEY_BEGIN = b"-----" + b"BEGIN "
 PRIVATE_KEY_END = b"PRIVATE " + b"KEY-----"
 TOKEN_PATTERNS = (
@@ -247,7 +248,15 @@ def validate(
     manifest: dict, *, source_commit: str, source_tree: str, source_root: Path,
 ) -> dict:
     command = [sys.executable, str(source_root / "scripts" / "release_suite.py")]
-    completed = _run_at(source_root, command, timeout=1_200)
+    try:
+        completed = _run_at(
+            source_root, command, timeout=RELEASE_SUITE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"portable release suite exceeded {RELEASE_SUITE_TIMEOUT_SECONDS} seconds; "
+            "no package was published"
+        ) from exc
     identity = _run_at(
         source_root,
         [sys.executable, str(source_root / "scripts" / "package_identity.py"), "--root", str(source_root)],
