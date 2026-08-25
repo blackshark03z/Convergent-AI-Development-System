@@ -90,9 +90,11 @@ def _epoch_preflight(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     if not _context_epoch_preflight_enabled(root):
         return 0
-    if args.command == "work" and not (root / ".buildos" / "control").exists():
+    if args.command == "work" and not (root / ".buildos" / "control" / "CURRENT").exists():
         # The normal Work Loop is also the initial bootstrap surface. There is
-        # no context epoch to own until the first canonical generation exists.
+        # no context epoch to own until CURRENT selects a canonical generation.
+        # The frozen kernel still distinguishes a clean retry from prior-record
+        # recovery and fails closed when recover is required.
         return 0
     script = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "context_epoch.py"
     proc = subprocess.run([sys.executable, str(script), "--root", str(root), "preflight"], text=True, capture_output=True)
