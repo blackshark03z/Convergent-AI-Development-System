@@ -154,6 +154,16 @@ class FacadeOptInTests(unittest.TestCase):
                 self.assertEqual(FACADE._epoch_preflight(preflight_args(root, "validate")), 0)
             self.assertIn("context_epoch.py", str(run.call_args.args[0][1]))
 
+    def test_initial_work_bootstrap_has_no_context_epoch_to_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".buildos-policy.json").write_text(
+                json.dumps({"context_epoch": {"enabled": True}}), encoding="utf-8",
+            )
+            with patch.object(FACADE.subprocess, "run") as run:
+                self.assertEqual(FACADE._epoch_preflight(preflight_args(root, "work")), 0)
+            run.assert_not_called()
+
     def test_environment_override_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

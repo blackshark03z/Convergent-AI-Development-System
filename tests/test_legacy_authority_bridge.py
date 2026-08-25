@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -314,10 +315,12 @@ class LegacyRetirementTests(unittest.TestCase):
             value = prepare_and_retire(root)
             self.assertEqual(value["state"], "LEGACY_RETIRED")
             archive = root / ".buildos-legacy" / "archives" / TRANSITION / "legacy"
+            ai_archive = root / ".buildos-legacy" / "archives" / TRANSITION / "legacy-ai.zip"
             encoded = root / ".buildos-legacy" / "archives" / TRANSITION / "encoded-executors" / "scripts" / "ai.py.base64"
             self.assertEqual(base64.b64decode(encoded.read_bytes(), validate=True), old_ai)
             self.assertEqual((archive / "AGENTS.md").read_bytes(), old_agents)
-            self.assertEqual((archive / ".ai" / "history" / "task.json").read_bytes(), old_history)
+            with zipfile.ZipFile(ai_archive) as stored_ai:
+                self.assertEqual(stored_ai.read(".ai/history/task.json"), old_history)
             self.assertFalse((root / "scripts" / "ai.py").exists())
             self.assertFalse((root / "scripts" / "ai_os.py").exists())
             self.assertFalse((root / ".ai").exists())
@@ -334,6 +337,24 @@ class LegacyRetirementTests(unittest.TestCase):
             second_code, second = invoke(root, "retire", "--transition-id", TRANSITION)
             self.assertEqual(second_code, 0, second)
             self.assertEqual(second["receipt_sha256"], first["receipt_sha256"])
+
+    def test_deep_legacy_evidence_is_committable_without_archive_path_expansion(self):
+        with legacy_fixture() as root:
+            deep = root / ".ai" / "evidence" / ("a" * 40) / ("b" * 40) / ("c" * 40)
+            deep.mkdir(parents=True)
+            member = deep / "historical-evidence-record.json"
+            member.write_text('{"preserved":true}\n', encoding="utf-8")
+            relative = member.relative_to(root).as_posix()
+            run_git(root, "add", relative)
+            run_git(root, "commit", "-qm", "deep legacy evidence")
+            expected_bytes = member.read_bytes()
+            prepare_and_retire(root)
+            ai_archive = root / ".buildos-legacy" / "archives" / TRANSITION / "legacy-ai.zip"
+            with zipfile.ZipFile(ai_archive) as stored_ai:
+                self.assertEqual(stored_ai.read(relative), expected_bytes)
+            run_git(root, "add", "-A")
+            run_git(root, "commit", "-qm", "commit portable retirement archive")
+            self.assertEqual(run_git(root, "status", "--porcelain"), "")
 
     def test_require_clean_requires_tracked_transition_evidence(self):
         with legacy_fixture() as root:
@@ -371,7 +392,7 @@ class LegacyRetirementTests(unittest.TestCase):
             self.assertEqual(value["state"], "LEGACY_RETIRED")
 
     def test_interrupted_retirement_recovers_same_transaction(self):
-        for fail_after in ("first_executor", "workers", "legacy_state", "receipt"):
+        for fail_after in ("first_executor", "workers", "ai_quarantine", "legacy_state", "receipt"):
             with self.subTest(fail_after=fail_after), legacy_fixture() as root:
                 self.assertEqual(invoke(root, "prepare", *prepare_args())[0], 0)
                 environment = os.environ.copy()
@@ -386,6 +407,38 @@ class LegacyRetirementTests(unittest.TestCase):
                 self.assertEqual(recovered["state"], "LEGACY_RETIRED")
                 self.assertFalse((root / "scripts" / "ai.py").exists())
                 self.assertFalse((root / "scripts" / "ai_os.py").exists())
+
+    def test_quarantined_ai_race_is_preserved_and_fails_closed(self):
+        with legacy_fixture() as root:
+            self.assertEqual(invoke(root, "prepare", *prepare_args())[0], 0)
+            environment = os.environ.copy()
+            environment["BUILDOS_LEGACY_BRIDGE_FAIL_AFTER"] = "ai_quarantine"
+            code, value = invoke(root, "retire", "--transition-id", TRANSITION, env=environment)
+            self.assertEqual(code, 2)
+            self.assertIn("INJECTED_FAILURE:ai_quarantine", value["error"])
+            common = Path(run_git(root, "rev-parse", "--git-common-dir"))
+            if not common.is_absolute():
+                common = root / common
+            quarantine = common / "buildos-legacy-bridge" / TRANSITION / "retired-ai"
+            late = quarantine / "late-writer-state.json"
+            late.write_text('{"late":true}\n', encoding="utf-8")
+            code, value = invoke(root, "recover", "--transition-id", TRANSITION)
+            self.assertEqual(code, 2)
+            self.assertIn("QUARANTINED_AI_UNEXPECTED_FILE", value["error"])
+            self.assertTrue(late.is_file())
+            self.assertFalse((root / ".ai").exists())
+        with legacy_fixture() as root:
+            prepare_and_retire(root)
+            common = Path(run_git(root, "rev-parse", "--git-common-dir"))
+            if not common.is_absolute():
+                common = root / common
+            quarantine = common / "buildos-legacy-bridge" / TRANSITION / "retired-ai"
+            late = quarantine / "post-archive-late-state.json"
+            late.write_text('{"late_after_archive":true}\n', encoding="utf-8")
+            code, value = invoke(root, "verify", "--transition-id", TRANSITION)
+            self.assertEqual(code, 2)
+            self.assertIn("QUARANTINED_AI_UNEXPECTED_FILE", value["error"])
+            self.assertTrue(late.is_file())
 
     def test_unrelated_dirty_path_during_recovery_fails_closed(self):
         with legacy_fixture() as root:
@@ -415,6 +468,18 @@ class LegacyRetirementTests(unittest.TestCase):
             code, failed = invoke(root, "verify", "--transition-id", TRANSITION)
             self.assertEqual(code, 2)
             self.assertEqual(failed["error"], "TRANSITION_RECEIPT_HASH_INVALID")
+        with legacy_fixture() as root:
+            prepare_and_retire(root)
+            archived = root / ".buildos-legacy" / "archives" / TRANSITION / "legacy-ai.zip"
+            with zipfile.ZipFile(archived, "r") as source:
+                members = [(info.filename, source.read(info)) for info in source.infolist()]
+            with zipfile.ZipFile(archived, "w", compression=zipfile.ZIP_STORED) as repacked:
+                for name, content in reversed(members):
+                    info = zipfile.ZipInfo(name, date_time=(2001, 2, 3, 4, 5, 6))
+                    repacked.writestr(info, content)
+            code, value = invoke(root, "verify", "--transition-id", TRANSITION)
+            self.assertEqual(code, 2)
+            self.assertIn("ARCHIVED_AI_CONTAINER_HASH_MISMATCH", value["error"])
 
     def test_receipt_copied_to_another_repository_is_refused(self):
         with legacy_fixture() as source, legacy_fixture() as target:

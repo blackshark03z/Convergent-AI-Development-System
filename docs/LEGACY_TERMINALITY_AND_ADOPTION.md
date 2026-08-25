@@ -38,10 +38,12 @@ cleanliness, origin/root identity, state and hashes, then:
 
 1. disables callable project-local legacy executors before exposing any current
    authority;
-2. archives the complete legacy `.ai` tree and conflicting instruction bytes
-   under `.buildos-legacy/archives/<transition-id>/legacy/`, and stores executor
-   bytes as hash-verified base64 evidence so they are exactly reconstructible
-   but no longer executable entry points;
+2. archives the complete legacy `.ai` tree as a deterministic ZIP with every
+   member checked against its original size/hash, archives conflicting
+   instruction bytes under `.buildos-legacy/archives/<transition-id>/legacy/`,
+   and stores executor bytes as hash-verified base64 evidence so all bytes are
+   exactly reconstructible without expanding deep legacy paths or retaining
+   executable entry points;
 3. installs either explicitly supplied replacement worker instructions or a
    canonical fail-closed transition notice;
 4. publishes one tracked `buildos.legacy-authority-transition.v1` receipt last.
@@ -84,8 +86,12 @@ project-local executor remains callable.
 
 ## Interruption and recovery
 
-The journal is written before retirement.  Retirement operations are
-idempotent and compare each source/archive/replacement hash.  A crash before
+The journal is written before retirement. Retirement operations are
+idempotent and compare each source/archive/replacement hash. Legacy `.ai` is
+atomically renamed into a Git-private quarantine before archive creation; the
+quarantined tree is never recursively deleted by the transition, and the
+canonical deterministic ZIP container bytes as well as every member are bound
+by the receipt. A crash before
 retirement leaves `LEGACY_ACTIVE`; cancellation is supported.  A crash during
 retirement leaves no v1.25 authority and `recover` completes the same bound
 transaction or refuses unexpected drift.  A crash after tracked receipt

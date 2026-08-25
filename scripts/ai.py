@@ -90,6 +90,10 @@ def _epoch_preflight(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     if not _context_epoch_preflight_enabled(root):
         return 0
+    if args.command == "work" and not (root / ".buildos" / "control").exists():
+        # The normal Work Loop is also the initial bootstrap surface. There is
+        # no context epoch to own until the first canonical generation exists.
+        return 0
     script = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "context_epoch.py"
     proc = subprocess.run([sys.executable, str(script), "--root", str(root), "preflight"], text=True, capture_output=True)
     if proc.returncode:

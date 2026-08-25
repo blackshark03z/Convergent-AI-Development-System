@@ -6,6 +6,7 @@ import argparse
 import base64
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ import shutil
 import subprocess
 import sys
 from typing import Any
+import zipfile
 
 
 BRIDGE_VERSION = "1.0.0"
@@ -527,6 +529,15 @@ def archive_path(root: Path, transition_id: str, relative: str) -> Path:
     return root / transition_path(transition_id) / "legacy" / Path(relative)
 
 
+def ai_archive_path(root: Path, transition_id: str) -> Path:
+    return root / transition_path(transition_id) / "legacy-ai.zip"
+
+
+def quarantined_ai_path(root: Path, transition_id: str) -> Path:
+    journal, _ = journal_paths(root, transition_id)
+    return journal.parent / "retired-ai"
+
+
 def lock_path(root: Path, transition_id: str) -> Path:
     journal, _ = journal_paths(root, transition_id)
     return journal.parent / "writer.lock"
@@ -633,29 +644,81 @@ def verify_encoded_executor(path: Path, expected: dict[str, Any]) -> None:
         raise BridgeError(f"ENCODED_EXECUTOR_ARCHIVE_HASH_MISMATCH:{path}")
 
 
-def verify_archived_ai(root: Path, transition_id: str, inventory: dict[str, Any]) -> None:
-    base = root / transition_path(transition_id) / "legacy"
+def verify_quarantined_ai(root: Path, transition_id: str, inventory: dict[str, Any]) -> Path:
+    directory = quarantined_ai_path(root, transition_id)
+    common = git_common_dir(root)
+    reject_indirection(common, directory)
+    expected_rows = inventory.get("files")
+    if not directory.is_dir() or not isinstance(expected_rows, list):
+        raise BridgeError("QUARANTINED_AI_STATE_INVALID")
+    expected = {
+        Path(str(row["path"])).relative_to(".ai").as_posix(): row
+        for row in expected_rows if isinstance(row, dict)
+    }
+    if len(expected) != len(expected_rows):
+        raise BridgeError("RECEIPT_AI_INVENTORY_INVALID")
+    observed: set[str] = set()
+    for path in sorted(directory.rglob("*")):
+        reject_indirection(common, path)
+        if path.is_dir():
+            continue
+        relative = path.relative_to(directory).as_posix()
+        row = expected.get(relative)
+        if row is None:
+            raise BridgeError(f"QUARANTINED_AI_UNEXPECTED_FILE:{relative}")
+        if (
+            not path.is_file() or sha256_file(path) != row.get("sha256")
+            or path.stat().st_size != row.get("size")
+        ):
+            raise BridgeError(f"QUARANTINED_AI_HASH_MISMATCH:{relative}")
+        observed.add(relative)
+    if observed != set(expected):
+        raise BridgeError("QUARANTINED_AI_FILE_SET_MISMATCH")
+    return directory
+
+
+def build_ai_archive(root: Path, transition_id: str, inventory: dict[str, Any]) -> bytes:
+    source_root = verify_quarantined_ai(root, transition_id, inventory)
     expected_rows = inventory.get("files")
     if not isinstance(expected_rows, list):
         raise BridgeError("RECEIPT_AI_INVENTORY_INVALID")
-    expected_paths = {str(row.get("path")) for row in expected_rows if isinstance(row, dict)}
-    observed_paths: set[str] = set()
-    ai_root = base / ".ai"
-    if not ai_root.is_dir() or is_reparse(ai_root):
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+        for row in sorted(expected_rows, key=lambda item: str(item.get("path", "")) if isinstance(item, dict) else ""):
+            if not isinstance(row, dict):
+                raise BridgeError("RECEIPT_AI_INVENTORY_INVALID")
+            relative = str(row.get("path", ""))
+            source = source_root / Path(relative).relative_to(".ai")
+            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, source.read_bytes())
+    return output.getvalue()
+
+
+def verify_archived_ai(root: Path, transition_id: str, inventory: dict[str, Any]) -> None:
+    path = ai_archive_path(root, transition_id)
+    reject_indirection(root, path)
+    if not path.is_file():
         raise BridgeError("ARCHIVED_AI_STATE_MISSING")
-    for path in sorted(ai_root.rglob("*")):
-        if path.is_dir():
-            if is_reparse(path):
-                raise BridgeError(f"ARCHIVE_REPARSE_POINT:{path}")
-            continue
-        relative = path.relative_to(base).as_posix()
-        observed_paths.add(relative)
-        matches = [row for row in expected_rows if isinstance(row, dict) and row.get("path") == relative]
-        if len(matches) != 1:
-            raise BridgeError(f"ARCHIVED_AI_UNEXPECTED_FILE:{relative}")
-        verify_file_matches(path, matches[0], "ARCHIVED_AI_HASH_MISMATCH")
-    if observed_paths != expected_paths:
-        raise BridgeError("ARCHIVED_AI_FILE_SET_MISMATCH")
+    expected_rows = inventory.get("files")
+    if not isinstance(expected_rows, list) or any(not isinstance(row, dict) for row in expected_rows):
+        raise BridgeError("RECEIPT_AI_INVENTORY_INVALID")
+    expected = {str(row["path"]): row for row in expected_rows}
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            names = archive.namelist()
+            if len(names) != len(set(names)) or set(names) != set(expected):
+                raise BridgeError("ARCHIVED_AI_FILE_SET_MISMATCH")
+            for info in archive.infolist():
+                if info.is_dir() or info.compress_type != zipfile.ZIP_STORED:
+                    raise BridgeError(f"ARCHIVED_AI_MEMBER_INVALID:{info.filename}")
+                content = archive.read(info)
+                row = expected[info.filename]
+                if len(content) != row.get("size") or hashlib.sha256(content).hexdigest() != row.get("sha256"):
+                    raise BridgeError(f"ARCHIVED_AI_HASH_MISMATCH:{info.filename}")
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        raise BridgeError(f"ARCHIVED_AI_ZIP_INVALID:{path}") from exc
 
 
 def failpoint(name: str) -> None:
@@ -697,12 +760,13 @@ def build_receipt(journal: dict[str, Any]) -> dict[str, Any]:
         "authorization": journal["authorization"],
         "legacy": legacy,
         "legacy_state_fingerprint": hashlib.sha256(canonical_bytes(legacy)).hexdigest(),
+        "legacy_ai_archive": journal.get("legacy_ai_archive"),
         "worker_replacements": {
             relative: {"sha256": row["sha256"], "size": row["size"]}
             for relative, row in journal["worker_replacements"].items()
         },
         "retired_authority_disposition": {
-            "legacy_ai": "TRACKED_BYTE_IDENTICAL_ARCHIVE",
+            "legacy_ai": "TRACKED_DETERMINISTIC_ZIP_WITH_BYTE_IDENTICAL_MEMBERS",
             "legacy_executors": "TRACKED_BASE64_RECONSTRUCTIBLE_ARCHIVE_AND_LIVE_PATH_REMOVAL",
             "legacy_worker_instructions": "TRACKED_BYTE_IDENTICAL_ARCHIVE_AND_FAIL_CLOSED_REPLACEMENT",
             "future_authority": "EXTERNAL_PORTABLE_PACKAGE_PENDING_NORMAL_BOOTSTRAP",
@@ -796,16 +860,27 @@ def retire(root: Path, package_root: Path, transition_id: str) -> dict[str, Any]
         ai_state = journal["legacy"].get("ai_state")
         if ai_state:
             source_ai = root / ".ai"
-            destination_ai = root / transition_path(transition_id) / "legacy" / ".ai"
-            if source_ai.exists() and destination_ai.exists():
-                raise BridgeError("SOURCE_AND_ARCHIVED_AI_BOTH_PRESENT")
-            if destination_ai.exists():
-                verify_archived_ai(root, transition_id, ai_state)
-            else:
+            quarantine_ai = quarantined_ai_path(root, transition_id)
+            destination_ai = ai_archive_path(root, transition_id)
+            if source_ai.exists() and quarantine_ai.exists():
+                raise BridgeError("SOURCE_AND_QUARANTINED_AI_BOTH_PRESENT")
+            if source_ai.exists():
                 verify_directory_inventory(root, ai_state)
-                destination_ai.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(source_ai, destination_ai)
-                verify_archived_ai(root, transition_id, ai_state)
+                quarantine_ai.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(source_ai, quarantine_ai)
+                failpoint("ai_quarantine")
+            verify_quarantined_ai(root, transition_id, ai_state)
+            if not destination_ai.exists():
+                atomic_write(
+                    destination_ai, build_ai_archive(root, transition_id, ai_state),
+                    overwrite=False,
+                )
+            verify_archived_ai(root, transition_id, ai_state)
+            verify_quarantined_ai(root, transition_id, ai_state)
+            journal["legacy_ai_archive"] = inventory_file(
+                root, destination_ai.relative_to(root).as_posix(),
+            )
+            save_journal(journal_path, journal)
         failpoint("legacy_state")
 
         receipt = build_receipt(journal)
@@ -845,6 +920,17 @@ def validate_receipt_shape(receipt: dict[str, Any], transition_id: str) -> None:
         or package.get("bridge_version") != BRIDGE_VERSION
     ):
         raise BridgeError("TRANSITION_RECEIPT_PACKAGE_IDENTITY_INVALID")
+    archive = receipt.get("legacy_ai_archive")
+    if legacy.get("ai_state"):
+        expected_path = (transition_path(transition_id) / "legacy-ai.zip").as_posix()
+        if (
+            not isinstance(archive, dict) or archive.get("path") != expected_path
+            or not isinstance(archive.get("sha256"), str) or not SHA256.fullmatch(archive["sha256"])
+            or not isinstance(archive.get("size"), int) or archive["size"] < 1
+        ):
+            raise BridgeError("TRANSITION_RECEIPT_AI_ARCHIVE_IDENTITY_INVALID")
+    elif archive is not None:
+        raise BridgeError("TRANSITION_RECEIPT_AI_ARCHIVE_UNEXPECTED")
 
 
 def frozen_kernel_current(package_root: Path, root: Path) -> dict[str, Any]:
@@ -979,6 +1065,14 @@ def verify_transition(
     ai_state = legacy.get("ai_state")
     if ai_state:
         verify_archived_ai(root, transition_id, ai_state)
+        verify_quarantined_ai(root, transition_id, ai_state)
+        archive = receipt.get("legacy_ai_archive")
+        if not isinstance(archive, dict):
+            raise BridgeError("TRANSITION_RECEIPT_AI_ARCHIVE_IDENTITY_INVALID")
+        verify_file_matches(
+            ai_archive_path(root, transition_id), archive,
+            "ARCHIVED_AI_CONTAINER_HASH_MISMATCH",
+        )
     if (root / ".ai").exists():
         raise BridgeError("LIVE_LEGACY_AI_STATE_REAPPEARED")
     for item in legacy.get("executors", []):
@@ -1010,10 +1104,7 @@ def verify_transition(
             for item in legacy.get("worker_instructions", []) if isinstance(item, dict)
         )
         if ai_state:
-            expected_tracked.update(
-                (transition_path(transition_id) / "legacy" / str(item["path"])).as_posix()
-                for item in ai_state.get("files", []) if isinstance(item, dict)
-            )
+            expected_tracked.add(ai_archive_path(root, transition_id).relative_to(root).as_posix())
         untracked = sorted(
             path for path in expected_tracked
             if not git_succeeds(root, "ls-files", "--error-unmatch", "--", path)

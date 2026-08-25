@@ -18,7 +18,7 @@ PACKAGE_ID = "build-os-v1.25-rc5-legacy-terminality-bridge-1.0.0-work-loop-execu
 ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc5_legacy_terminality_bridge_v1.0.0_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.4.0_continuity_v1.1.0_context_epoch_v1.0.1.zip"
 RELEASE_EVIDENCE_PATH = "docs/V1.25_RC5_REPORT.md"
 RELEASE_REFERENCE = "BUILDOS-V1.25-LEGACY-TERMINALITY-RC5"
-EXPECTED_TEST_COUNT = 341
+EXPECTED_TEST_COUNT = 344
 EXPECTED_TEST_MODULES = [
     "test_acceptance_contract.py", "test_adversarial.py", "test_candidate.py",
     "test_context_epoch.py", "test_continuity_sidecar.py", "test_execution_authority.py",

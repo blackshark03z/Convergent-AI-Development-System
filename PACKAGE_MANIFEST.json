@@ -15,7 +15,7 @@
   "runtime_context_epoch_capability": {"name": "codex-app-server-context-epoch", "version": "1.0.1", "identity": "codex-app-server-context-epoch.v1"},
   "field_study": {"version": "external-append-only", "authority": "NON_AUTHORITATIVE"},
   "release_assurance": {
-    "expected_test_count": 341,
+    "expected_test_count": 344,
     "expected_test_modules": ["test_acceptance_contract.py", "test_adversarial.py", "test_candidate.py", "test_context_epoch.py", "test_continuity_sidecar.py", "test_execution_authority.py", "test_execution_runtime.py", "test_facade_opt_in.py", "test_grounding.py", "test_legacy_authority_bridge.py", "test_lifecycle_lineage.py", "test_package_identity.py", "test_project_lifecycle.py", "test_runtime_no_source_delta.py", "test_side_effect_contract.py", "test_telemetry_binding.py", "test_vnext_pilots.py", "test_work_contract.py", "test_work_loop.py"],
     "allowed_skip_tests": ["tests.test_grounding.GroundingTests.test_repo_evidence_alias_cannot_resolve_into_buildos_control_state", "tests.test_legacy_authority_bridge.LegacyAdoptionBindingTests.test_activation_receipt_reparse_path_is_refused", "tests.test_legacy_authority_bridge.LegacyAdoptionBindingTests.test_initializer_rejects_invalid_transition_before_any_adoption_write", "tests.test_legacy_authority_bridge.LegacyRetirementTests.test_symlinked_legacy_executor_is_refused", "tests.test_telemetry_binding.DesktopBindingTests.test_failed_rollover_field_trace_would_bind_via_read_only_handoff_proof", "tests.test_telemetry_binding.DesktopBindingTests.test_recovered_field_trace_is_parsed_read_only_with_exact_full_turn_usage", "tests.test_telemetry_binding.DesktopBindingTests.test_editorial_request_twenty_replays_without_request_count_rollover"]
   },
