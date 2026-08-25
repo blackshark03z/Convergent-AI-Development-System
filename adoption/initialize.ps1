@@ -21,6 +21,20 @@ if ($QualityGate -and $QualityGateArgvJson) { throw "Choose exactly one quality-
 $target = (Resolve-Path -LiteralPath $Root).Path
 & git -C $target rev-parse --show-toplevel *> $null
 if ($LASTEXITCODE -ne 0) { throw "Root must be a Git worktree." }
+$legacyArchiveRoot = Join-Path $target ".buildos-legacy\archives"
+if (Test-Path -LiteralPath $legacyArchiveRoot) {
+  $transitionReceipts = @(
+    Get-ChildItem -LiteralPath $legacyArchiveRoot -Directory | ForEach-Object {
+      $candidate = Join-Path $_.FullName "receipt.json"
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { Get-Item -LiteralPath $candidate }
+    }
+  )
+  if ($transitionReceipts.Count -ne 1) { throw "Exactly one legacy transition receipt is required." }
+  $transitionId = $transitionReceipts[0].Directory.Name
+  $bridge = Join-Path $PackageRoot "skills\project-lifecycle-bootstrap\scripts\legacy_authority_bridge.py"
+  & python $bridge --root $target --package-root $PackageRoot verify --transition-id $transitionId --require-clean
+  if ($LASTEXITCODE -ne 0) { throw "Legacy authority transition preflight failed before adoption mutation." }
+}
 $policyPath = Join-Path $target ".buildos-policy.json"
 if (Test-Path -LiteralPath $policyPath) { throw ".buildos-policy.json already exists; merge documentation_handoff deliberately." }
 $example = Get-Content -Raw (Join-Path $PackageRoot "adoption\project-policy.example.json") | ConvertFrom-Json

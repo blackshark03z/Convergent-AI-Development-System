@@ -253,8 +253,18 @@ admission object. Administrative recovery stays separately scoped;
 `-QualityGate` string remains a clearly labeled compatibility path for existing
 single-owner projects.
 
+A repository still governed by supported v1.16-style tracked executors and
+`.ai` authority must not delete or relabel that history to pass admission. Use
+the adoption-layer `legacy_authority_bridge.py` `inspect -> prepare -> retire`
+flow, commit its identity-bound archive/receipt, run normal initialization and
+bootstrap, then `finalize` the first selected generation. Active work always
+fails closed; a BLOCKED Goal requires a specific terminal-disposition
+authorization. This capability preserves legacy bytes without importing them
+as v1.25-supervised generations.
+
 See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md),
 [docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md](docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md),
+[docs/LEGACY_TERMINALITY_AND_ADOPTION.md](docs/LEGACY_TERMINALITY_AND_ADOPTION.md),
 [docs/SIDE_EFFECT_SPEC_CONTRACT.md](docs/SIDE_EFFECT_SPEC_CONTRACT.md), and
 [docs/CONTEXT_EPOCH_RUNTIME.md](docs/CONTEXT_EPOCH_RUNTIME.md) for the adoption
 contract and runtime boundaries.
@@ -266,4 +276,4 @@ python scripts/self_test.py
 ```
 
 The candidate is ready for a real field benchmark only after the final
-commit and clean-tree checks described in `docs/V1.23_CANDIDATE_REPORT.md`.
+commit and clean-tree checks described in `docs/V1.25_RC5_REPORT.md`.

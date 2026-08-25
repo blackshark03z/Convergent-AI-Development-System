@@ -246,7 +246,7 @@ class ProjectLifecycleTests(unittest.TestCase):
 class ProjectLifecyclePackageTests(unittest.TestCase):
     def test_package_contains_lifecycle_assets_and_kernel_is_unchanged(self):
         manifest = json.loads((PACKAGE / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["project_lifecycle_kit"]["version"], "1.3.1")
+        self.assertEqual(manifest["project_lifecycle_kit"]["version"], "1.4.0")
         self.assertEqual(manifest["continuity_skill"]["version"], "1.1.0")
         self.assertTrue((PACKAGE / "templates" / "project-lifecycle" / "PROJECT_STATUS.md.tmpl").is_file())
         self.assertTrue((PACKAGE / "docs" / "PROJECT_LIFECYCLE_KIT.md").is_file())

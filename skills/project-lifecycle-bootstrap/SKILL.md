@@ -5,7 +5,7 @@ description: Establish or adopt the bounded Project Lifecycle Kit operating cont
 
 # Project lifecycle bootstrap
 
-Project Lifecycle Kit v1.3.1 is mandatory by the portable adoption contract,
+Project Lifecycle Kit v1.4.0 is mandatory by the portable adoption contract,
 not kernel-enforced security. It does not replace
 `documentation-handoff-continuity v1.1.0`, which remains the sole
 authority for active operational intent.
@@ -64,6 +64,23 @@ python skills/project-lifecycle-bootstrap/scripts/project_lifecycle.py --root <r
 python skills/project-lifecycle-bootstrap/scripts/project_lifecycle.py --root <repo> advance --expected-old-sha <sha> --target-sha <sha>
 python skills/project-lifecycle-bootstrap/scripts/project_lifecycle.py --root <repo> retire-project --confirm
 ```
+
+For an existing repository that still has supported v1.16-style callable
+authority, read `docs/LEGACY_TERMINALITY_AND_ADOPTION.md` and use the dedicated
+bridge before ordinary bootstrap:
+
+```powershell
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py --root <repo> inspect
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py --root <repo> prepare --transition-id <id>
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py --root <repo> retire --transition-id <id>
+```
+
+Preparation is product-read-only. Never infer authorization to terminalize a
+BLOCKED Goal: it requires the exact `--terminalize-blocked-goal` flag and a
+specific `--authorization-reference`. Commit the verified retirement receipt
+before initialization. After normal v1.25 bootstrap, run bridge `finalize` to
+bind the first selected generation. Do not copy, edit, or manufacture either
+receipt by hand, and do not revive legacy authority after activation.
 
 Bootstrap reads the existing `.buildos-policy.json`; it never creates a second
 project-policy authority. It refuses normal adoption without a resolved

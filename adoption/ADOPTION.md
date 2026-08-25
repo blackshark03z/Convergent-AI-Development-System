@@ -24,3 +24,13 @@ Do not retire a closed task merely because Build OS reports CLOSED. `retire`
 reports `CLOSED_PENDING_BASELINE_ADVANCE` until the resolved accepted ref
 contains the candidate, then archives bounded terminal proof and removes only
 the active sidecar.
+
+For a clean repository with supported terminal v1.16-style authority, run
+`skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py inspect`,
+then the explicit `prepare` and `retire` commands before this initializer.
+Commit the generated `.buildos-legacy` transition archive/receipt and
+fail-closed instruction replacement first. A BLOCKED Goal needs the exact
+`--terminalize-blocked-goal --authorization-reference <ref>` disposition; no
+flag can override a live task/lease/node, dirty Git state, or malformed proof.
+After normal v1.25 bootstrap, run bridge `finalize` to bind the first selected
+generation. See `docs/LEGACY_TERMINALITY_AND_ADOPTION.md`.

@@ -1,6 +1,6 @@
 # Project Lifecycle Kit
 
-Project Lifecycle Kit v1.3.1 is the portable adoption layer around Build OS
+Project Lifecycle Kit v1.4.0 is the portable adoption layer around Build OS
 v1.25 candidate. It is mandatory by the adoption contract, not kernel-enforced
 security. `buildos/` continues to own task, revision, lifecycle and immutable
 validation evidence.
@@ -154,6 +154,17 @@ conflicting Worker instructions, missing/incorrect package identity, and any
 non-unique executor. It deliberately does not scan archival roots or historical
 documentation, which are provenance only. If the record cannot resolve, do not
 fall back to PATH or another Build OS version; stop for Tech Lead action.
+
+Supported v1.16-style repositories use the dedicated
+`legacy_authority_bridge.py` migrator before initialization. Its terminality
+proof rejects live tasks/leases/Goals, preserves exact `.ai`, executor and
+instruction bytes in a tracked archive, and removes callable legacy entry
+points. The authority record binds its transition receipt. Once normal
+bootstrap creates `CURRENT`, admission requires the immutable local activation
+receipt that binds the first selected generation; an interrupted activation is
+therefore recoverable but cannot admit further work. A BLOCKED Goal is not
+terminal by itself and requires a specific administrator disposition reference.
+The exact contract and commands are in `LEGACY_TERMINALITY_AND_ADOPTION.md`.
 
 ## Lifecycle
 

@@ -31,6 +31,15 @@ launder owner work into a supervised task. Preserve it, finish or explicitly
 adopt it through the existing admin provenance workflow, then start from a
 clean observable baseline. `.buildos` remains reserved and locally excluded.
 
+A repository with supported v1.16-style tracked execution authority is not an
+ordinary clean adoption merely because Git is clean. Use the explicit
+`legacy_authority_bridge.py` terminality/retirement flow documented in
+`LEGACY_TERMINALITY_AND_ADOPTION.md`. It preserves legacy bytes and supervision
+identity, removes callable old entry points, binds a tracked transition receipt,
+then uses normal bootstrap and an immutable activation receipt. It never imports
+v1.16 work into current generations. ACTIVE work is refused; a BLOCKED Goal
+needs a specific terminal-disposition authorization.
+
 ## Revisions and canonical decisions
 
 A Work Loop Contract is immutable. Repository contradictions may be adapted

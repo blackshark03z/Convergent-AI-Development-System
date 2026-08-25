@@ -9,8 +9,10 @@ from pathlib import Path
 import re
 import sys
 
+from legacy_authority_bridge import BridgeError as LegacyBridgeError, authority_binding
+
 KERNEL_VERSION = "1.25"
-LIFECYCLE_KIT_VERSION = "1.3.1"
+LIFECYCLE_KIT_VERSION = "1.4.0"
 CONTINUITY_SKILL_VERSION = "1.1.0"
 RECORD = ".buildos-authority.json"
 LEGACY_EXECUTABLES = ("scripts/ai.py", "scripts/ai_os.py")
@@ -36,10 +38,10 @@ def fail(errors: list[str], **extra: object) -> int:
     return 2
 
 
-def expected_record(package_root: Path) -> dict[str, object]:
+def expected_record(root: Path, package_root: Path) -> dict[str, object]:
     executor = (package_root / "scripts" / "ai.py").resolve()
     admin = (package_root / "scripts" / "ai_os.py").resolve()
-    return {
+    record: dict[str, object] = {
         "schema": "buildos.execution-authority.v1",
         "invariant": "SINGLE_ACTIVE_EXECUTION_AUTHORITY",
         "kernel_version": KERNEL_VERSION,
@@ -53,6 +55,10 @@ def expected_record(package_root: Path) -> dict[str, object]:
         "resolution_rule": "python <package_root>/scripts/ai.py --root <project-root> <lifecycle-command>; never fall back to project-local or PATH executors",
         "legacy_archive_is_provenance_only": True,
     }
+    transition = authority_binding(root, package_root)
+    if transition is not None:
+        record["legacy_transition"] = transition
+    return record
 
 
 def load_record(root: Path) -> dict[str, object]:
@@ -69,10 +75,12 @@ def check(root: Path) -> int:
     try:
         record = load_record(root)
         package_root = Path(str(record["package_root"])).resolve()
-        expected = expected_record(package_root)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        expected = expected_record(root, package_root)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, LegacyBridgeError) as exc:
         return fail([f"AUTHORITY_RECORD_INVALID: {exc}"])
     errors: list[str] = []
+    if set(record) != set(expected):
+        errors.append("AUTHORITY_RECORD_FIELD_SET_MISMATCH")
     for key in expected:
         if record.get(key) != expected[key]:
             errors.append(f"AUTHORITY_IDENTITY_MISMATCH: {key}")
@@ -119,7 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "write-record":
         if not args.package_root:
             return fail(["PACKAGE_ROOT_REQUIRED"])
-        record = expected_record(Path(args.package_root))
+        try:
+            record = expected_record(root, Path(args.package_root))
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, LegacyBridgeError) as exc:
+            return fail([f"LEGACY_TRANSITION_INVALID: {exc}"])
         (root / RECORD).write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(json.dumps({"status": "PASS", "record": str(root / RECORD), "invariant": "SINGLE_ACTIVE_EXECUTION_AUTHORITY"}, sort_keys=True))
         return 0

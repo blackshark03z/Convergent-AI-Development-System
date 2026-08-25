@@ -70,3 +70,11 @@ If a future lifecycle change is not backward readable, it must use an explicit
 migrator with source-schema validation, a new immutable generation, a migration
 receipt, post-write verification, and a single guarded pointer swap. Silent
 in-place migration and historical-state rewriting are forbidden.
+
+The supported v1.16-style authority transition follows that additive rule but
+does not import legacy state into current generations. It preserves exact
+legacy bytes in a tracked archive, records an identity-bound terminality and
+retirement receipt, retires callable entry points, runs normal current
+bootstrap, and then binds the first selected generation with an immutable local
+activation receipt. Legacy commits remain legacy-supervised provenance. See
+`LEGACY_TERMINALITY_AND_ADOPTION.md`.

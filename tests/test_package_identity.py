@@ -259,6 +259,7 @@ class PackageIdentityTests(unittest.TestCase):
             self._git(root, "commit", "-m", "frozen package source")
             frozen_commit = self._git(root, "rev-parse", "HEAD")
             manifest["frozen_kernel_commit"] = frozen_commit
+            manifest["release_evidence"] = {"review_target": frozen_commit}
             (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
             self._git(root, "add", "PACKAGE_MANIFEST.json")
             self._git(root, "commit", "-m", "bind release metadata")
@@ -273,7 +274,7 @@ class PackageIdentityTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "clean Git worktree"):
                     package_builder.source_snapshot()
 
-    def test_package_source_rejects_unreviewed_post_freeze_content_delta(self):
+    def test_package_source_rejects_unreviewed_post_review_content_delta(self):
         with tempfile.TemporaryDirectory(prefix="package-post-freeze-delta-") as raw:
             root = Path(raw)
             self._git(root, "init")
@@ -292,12 +293,13 @@ class PackageIdentityTests(unittest.TestCase):
             self._git(root, "commit", "-m", "reviewed freeze")
             frozen_commit = self._git(root, "rev-parse", "HEAD")
             manifest["frozen_kernel_commit"] = frozen_commit
+            manifest["release_evidence"] = {"review_target": frozen_commit}
             (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
             (root / "payload.txt").write_text("unreviewed executable/content change\n", encoding="utf-8")
             self._git(root, "add", ".")
             self._git(root, "commit", "-m", "unreviewed descendant")
             with mock.patch.object(package_builder, "ROOT", root):
-                with self.assertRaisesRegex(RuntimeError, "unreviewed post-freeze"):
+                with self.assertRaisesRegex(RuntimeError, "unreviewed post-review"):
                     package_builder.source_snapshot()
 
     def test_failed_staged_verification_never_publishes_release_named_zip(self):

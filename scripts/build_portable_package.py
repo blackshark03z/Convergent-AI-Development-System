@@ -20,7 +20,7 @@ FROZEN_KERNEL = ROOT / "FROZEN_KERNEL.sha256"
 IDENTITY = ROOT / "scripts" / "package_identity.py"
 GENERATED_MEMBERS = {"PACKAGE_VALIDATION.json", "PACKAGE_CONTENTS.sha256"}
 POST_FREEZE_METADATA_ALLOWLIST = {
-    "FROZEN_KERNEL.sha256", "PACKAGE_MANIFEST.json", "docs/V1.25_RC4_REPORT.md",
+    "FROZEN_KERNEL.sha256", "PACKAGE_MANIFEST.json", "docs/V1.25_RC5_REPORT.md",
 }
 RELEASE_SUITE_TIMEOUT_SECONDS = 2_400
 PRIVATE_KEY_BEGIN = b"-----" + b"BEGIN "
@@ -175,15 +175,22 @@ def source_snapshot() -> tuple[str, str, list[str], dict]:
     frozen_commit = manifest.get("frozen_kernel_commit")
     if not isinstance(frozen_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", frozen_commit):
         raise RuntimeError("package manifest frozen kernel commit is invalid")
-    ancestry = _run(["git", "merge-base", "--is-ancestor", frozen_commit, commit])
-    if ancestry.returncode:
-        raise RuntimeError("package source commit does not descend from the frozen kernel commit")
-    changed = set(_git_lines("diff", "--name-only", frozen_commit, commit, "--"))
-    additions = set(_git_lines("diff", "--name-only", "--diff-filter=A", frozen_commit, commit, "--"))
+    release = manifest.get("release_evidence")
+    review_target = release.get("review_target") if isinstance(release, dict) else None
+    if not isinstance(review_target, str) or not re.fullmatch(r"[0-9a-f]{40}", review_target):
+        raise RuntimeError("package manifest review target is invalid")
+    if _run(["git", "merge-base", "--is-ancestor", frozen_commit, review_target]).returncode:
+        raise RuntimeError("package review target does not descend from the frozen kernel commit")
+    if _run(["git", "merge-base", "--is-ancestor", review_target, commit]).returncode:
+        raise RuntimeError("package source commit does not descend from the reviewed package source")
+    if _git_lines("diff", "--name-only", frozen_commit, review_target, "--", "buildos"):
+        raise RuntimeError("reviewed package source changes frozen kernel bytes")
+    changed = set(_git_lines("diff", "--name-only", review_target, commit, "--"))
+    additions = set(_git_lines("diff", "--name-only", "--diff-filter=A", review_target, commit, "--"))
     if additions or not changed.issubset(POST_FREEZE_METADATA_ALLOWLIST):
         unexpected = sorted(additions | (changed - POST_FREEZE_METADATA_ALLOWLIST))
         raise RuntimeError(
-            "package source contains unreviewed post-freeze additions or executable/content changes: "
+            "package source contains unreviewed post-review additions or executable/content changes: "
             + ", ".join(unexpected)
         )
     tracked = _git_lines("ls-tree", "-r", "--name-only", commit)
@@ -269,6 +276,8 @@ def validate(
     inventory = sorted(path.name for path in (source_root / "tests").glob("test_*.py") if path.is_file())
     assurance = manifest.get("release_assurance") or {}
     frozen_commit = str(manifest.get("frozen_kernel_commit") or "")
+    release_evidence = manifest.get("release_evidence") or {}
+    package_review_target = str(release_evidence.get("review_target") or "")
     expected_count = assurance.get("expected_test_count")
     expected_inventory = assurance.get("expected_test_modules")
     allowed_skips = set(assurance.get("allowed_skip_tests") or [])
@@ -282,6 +291,7 @@ def validate(
         "archive_name": manifest.get("archive_name"),
         "manifest_sha256": manifest_hash,
         "frozen_kernel_commit": frozen_commit,
+        "package_review_target": package_review_target,
         "package_source_commit": source_commit,
         "package_source_tree": source_tree,
         "frozen_kernel_ancestor_of_package_source": True,
@@ -439,6 +449,7 @@ def publish(manifest: dict, validation: dict, payloads: dict[str, bytes]) -> tup
             "zip_sha256": zip_hash,
             "manifest_sha256": validation["manifest_sha256"],
             "frozen_kernel_commit": validation["frozen_kernel_commit"],
+            "package_review_target": validation["package_review_target"],
             "package_source_commit": validation["package_source_commit"],
             "package_source_tree": validation["package_source_tree"],
             "validation_schema": validation["schema"],
@@ -488,6 +499,7 @@ def main() -> int:
         "sha256": zip_hash,
         "package_id": manifest["package_id"],
         "frozen_kernel_commit": manifest["frozen_kernel_commit"],
+        "package_review_target": (manifest.get("release_evidence") or {}).get("review_target"),
         "package_source_commit": source_commit,
         "package_source_tree": source_tree,
         "validation_exit_code": validation["exit_code"],

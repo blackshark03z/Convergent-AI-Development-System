@@ -63,3 +63,38 @@ also enable the independent `side_effect_contract` policy entry. This adds a
 deterministic design/spec check for canonical predicates, retry/replay
 consumers, crash recovery, and schema compatibility; it does not add a second
 lifecycle authority.
+
+## Legacy v1.16 authority bridge
+
+Do not delete project-local executors or `.ai` state by hand to make adoption
+pass. A clean repository with supported terminal v1.16-style authority uses the
+dedicated adoption-layer migrator:
+
+```powershell
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py `
+  --root D:\path\to\product inspect
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py `
+  --root D:\path\to\product prepare --transition-id <id>
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py `
+  --root D:\path\to\product retire --transition-id <id>
+```
+
+`prepare` is product-read-only and cancellable. `retire` archives exact legacy
+bytes and creates a tracked transition receipt; commit that bounded retirement
+delta before calling `initialize.ps1`. A BLOCKED Goal is still resumable and
+requires both `--terminalize-blocked-goal` and a specific
+`--authorization-reference`; the flag never overrides a live task, claimed
+lease, ACTIVE Goal/node, dirty tree, identity drift, or malformed evidence.
+
+`initialize.ps1` validates a discovered transition receipt before writing any
+adoption file. Its authority record binds the receipt. After the first normal
+v1.25 bootstrap, complete the crash-recoverable activation boundary:
+
+```powershell
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py `
+  --root D:\path\to\product finalize --transition-id <id>
+```
+
+Until `finalize` durably binds the first selected generation, normal authority
+admission fails closed. See `LEGACY_TERMINALITY_AND_ADOPTION.md` for eligibility,
+provenance, interruption recovery, refusal and rollback semantics.

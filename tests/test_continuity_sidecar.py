@@ -314,13 +314,22 @@ class PortablePackageContractTests(unittest.TestCase):
     def test_manifest_skill_policy_and_frozen_kernel_contract(self):
         manifest = json.loads((PACKAGE / "PACKAGE_MANIFEST.json").read_text(encoding="utf-8"))
         self.assertRegex(manifest["frozen_kernel_commit"], r"^[0-9a-f]{40}$")
+        review_target = manifest["release_evidence"]["review_target"]
+        self.assertRegex(review_target, r"^[0-9a-f]{40}$")
         self.assertEqual(
-            manifest["release_evidence"]["review_target"],
-            manifest["frozen_kernel_commit"],
+            subprocess.run(
+                ["git", "-C", str(PACKAGE), "merge-base", "--is-ancestor", manifest["frozen_kernel_commit"], review_target],
+                text=True, capture_output=True, timeout=30,
+            ).returncode,
+            0,
         )
+        self.assertEqual(git(PACKAGE, "diff", "--name-only", manifest["frozen_kernel_commit"], review_target, "--", "buildos"), "")
+        self.assertEqual(manifest["package_version"], "1.25-rc5")
+        self.assertEqual(manifest["frozen_kernel_version"], "1.25-rc4")
         self.assertTrue(manifest["continuity_skill"]["mandatory_by_adoption_contract"])
         self.assertFalse(manifest["continuity_skill"]["kernel_enforced"])
         self.assertTrue((PACKAGE / "adoption" / "initialize.ps1").is_file())
+        self.assertTrue((PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "legacy_authority_bridge.py").is_file())
         self.assertTrue((PACKAGE / "skills" / "documentation-handoff-continuity" / "references" / "handoff.schema.json").is_file())
         expected = {
             line.split("  ", 1)[1]: line.split("  ", 1)[0]
