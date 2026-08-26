@@ -280,4 +280,4 @@ python scripts/self_test.py
 ```
 
 The candidate is ready for a real field benchmark only after the final
-commit and clean-tree checks described in `docs/V1.25_RC5_REPORT.md`.
+commit and clean-tree checks described in `docs/V1.25_RC6_REPORT.md`.

@@ -12,13 +12,13 @@ import sys
 
 INVARIANT = "PACKAGE_IDENTITY_CONSISTENT"
 KERNEL_VERSION = "1.25"
-PACKAGE_VERSION = "1.25-rc5"
+PACKAGE_VERSION = "1.25-rc6"
 FROZEN_KERNEL_VERSION = "1.25-rc4"
-PACKAGE_ID = "build-os-v1.25-rc5-legacy-terminality-bridge-1.0.0-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.4.0-continuity-1.1.0-context-epoch-1.0.1"
-ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc5_legacy_terminality_bridge_v1.0.0_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.4.0_continuity_v1.1.0_context_epoch_v1.0.1.zip"
-RELEASE_EVIDENCE_PATH = "docs/V1.25_RC5_REPORT.md"
-RELEASE_REFERENCE = "BUILDOS-V1.25-LEGACY-TERMINALITY-RC5"
-EXPECTED_TEST_COUNT = 344
+PACKAGE_ID = "build-os-v1.25-rc6-legacy-terminality-bridge-1.0.1-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.4.1-continuity-1.1.0-context-epoch-1.0.1"
+ARCHIVE_NAME = "Senior_AI_Build_OS_Reusable_v1.25_rc6_legacy_terminality_bridge_v1.0.1_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.4.1_continuity_v1.1.0_context_epoch_v1.0.1.zip"
+RELEASE_EVIDENCE_PATH = "docs/V1.25_RC6_REPORT.md"
+RELEASE_REFERENCE = "BUILDOS-V1.25-LEGACY-TERMINALITY-RC6"
+EXPECTED_TEST_COUNT = 358
 EXPECTED_TEST_MODULES = [
     "test_acceptance_contract.py", "test_adversarial.py", "test_candidate.py",
     "test_context_epoch.py", "test_continuity_sidecar.py", "test_execution_authority.py",
@@ -147,7 +147,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         errors.append("BUILDOS_LIBRARY_IDENTITY_MISMATCH")
     if lifecycle.get("bootstrap_skill", {}).get("version") != expected["lifecycle_version"]: errors.append("MANIFEST_LIFECYCLE_SKILL_MISMATCH")
     if continuity.get("name") != "documentation-handoff-continuity" or expected["continuity_version"] != "1.1.0": errors.append("MANIFEST_CONTINUITY_IDENTITY_MISMATCH")
-    if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or expected["lifecycle_version"] != "1.4.0": errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
+    if lifecycle.get("bootstrap_skill", {}).get("name") != "project-lifecycle-bootstrap" or expected["lifecycle_version"] != "1.4.1": errors.append("MANIFEST_LIFECYCLE_IDENTITY_MISMATCH")
     if runtime.get("name") != "codex-app-server-context-epoch" or expected["runtime_capability"] != "codex-app-server-context-epoch.v1" or expected["runtime_version"] != "1.0.1":
         errors.append("MANIFEST_RUNTIME_CONTEXT_EPOCH_IDENTITY_MISMATCH")
     execution_runtime_raw = manifest.get("execution_runtime")
@@ -226,7 +226,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
             release_text = ""
         release_lines = release_text.splitlines()
         required_lines = {
-            0: "# Build OS v1.25 legacy terminality bridge RC5 report",
+            0: "# Build OS v1.25 legacy terminality bridge RC6 report",
             2: "Status: `CANDIDATE_AWAITING_INDEPENDENT_R3`",
             4: "Frozen kernel target:",
             5: f"`{kernel_commit}`",
@@ -299,7 +299,7 @@ def validate(root: Path) -> tuple[bool, list[str], dict[str, object]]:
         errors.append("RUNTIME_CONTEXT_EPOCH_EXECUTABLE_IDENTITY_MISMATCH")
     if (
         legacy_bridge_identity.get("component") != "legacy-authority-bridge"
-        or legacy_bridge_identity.get("bridge_version") != "1.0.0"
+        or legacy_bridge_identity.get("bridge_version") != "1.0.1"
         or legacy_bridge_identity.get("package_id") != PACKAGE_ID
         or legacy_bridge_identity.get("project_lifecycle_kit_version") != expected["lifecycle_version"]
         or legacy_bridge_identity.get("frozen_kernel_commit") != kernel_commit

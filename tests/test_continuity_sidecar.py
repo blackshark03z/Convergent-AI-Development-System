@@ -324,7 +324,7 @@ class PortablePackageContractTests(unittest.TestCase):
             0,
         )
         self.assertEqual(git(PACKAGE, "diff", "--name-only", manifest["frozen_kernel_commit"], review_target, "--", "buildos"), "")
-        self.assertEqual(manifest["package_version"], "1.25-rc5")
+        self.assertEqual(manifest["package_version"], "1.25-rc6")
         self.assertEqual(manifest["frozen_kernel_version"], "1.25-rc4")
         self.assertTrue(manifest["continuity_skill"]["mandatory_by_adoption_contract"])
         self.assertFalse(manifest["continuity_skill"]["kernel_enforced"])
