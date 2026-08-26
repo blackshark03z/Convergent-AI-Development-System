@@ -47,6 +47,17 @@ def main():
 if __name__ == "__main__": main()
 '''
 
+LEGACY_VALIDATOR = '''#!/usr/bin/env python3
+"""Invariant validator for Senior AI Build OS v1.16."""
+import argparse
+ACTIVE_TASK = "ACTIVE_TASK.md"
+GOAL_STATE = "GOAL_STATE.json"
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ci", action="store_true")
+if __name__ == "__main__": main()
+'''
+
 
 def run_git(root: Path, *args: str, check: bool = True) -> str:
     completed = subprocess.run(
@@ -602,12 +613,13 @@ class LegacyRetirementTests(unittest.TestCase):
             product_files = {
                 "src/ai.py": b"def choose_move(board):\n    return 'product-ai'\n",
                 "src/product/buildos.py": b"class ProductBuildOS:\n    pass\n",
+                "scripts/validate_ai_os.py": LEGACY_VALIDATOR.encode("utf-8"),
             }
             for relative, content in product_files.items():
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(content)
-            run_git(root, "add", "src")
+            run_git(root, "add", "src", "scripts/validate_ai_os.py")
             run_git(root, "commit", "-qm", "add legitimate product modules")
             prepare_and_retire(root)
             for relative, content in product_files.items():

@@ -25,6 +25,16 @@ LEGACY_KERNEL = '''#!/usr/bin/env python3
 import argparse
 ACTIVE_TASK = "ACTIVE_TASK.md"
 GOAL_STATE = "GOAL_STATE.json"
+def main():
+    parser = argparse.ArgumentParser(); parser.add_subparsers(dest="command")
+'''
+LEGACY_VALIDATOR = '''#!/usr/bin/env python3
+"""Invariant validator for Senior AI Build OS v1.16."""
+import argparse
+ACTIVE_TASK = "ACTIVE_TASK.md"
+GOAL_STATE = "GOAL_STATE.json"
+def main():
+    parser = argparse.ArgumentParser(); parser.add_argument("--ci", action="store_true")
 '''
 
 
@@ -70,6 +80,8 @@ class ExecutionAuthorityTests(unittest.TestCase):
             (root / "src" / "product").mkdir(parents=True)
             (root / "src" / "ai.py").write_text("def choose_move(): return 1\n", encoding="utf-8")
             (root / "src" / "product" / "buildos.py").write_text("class ProductBuildOS: pass\n", encoding="utf-8")
+            (root / "scripts").mkdir()
+            (root / "scripts" / "validate_ai_os.py").write_text(LEGACY_VALIDATOR, encoding="utf-8")
             code, payload = invoke(root, "check")
             self.assertEqual(code, 0, payload)
 

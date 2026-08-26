@@ -244,8 +244,22 @@ def legacy_executor_signature(content: str) -> str | None:
         executable_python
         and re.search(r"(?i)Senior AI Build OS v1\.(?:[0-9]|1[0-9]|20|21)\b", prefix) is not None
         and "ACTIVE_TASK.md" in content
-        and "GOAL_STATE.json" in content
+        and (
+            "GOAL_STATE.json" in content
+            or (
+                "from goal_support import (" in content
+                and "begin_goal" in content
+                and "complete_goal" in content
+            )
+        )
         and "argparse" in content
+        and (
+            "add_subparsers" in content
+            or (
+                "from cli_support import build_parser" in content
+                and "build_parser().parse_args" in content
+            )
+        )
     )
     facade = (
         executable_python
