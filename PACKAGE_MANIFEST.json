@@ -5,7 +5,7 @@
   "archive_name": "Senior_AI_Build_OS_Reusable_v1.25_rc6_legacy_terminality_bridge_v1.0.1_work_loop_v1.0.1_execution_runtime_v1.0.3_project_lifecycle_kit_v1.4.1_continuity_v1.1.0_context_epoch_v1.0.1.zip",
   "frozen_kernel_commit": "b34eb368061d063646c58f0115542b8f8d011166",
   "frozen_kernel_version": "1.25-rc4",
-  "release_evidence": {"path": "docs/V1.25_RC6_REPORT.md", "status": "CANDIDATE_AWAITING_INDEPENDENT_R3", "reference": "BUILDOS-V1.25-LEGACY-TERMINALITY-RC6", "review_target": "365df8103a30c4f1db6031957f26cd5847af1e60"},
+  "release_evidence": {"path": "docs/V1.25_RC6_REPORT.md", "status": "CANDIDATE_AWAITING_INDEPENDENT_R3", "reference": "BUILDOS-V1.25-LEGACY-TERMINALITY-RC6", "review_target": "54afdd311682db4619c9ce45ca18c18d8e997cfa"},
   "continuity_skill": {"name": "documentation-handoff-continuity", "version": "1.1.0", "mandatory_by_adoption_contract": true, "kernel_enforced": false},
   "project_lifecycle_kit": {"version": "1.4.1", "bootstrap_skill": {"name": "project-lifecycle-bootstrap", "version": "1.4.1"}, "mandatory_by_adoption_contract": true, "kernel_enforced": false},
   "execution_runtime": {"version": "1.0.3", "spec_schema": "buildos.execution-spec.v1", "runtime_schema": "buildos.execution-runtime.v1", "canonical_authority": "CURRENT_SELECTED_IMMUTABLE_GENERATION"},
