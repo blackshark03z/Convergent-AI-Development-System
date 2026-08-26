@@ -1,0 +1,22 @@
+{
+  "schema": "buildos.release-approval.v1",
+  "canonical_task": "BUILDOS_V125_RC6_R3_PROMOTION",
+  "project": "SHARED_BUILD_OS",
+  "status": "R3_APPROVED_CANDIDATE",
+  "decision": "APPROVE_R3_CANDIDATE",
+  "reviewer_type": "EXTERNAL_INDEPENDENT_TECHNICAL_REVIEWER",
+  "reference": "BUILDOS-V1.25-LEGACY-TERMINALITY-RC6-R3-APPROVED-2026-08-26",
+  "review_target": "5ac6ae08b0a387f002932e009a832d9ce9a3686f",
+  "candidate_source_commit": "b0ef5003a649ef2300ee16bf97e2a88b150c64fc",
+  "candidate_source_tree": "9d3fd937a9b10db0c987674ccd36a2144bd23796",
+  "package_id": "build-os-v1.25-rc6-legacy-terminality-bridge-1.0.1-work-loop-execution-runtime-1.0.3-project-lifecycle-kit-1.4.1-continuity-1.1.0-context-epoch-1.0.1",
+  "zip_sha256": "23d25f2d76e8dc8c80fe8c68a45ee8f049c2ec0f231b12904276f9aaa16139e6",
+  "frozen_kernel_commit": "b34eb368061d063646c58f0115542b8f8d011166",
+  "review_report_sha256": "0cd467d082123e7c160bcb233db42b90962fd8d35e3b510f7623b224bbcc3309",
+  "attestation_sha256": "d5737faafa877c6c92b644b12f3ad9f7430b1f8e33660bf517dff52978d34920",
+  "recorded_at": "2026-08-26",
+  "scope": "PROMOTION_EVIDENCE_ONLY",
+  "implementation_bytes_changed": false,
+  "stable_release": false,
+  "review_limitations": "External review and attestation are owner-provided independent evidence references. This record does not reproduce their contents, claim Worker authorship, authorize a merge, or convert RC6 into a stable release."
+}
