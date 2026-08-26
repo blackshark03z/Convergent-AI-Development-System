@@ -6,6 +6,7 @@ import argparse
 import base64
 from datetime import datetime, timezone
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -18,20 +19,26 @@ from typing import Any
 import zipfile
 
 
-BRIDGE_VERSION = "1.0.0"
+BRIDGE_VERSION = "1.0.1"
 TRANSITION_SCHEMA = "buildos.legacy-authority-transition.v1"
 ACTIVATION_SCHEMA = "buildos.legacy-authority-activation.v1"
 JOURNAL_SCHEMA = "buildos.legacy-authority-journal.v1"
 AUTHORITY_SCHEMA = "buildos.execution-authority.v1"
+TERMINAL_AUTHORIZATION_SCHEMA = "buildos.legacy-terminal-disposition-authorization.v1"
+TERMINAL_AUTHORIZATION_ENV = "BUILDOS_TRUSTED_LEGACY_TERMINAL_DISPOSITION_SHA256"
+TERMINAL_DISPOSITION = "TERMINALIZE_BLOCKED_LEGACY_GOAL_FOR_V125_ADOPTION"
 ARCHIVE_ROOT = Path(".buildos-legacy") / "archives"
 CURRENT_PATH = Path(".buildos") / "control" / "CURRENT"
 ACTIVATION_ROOT = Path(".buildos") / "control" / "legacy-bridge-receipts"
 AUTHORITY_RECORD = Path(".buildos-authority.json")
-EXECUTOR_FILENAMES = {"ai.py", "ai_os.py", "buildos.py", "build_os.py"}
+LEGACY_ATTRIBUTES = Path(".buildos-legacy") / ".gitattributes"
+LEGACY_ATTRIBUTES_BYTES = b"** -text\n"
+CANONICAL_EXECUTOR_PATHS = {"scripts/ai.py", "scripts/ai_os.py"}
 WORKER_FILES = ("AGENTS.md", "WORKER_INSTRUCTIONS.md", "prompts/03_WORKER.md")
 LEGACY_VERSION = re.compile(r"(?i)build\s*os\s*v1\.(?:[0-9]|1[0-9]|20|21)\b")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
+AUTHORIZATION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 LIVE_TASK_STATES = {"READY", "ACTIVE", "PAUSED", "BLOCKED"}
 TERMINAL_TASK_STATES = {"COMPLETED", "ABORTED"}
 TERMINAL_GOAL_STATES = {"COMPLETED", "ABORTED"}
@@ -102,6 +109,12 @@ def atomic_write(path: Path, data: bytes, *, overwrite: bool = True) -> None:
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def normalized_text_sha256(content: bytes) -> str:
+    text = content.decode("utf-8", errors="strict")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest()
 
 
 def git(root: Path, *args: str, check: bool = True) -> str:
@@ -223,16 +236,70 @@ def verify_directory_inventory(root: Path, inventory: dict[str, Any]) -> None:
         raise BridgeError(f"SOURCE_DIRECTORY_DRIFT:{inventory.get('path')}")
 
 
-def find_executors(root: Path) -> list[str]:
-    found: set[str] = set()
-    for path in root.rglob("*"):
+def legacy_executor_signature(content: str) -> str | None:
+    """Recognize supported legacy lifecycle entry points, not product basenames."""
+    prefix = content[:2_048]
+    executable_python = prefix.startswith("#!/usr/bin/env python3")
+    kernel = (
+        executable_python
+        and re.search(r"(?i)Senior AI Build OS v1\.(?:[0-9]|1[0-9]|20|21)\b", prefix) is not None
+        and "ACTIVE_TASK.md" in content
+        and "GOAL_STATE.json" in content
+        and "argparse" in content
+    )
+    facade = (
+        executable_python
+        and "Small agent-facing facade over the full ai_os.py kernel" in prefix
+        and "ai_os.py" in content
+        and "add_subparsers" in content
+        and all(command in content for command in ("start", "finish", "status", "next"))
+    )
+    if kernel:
+        return "LEGACY_BUILD_OS_ADMIN_KERNEL"
+    if facade:
+        return "LEGACY_BUILD_OS_AGENT_FACADE"
+    return None
+
+
+def identify_legacy_executors(root: Path) -> dict[str, list[str]]:
+    """Return exact supported authorities and strong-but-unsupported candidates.
+
+    Git archaeology for the supported legacy family contains only scripts/ai.py
+    and scripts/ai_os.py. A strong signature elsewhere is refused for explicit
+    inspection; an unrelated product file is never retired by basename alone.
+    """
+    executors: set[str] = set()
+    ambiguous: set[str] = set()
+    excluded = {
+        ".git", ".buildos", ".buildos-legacy", "archive", "archives",
+        ".venv", "venv", "node_modules", "site-packages", "__pycache__",
+    }
+    for path in root.rglob("*.py"):
         relative = path.relative_to(root)
-        if any(part in {".git", ".buildos", ".buildos-legacy", "archive", "archives"} for part in relative.parts):
+        if any(part in excluded for part in relative.parts):
             continue
-        if path.is_file() and path.name in EXECUTOR_FILENAMES:
-            reject_indirection(root, path)
-            found.add(relative.as_posix())
-    return sorted(found)
+        name = relative.as_posix()
+        if is_reparse(path):
+            if name in CANONICAL_EXECUTOR_PATHS or path.name in {"ai.py", "ai_os.py", "buildos.py", "build_os.py"}:
+                reject_indirection(root, path)
+            continue
+        if not path.is_file():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="strict")
+        except (OSError, UnicodeError) as exc:
+            if name in CANONICAL_EXECUTOR_PATHS:
+                raise BridgeError(f"AMBIGUOUS_LEGACY_EXECUTOR_CANDIDATE:{name}") from exc
+            continue
+        signature = legacy_executor_signature(content)
+        if name in CANONICAL_EXECUTOR_PATHS:
+            if signature is None:
+                ambiguous.add(name)
+            else:
+                executors.add(name)
+        elif signature is not None:
+            ambiguous.add(name)
+    return {"executors": sorted(executors), "ambiguous": sorted(ambiguous)}
 
 
 def encoded_executor_path(root: Path, transition_id: str, relative: str) -> Path:
@@ -265,7 +332,7 @@ def inspect_task(root: Path) -> dict[str, Any]:
     return {"status": status, "lease_status": lease, "path": ".ai/ACTIVE_TASK.md", "sha256": sha256_file(path)}
 
 
-def inspect_goal(root: Path, *, allow_blocked: bool, authorization_reference: str | None) -> dict[str, Any]:
+def inspect_goal(root: Path) -> dict[str, Any]:
     path = root / ".ai" / "GOAL_STATE.json"
     if not path.exists():
         return {"status": "ABSENT", "path": None, "disposition": "NATIVELY_TERMINAL"}
@@ -289,9 +356,7 @@ def inspect_goal(root: Path, *, allow_blocked: bool, authorization_reference: st
             raise BridgeError(f"LEGACY_GOAL_NODE_LIVE:{node_id}")
     disposition = "NATIVELY_TERMINAL"
     if status == "BLOCKED":
-        if not allow_blocked or not str(authorization_reference or "").strip():
-            raise BridgeError("LEGACY_GOAL_BLOCKED_REQUIRES_TERMINAL_DISPOSITION_AUTHORIZATION")
-        disposition = "OWNER_AUTHORIZED_TERMINAL_DISPOSITION"
+        disposition = "TERMINAL_DISPOSITION_AUTHORIZATION_REQUIRED"
     elif status not in TERMINAL_GOAL_STATES:
         raise BridgeError(f"LEGACY_GOAL_STATE_UNKNOWN:{status or 'MISSING'}")
     elif status == "COMPLETED":
@@ -312,8 +377,126 @@ def inspect_goal(root: Path, *, allow_blocked: bool, authorization_reference: st
     }
 
 
+def decision_bindings(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise BridgeError("LEGACY_GOAL_DECISIONS_MALFORMED")
+    result: list[dict[str, Any]] = []
+    for index, row in enumerate(value):
+        identity: str | None = None
+        if isinstance(row, str) and row.strip():
+            identity = row.strip()
+        elif isinstance(row, dict):
+            for key in ("request_id", "decision_id", "id"):
+                candidate = row.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    identity = candidate.strip()
+                    break
+        result.append({
+            "index": index,
+            "identity": identity,
+            "sha256": hashlib.sha256(canonical_bytes(row)).hexdigest(),
+        })
+    return result
+
+
+def _exact_object(value: object, *, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise BridgeError(f"{label}_INVALID")
+    return value
+
+
+def validate_terminal_authorization(
+    path: Path, repository: dict[str, Any], goal: dict[str, Any], *, require_transport: bool,
+) -> tuple[dict[str, Any], bytes, str]:
+    candidate = path.absolute()
+    if (
+        not candidate.is_file()
+        or any(part.exists() and is_reparse(part) for part in (candidate, *candidate.parents))
+    ):
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_FILE_INVALID")
+    raw = read_json(candidate)
+    row = _exact_object(
+        raw,
+        keys={
+            "schema", "authorization_id", "repository", "legacy_goal",
+            "disposition", "authority", "authorization_sha256",
+        },
+        label="TERMINAL_DISPOSITION_AUTHORIZATION",
+    )
+    if row["schema"] != TERMINAL_AUTHORIZATION_SCHEMA:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_SCHEMA_INVALID")
+    authorization_id = str(row["authorization_id"])
+    if not AUTHORIZATION_ID.fullmatch(authorization_id):
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_ID_INVALID")
+    if row["disposition"] != TERMINAL_DISPOSITION:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_DISPOSITION_INVALID")
+    bound_repository = _exact_object(
+        row["repository"],
+        keys={"origin", "root_commits", "branch", "head", "tree"},
+        label="TERMINAL_DISPOSITION_AUTHORIZATION_REPOSITORY",
+    )
+    expected_repository = {
+        key: repository[key] for key in ("origin", "root_commits", "branch", "head", "tree")
+    }
+    if bound_repository != expected_repository:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_REPOSITORY_MISMATCH")
+    legacy_goal = _exact_object(
+        row["legacy_goal"],
+        keys={"goal_id", "path", "status", "sha256", "decision_bindings"},
+        label="TERMINAL_DISPOSITION_AUTHORIZATION_GOAL",
+    )
+    expected_goal = {
+        "goal_id": goal.get("goal_id"),
+        "path": goal.get("path"),
+        "status": goal.get("status"),
+        "sha256": goal.get("sha256"),
+        "decision_bindings": decision_bindings(goal.get("decisions_required")),
+    }
+    if not isinstance(expected_goal["goal_id"], str) or not expected_goal["goal_id"]:
+        raise BridgeError("LEGACY_GOAL_ID_MALFORMED")
+    if legacy_goal != expected_goal:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_GOAL_MISMATCH")
+    authority = _exact_object(
+        row["authority"],
+        keys={"role", "identity", "authority_reference", "authorized_at"},
+        label="TERMINAL_DISPOSITION_AUTHORIZATION_AUTHORITY",
+    )
+    if authority["role"] != "OWNER":
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_AUTHORITY_INVALID")
+    for key, maximum in (("identity", 256), ("authority_reference", 2_048), ("authorized_at", 128)):
+        value = authority.get(key)
+        if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+            raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_AUTHORITY_INVALID")
+    normalized = {
+        "schema": TERMINAL_AUTHORIZATION_SCHEMA,
+        "authorization_id": authorization_id,
+        "repository": expected_repository,
+        "legacy_goal": expected_goal,
+        "disposition": TERMINAL_DISPOSITION,
+        "authority": {
+            "role": "OWNER",
+            "identity": authority["identity"].strip(),
+            "authority_reference": authority["authority_reference"].strip(),
+            "authorized_at": authority["authorized_at"].strip(),
+        },
+    }
+    authorization_sha256 = object_hash({**normalized, "authorization_sha256": ""}, "authorization_sha256")
+    if row.get("authorization_sha256") != authorization_sha256:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_HASH_INVALID")
+    normalized["authorization_sha256"] = authorization_sha256
+    canonical = canonical_bytes(normalized)
+    transport_digest = hashlib.sha256(canonical).hexdigest()
+    if require_transport:
+        supplied = str(os.environ.get(TERMINAL_AUTHORIZATION_ENV) or "").strip().lower()
+        if not SHA256.fullmatch(supplied):
+            raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_TRUSTED_BINDING_REQUIRED")
+        if not hmac.compare_digest(supplied, transport_digest):
+            raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_TRUSTED_BINDING_MISMATCH")
+    return normalized, canonical, transport_digest
+
+
 def inspect_runtime(
-    root: Path, *, allow_blocked: bool, authorization_reference: str | None,
+    root: Path, *, allow_blocked: bool,
 ) -> dict[str, Any]:
     runtime = root / ".ai" / "runtime"
     if not runtime.exists():
@@ -339,9 +522,7 @@ def inspect_runtime(
                 raise BridgeError(f"LEGACY_RUNTIME_TASK_MALFORMED:{status}:{lease or 'MISSING'}")
         elif status == "ACTIVE":
             raise BridgeError("LEGACY_RUNTIME_GOAL_LIVE:ACTIVE")
-        elif status == "BLOCKED" and (
-            not allow_blocked or not str(authorization_reference or "").strip()
-        ):
+        elif status == "BLOCKED" and not allow_blocked:
             raise BridgeError("LEGACY_RUNTIME_GOAL_BLOCKED_REQUIRES_TERMINAL_DISPOSITION_AUTHORIZATION")
         elif status not in TERMINAL_GOAL_STATES | {"BLOCKED"}:
             raise BridgeError(f"LEGACY_RUNTIME_GOAL_MALFORMED:{status}")
@@ -350,7 +531,8 @@ def inspect_runtime(
 
 def inspect_legacy(
     root: Path, package_root: Path, *, allow_blocked: bool = False,
-    authorization_reference: str | None = None, require_clean: bool = True,
+    authorization_path: Path | None = None, authorization_reference: str | None = None,
+    require_clean: bool = True,
 ) -> dict[str, Any]:
     root = root.resolve()
     repository = repository_identity(root, require_clean=require_clean)
@@ -359,9 +541,12 @@ def inspect_legacy(
     existing_archives = root / ARCHIVE_ROOT
     if existing_archives.exists():
         raise BridgeError("LEGACY_BRIDGE_ALREADY_PRESENT")
-    executors = find_executors(root)
-    if any(Path(item).parts and Path(item).parts[0] == ".ai" for item in executors):
-        raise BridgeError("LEGACY_EXECUTOR_INSIDE_AI_UNSUPPORTED")
+    executor_inventory = identify_legacy_executors(root)
+    executors = executor_inventory["executors"]
+    if executor_inventory["ambiguous"]:
+        raise BridgeError(
+            f"AMBIGUOUS_LEGACY_EXECUTOR_CANDIDATE:{executor_inventory['ambiguous']}"
+        )
     conflicting_workers: list[dict[str, Any]] = []
     for relative in WORKER_FILES:
         path = root / relative
@@ -375,14 +560,22 @@ def inspect_legacy(
         raise BridgeError("LEGACY_AI_STATE_PATH_INVALID")
     ai_inventory = inventory_directory(root, ".ai") if ai_path.is_dir() else None
     task = inspect_task(root)
-    goal = inspect_goal(
-        root, allow_blocked=allow_blocked,
-        authorization_reference=authorization_reference,
-    )
-    runtime = inspect_runtime(
-        root, allow_blocked=allow_blocked,
-        authorization_reference=authorization_reference,
-    )
+    goal = inspect_goal(root)
+    terminal_authorization: dict[str, Any] | None = None
+    if authorization_reference:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_REFERENCE_UNSUPPORTED")
+    if goal["status"] == "BLOCKED":
+        if not allow_blocked:
+            raise BridgeError("LEGACY_GOAL_BLOCKED_REQUIRES_TERMINAL_DISPOSITION_AUTHORIZATION")
+        if authorization_path is None:
+            raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_FILE_REQUIRED")
+        terminal_authorization, _, _ = validate_terminal_authorization(
+            authorization_path, repository, goal, require_transport=True,
+        )
+        goal = {**goal, "disposition": "OWNER_AUTHORIZED_TERMINAL_DISPOSITION"}
+    elif allow_blocked or authorization_path is not None or authorization_reference:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_UNEXPECTED")
+    runtime = inspect_runtime(root, allow_blocked=terminal_authorization is not None)
     if not executors and ai_inventory is None and not conflicting_workers:
         raise BridgeError("SUPPORTED_LEGACY_AUTHORITY_NOT_FOUND")
     return {
@@ -398,6 +591,7 @@ def inspect_legacy(
             "worker_instructions": conflicting_workers,
             "ai_state": ai_inventory,
         },
+        "terminal_disposition_authorization": terminal_authorization,
     }
 
 
@@ -457,6 +651,7 @@ def parse_replacements(rows: list[str], workers: list[dict[str, Any]], transitio
             raise BridgeError(f"REPLACEMENT_WORKER_STILL_CONFLICTS:{relative}")
         result[relative] = {
             "sha256": hashlib.sha256(content).hexdigest(),
+            "text_sha256": normalized_text_sha256(content),
             "size": len(content),
             "content_base64": base64.b64encode(content).decode("ascii"),
         }
@@ -465,7 +660,8 @@ def parse_replacements(rows: list[str], workers: list[dict[str, Any]], transitio
 
 def prepare(
     root: Path, package_root: Path, transition_id: str, *, allow_blocked: bool,
-    authorization_reference: str | None, replacement_rows: list[str],
+    authorization_path: Path | None, authorization_reference: str | None,
+    replacement_rows: list[str],
 ) -> dict[str, Any]:
     transition_id = validate_identifier(transition_id)
     journal_path, backup = journal_paths(root, transition_id)
@@ -476,6 +672,7 @@ def prepare(
         raise BridgeError("JOURNAL_ALREADY_EXISTS")
     inspected = inspect_legacy(
         root, package_root, allow_blocked=allow_blocked,
+        authorization_path=authorization_path,
         authorization_reference=authorization_reference, require_clean=True,
     )
     replacements = parse_replacements(
@@ -500,9 +697,21 @@ def prepare(
         "package": inspected["package"],
         "legacy": inspected["legacy"],
         "authorization": {
-            "blocked_goal_terminal_disposition": bool(allow_blocked),
-            "reference": str(authorization_reference or "").strip() or None,
+            "blocked_goal_terminal_disposition": inspected["terminal_disposition_authorization"] is not None,
+            "schema": (
+                inspected["terminal_disposition_authorization"].get("schema")
+                if inspected["terminal_disposition_authorization"] else None
+            ),
+            "authorization_id": (
+                inspected["terminal_disposition_authorization"].get("authorization_id")
+                if inspected["terminal_disposition_authorization"] else None
+            ),
+            "authorization_sha256": (
+                inspected["terminal_disposition_authorization"].get("authorization_sha256")
+                if inspected["terminal_disposition_authorization"] else None
+            ),
         },
+        "terminal_disposition_authorization": inspected["terminal_disposition_authorization"],
         "worker_replacements": replacements,
     }
     save_journal(journal_path, journal)
@@ -531,6 +740,25 @@ def archive_path(root: Path, transition_id: str, relative: str) -> Path:
 
 def ai_archive_path(root: Path, transition_id: str) -> Path:
     return root / transition_path(transition_id) / "legacy-ai.zip"
+
+
+def terminal_authorization_path(root: Path, transition_id: str) -> Path:
+    return root / transition_path(transition_id) / "terminal-disposition-authorization.json"
+
+
+def ensure_legacy_attributes(root: Path) -> None:
+    path = root / LEGACY_ATTRIBUTES
+    if path.exists():
+        if not path.is_file() or is_reparse(path) or path.read_bytes() != LEGACY_ATTRIBUTES_BYTES:
+            raise BridgeError("LEGACY_ARCHIVE_ATTRIBUTES_INVALID")
+        return
+    atomic_write(path, LEGACY_ATTRIBUTES_BYTES, overwrite=False)
+
+
+def verify_legacy_attributes(root: Path) -> None:
+    path = root / LEGACY_ATTRIBUTES
+    if not path.is_file() or is_reparse(path) or path.read_bytes() != LEGACY_ATTRIBUTES_BYTES:
+        raise BridgeError("LEGACY_ARCHIVE_ATTRIBUTES_INVALID")
 
 
 def quarantined_ai_path(root: Path, transition_id: str) -> Path:
@@ -603,7 +831,7 @@ def transition_dirty_paths(root: Path) -> set[str]:
 
 def assert_only_transition_dirtiness(root: Path, journal: dict[str, Any]) -> None:
     transition_id = str(journal["transition_id"])
-    exact = {
+    exact = {LEGACY_ATTRIBUTES.as_posix()} | {
         str(item["path"])
         for item in [
             *journal["legacy"]["executors"],
@@ -628,6 +856,22 @@ def verify_file_matches(path: Path, expected: dict[str, Any], error: str) -> Non
         or path.stat().st_size != expected.get("size")
     ):
         raise BridgeError(f"{error}:{path}")
+
+
+def verify_worker_replacement(path: Path, expected: dict[str, Any]) -> None:
+    if not path.is_file() or is_reparse(path):
+        raise BridgeError(f"WORKER_REPLACEMENT_CHANGED:{path}")
+    content = path.read_bytes()
+    exact = (
+        len(content) == expected.get("size")
+        and hashlib.sha256(content).hexdigest() == expected.get("sha256")
+    )
+    try:
+        portable = normalized_text_sha256(content) == expected.get("text_sha256")
+    except UnicodeError:
+        portable = False
+    if not exact and not portable:
+        raise BridgeError(f"WORKER_REPLACEMENT_CHANGED:{path}")
 
 
 def verify_encoded_executor(path: Path, expected: dict[str, Any]) -> None:
@@ -731,6 +975,7 @@ def sanitized_legacy(legacy: dict[str, Any]) -> dict[str, Any]:
     decisions = goal.pop("decisions_required", [])
     goal["decisions_required_count"] = len(decisions) if isinstance(decisions, list) else -1
     goal["decisions_required_sha256"] = hashlib.sha256(canonical_bytes(decisions)).hexdigest()
+    goal["decision_bindings"] = decision_bindings(decisions)
     runtime_rows: dict[str, Any] = {}
     for name, row in legacy["runtime"].get("observations", {}).items():
         if isinstance(row, dict):
@@ -757,12 +1002,18 @@ def build_receipt(journal: dict[str, Any]) -> dict[str, Any]:
         "retired_at": journal.get("retirement_started_at"),
         "repository": journal["repository"],
         "package": journal["package"],
-        "authorization": journal["authorization"],
+        "authorization": {
+            **journal["authorization"],
+            "evidence": journal.get("terminal_disposition_authorization_evidence"),
+        },
         "legacy": legacy,
         "legacy_state_fingerprint": hashlib.sha256(canonical_bytes(legacy)).hexdigest(),
         "legacy_ai_archive": journal.get("legacy_ai_archive"),
         "worker_replacements": {
-            relative: {"sha256": row["sha256"], "size": row["size"]}
+            relative: {
+                "sha256": row["sha256"], "text_sha256": row["text_sha256"],
+                "size": row["size"],
+            }
             for relative, row in journal["worker_replacements"].items()
         },
         "retired_authority_disposition": {
@@ -831,6 +1082,8 @@ def retire(root: Path, package_root: Path, transition_id: str) -> dict[str, Any]
                     raise BridgeError(f"REPOSITORY_BINDING_DRIFT:{key}")
             assert_only_transition_dirtiness(root, journal)
 
+        ensure_legacy_attributes(root)
+
         for index, item in enumerate(journal["legacy"]["executors"]):
             retire_executor(root, transition_id, item)
             if index == 0:
@@ -851,10 +1104,10 @@ def retire(root: Path, package_root: Path, transition_id: str) -> dict[str, Any]
                 raise BridgeError(f"WORKER_SOURCE_AND_ARCHIVE_MISSING:{relative}")
             content = base64.b64decode(replacement["content_base64"], validate=True)
             if source.exists():
-                verify_file_matches(source, replacement, "WORKER_REPLACEMENT_DRIFT")
+                verify_worker_replacement(source, replacement)
             else:
                 atomic_write(source, content, overwrite=False)
-            verify_file_matches(source, replacement, "WORKER_REPLACEMENT_DRIFT")
+            verify_worker_replacement(source, replacement)
         failpoint("workers")
 
         ai_state = journal["legacy"].get("ai_state")
@@ -882,6 +1135,21 @@ def retire(root: Path, package_root: Path, transition_id: str) -> dict[str, Any]
             )
             save_journal(journal_path, journal)
         failpoint("legacy_state")
+
+        terminal_authorization = journal.get("terminal_disposition_authorization")
+        if terminal_authorization is not None:
+            authorization_target = terminal_authorization_path(root, transition_id)
+            atomic_write(
+                authorization_target, canonical_bytes(terminal_authorization), overwrite=False,
+            )
+            validate_terminal_authorization(
+                authorization_target, journal["repository"], journal["legacy"]["goal"],
+                require_transport=False,
+            )
+            journal["terminal_disposition_authorization_evidence"] = inventory_file(
+                root, authorization_target.relative_to(root).as_posix(),
+            )
+            save_journal(journal_path, journal)
 
         receipt = build_receipt(journal)
         atomic_write(receipt_path(root, transition_id), canonical_bytes(receipt), overwrite=False)
@@ -931,6 +1199,85 @@ def validate_receipt_shape(receipt: dict[str, Any], transition_id: str) -> None:
             raise BridgeError("TRANSITION_RECEIPT_AI_ARCHIVE_IDENTITY_INVALID")
     elif archive is not None:
         raise BridgeError("TRANSITION_RECEIPT_AI_ARCHIVE_UNEXPECTED")
+    authorization = receipt.get("authorization")
+    if not isinstance(authorization, dict) or set(authorization) != {
+        "blocked_goal_terminal_disposition", "schema", "authorization_id",
+        "authorization_sha256", "evidence",
+    }:
+        raise BridgeError("TRANSITION_RECEIPT_AUTHORIZATION_INVALID")
+    authorized = authorization.get("blocked_goal_terminal_disposition") is True
+    expected_authorized = legacy.get("goal", {}).get("disposition") == "OWNER_AUTHORIZED_TERMINAL_DISPOSITION"
+    if authorized != expected_authorized:
+        raise BridgeError("TRANSITION_RECEIPT_AUTHORIZATION_DISPOSITION_MISMATCH")
+    if authorized:
+        evidence = authorization.get("evidence")
+        expected_path = (transition_path(transition_id) / "terminal-disposition-authorization.json").as_posix()
+        if (
+            authorization.get("schema") != TERMINAL_AUTHORIZATION_SCHEMA
+            or not isinstance(authorization.get("authorization_id"), str)
+            or not AUTHORIZATION_ID.fullmatch(authorization["authorization_id"])
+            or not isinstance(authorization.get("authorization_sha256"), str)
+            or not SHA256.fullmatch(authorization["authorization_sha256"])
+            or not isinstance(evidence, dict)
+            or evidence.get("path") != expected_path
+            or not isinstance(evidence.get("sha256"), str)
+            or not SHA256.fullmatch(evidence["sha256"])
+            or not isinstance(evidence.get("size"), int) or evidence["size"] < 1
+        ):
+            raise BridgeError("TRANSITION_RECEIPT_AUTHORIZATION_EVIDENCE_INVALID")
+    elif any(authorization.get(key) is not None for key in ("schema", "authorization_id", "authorization_sha256", "evidence")):
+        raise BridgeError("TRANSITION_RECEIPT_AUTHORIZATION_UNEXPECTED")
+
+
+def verify_terminal_authorization_evidence(
+    root: Path, transition_id: str, receipt: dict[str, Any],
+) -> None:
+    authorization = receipt["authorization"]
+    if not authorization["blocked_goal_terminal_disposition"]:
+        return
+    target = terminal_authorization_path(root, transition_id)
+    evidence = authorization["evidence"]
+    verify_file_matches(target, evidence, "TERMINAL_DISPOSITION_AUTHORIZATION_EVIDENCE_MISMATCH")
+    value = read_json(target)
+    if set(value) != {
+        "schema", "authorization_id", "repository", "legacy_goal",
+        "disposition", "authority", "authorization_sha256",
+    }:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_INVALID")
+    digest = value.get("authorization_sha256")
+    if (
+        value.get("schema") != TERMINAL_AUTHORIZATION_SCHEMA
+        or value.get("authorization_id") != authorization.get("authorization_id")
+        or digest != authorization.get("authorization_sha256")
+        or not isinstance(digest, str) or digest != object_hash(value, "authorization_sha256")
+        or value.get("disposition") != TERMINAL_DISPOSITION
+    ):
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_IDENTITY_INVALID")
+    repository = receipt["repository"]
+    expected_repository = {
+        key: repository[key] for key in ("origin", "root_commits", "branch", "head", "tree")
+    }
+    if value.get("repository") != expected_repository:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_REPOSITORY_MISMATCH")
+    goal = receipt["legacy"]["goal"]
+    expected_goal = {
+        "goal_id": goal.get("goal_id"),
+        "path": goal.get("path"),
+        "status": goal.get("status"),
+        "sha256": goal.get("sha256"),
+        "decision_bindings": goal.get("decision_bindings"),
+    }
+    if value.get("legacy_goal") != expected_goal:
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_GOAL_MISMATCH")
+    authority = value.get("authority")
+    if (
+        not isinstance(authority, dict)
+        or set(authority) != {"role", "identity", "authority_reference", "authorized_at"}
+        or authority.get("role") != "OWNER"
+        or any(not isinstance(authority.get(key), str) or not authority[key].strip()
+               for key in ("identity", "authority_reference", "authorized_at"))
+    ):
+        raise BridgeError("TERMINAL_DISPOSITION_AUTHORIZATION_AUTHORITY_INVALID")
 
 
 def frozen_kernel_current(package_root: Path, root: Path) -> dict[str, Any]:
@@ -1038,6 +1385,34 @@ def verify_activation(root: Path, transition_id: str, receipt: dict[str, Any]) -
     return activation
 
 
+def expected_transition_evidence_paths(
+    root: Path, transition_id: str, receipt_file: Path, receipt: dict[str, Any],
+) -> set[str]:
+    legacy = receipt["legacy"]
+    expected = {receipt_file.relative_to(root).as_posix()}
+    expected.add(LEGACY_ATTRIBUTES.as_posix())
+    expected.update(
+        encoded_executor_path(root, transition_id, str(item["path"])).relative_to(root).as_posix()
+        for item in legacy.get("executors", []) if isinstance(item, dict)
+    )
+    expected.update(
+        archive_path(root, transition_id, str(item["path"])).relative_to(root).as_posix()
+        for item in legacy.get("worker_instructions", []) if isinstance(item, dict)
+    )
+    if legacy.get("ai_state"):
+        expected.add(ai_archive_path(root, transition_id).relative_to(root).as_posix())
+    if receipt.get("authorization", {}).get("blocked_goal_terminal_disposition"):
+        expected.add(terminal_authorization_path(root, transition_id).relative_to(root).as_posix())
+    return expected
+
+
+def untracked_transition_evidence(root: Path, expected: set[str]) -> list[str]:
+    return sorted(
+        path for path in expected
+        if not git_succeeds(root, "ls-files", "--error-unmatch", "--", path)
+    )
+
+
 def verify_transition(
     root: Path, package_root: Path, transition_id: str, *, require_clean: bool,
     require_activation_if_current: bool = True,
@@ -1048,6 +1423,8 @@ def verify_transition(
     reject_indirection(root, receipt_file)
     receipt = read_json(receipt_file)
     validate_receipt_shape(receipt, transition_id)
+    verify_legacy_attributes(root)
+    verify_terminal_authorization_evidence(root, transition_id, receipt)
     observed = repository_identity(root, require_clean=require_clean)
     bound = receipt.get("repository")
     if not isinstance(bound, dict):
@@ -1063,9 +1440,13 @@ def verify_transition(
     package_identity(package_root)
     legacy = receipt["legacy"]
     ai_state = legacy.get("ai_state")
+    expected_tracked = expected_transition_evidence_paths(
+        root, transition_id, receipt_file, receipt,
+    )
+    untracked = untracked_transition_evidence(root, expected_tracked)
+    durable_retirement = not untracked
     if ai_state:
         verify_archived_ai(root, transition_id, ai_state)
-        verify_quarantined_ai(root, transition_id, ai_state)
         archive = receipt.get("legacy_ai_archive")
         if not isinstance(archive, dict):
             raise BridgeError("TRANSITION_RECEIPT_AI_ARCHIVE_IDENTITY_INVALID")
@@ -1073,6 +1454,11 @@ def verify_transition(
             ai_archive_path(root, transition_id), archive,
             "ARCHIVED_AI_CONTAINER_HASH_MISMATCH",
         )
+        quarantine = quarantined_ai_path(root, transition_id)
+        if quarantine.exists():
+            verify_quarantined_ai(root, transition_id, ai_state)
+        elif not durable_retirement:
+            raise BridgeError("QUARANTINED_AI_STATE_REQUIRED_FOR_INCOMPLETE_TRANSITION")
     if (root / ".ai").exists():
         raise BridgeError("LIVE_LEGACY_AI_STATE_REAPPEARED")
     for item in legacy.get("executors", []):
@@ -1092,28 +1478,15 @@ def verify_transition(
         replacement = replacements.get(relative)
         if not isinstance(replacement, dict):
             raise BridgeError(f"WORKER_REPLACEMENT_BINDING_MISSING:{relative}")
-        verify_file_matches(root / relative, replacement, "WORKER_REPLACEMENT_CHANGED")
+        verify_worker_replacement(root / relative, replacement)
     if require_clean:
-        expected_tracked = {receipt_file.relative_to(root).as_posix()}
-        expected_tracked.update(
-            encoded_executor_path(root, transition_id, str(item["path"])).relative_to(root).as_posix()
-            for item in legacy.get("executors", []) if isinstance(item, dict)
-        )
-        expected_tracked.update(
-            archive_path(root, transition_id, str(item["path"])).relative_to(root).as_posix()
-            for item in legacy.get("worker_instructions", []) if isinstance(item, dict)
-        )
-        if ai_state:
-            expected_tracked.add(ai_archive_path(root, transition_id).relative_to(root).as_posix())
-        untracked = sorted(
-            path for path in expected_tracked
-            if not git_succeeds(root, "ls-files", "--error-unmatch", "--", path)
-        )
         if untracked:
             raise BridgeError(f"TRANSITION_EVIDENCE_NOT_TRACKED:{untracked}")
-    remaining = find_executors(root)
-    if remaining:
-        raise BridgeError(f"LEGACY_EXECUTOR_CALLABLE:{remaining}")
+    remaining = identify_legacy_executors(root)
+    if remaining["executors"]:
+        raise BridgeError(f"LEGACY_EXECUTOR_CALLABLE:{remaining['executors']}")
+    if remaining["ambiguous"]:
+        raise BridgeError(f"AMBIGUOUS_LEGACY_EXECUTOR_CANDIDATE:{remaining['ambiguous']}")
     authority = root / AUTHORITY_RECORD
     if authority.exists():
         record = read_json(authority)
@@ -1245,10 +1618,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     inspect_parser = sub.add_parser("inspect")
     inspect_parser.add_argument("--terminalize-blocked-goal", action="store_true")
+    inspect_parser.add_argument("--terminal-disposition-authorization", type=Path)
     inspect_parser.add_argument("--authorization-reference")
     prepare_parser = sub.add_parser("prepare")
     prepare_parser.add_argument("--transition-id", required=True)
     prepare_parser.add_argument("--terminalize-blocked-goal", action="store_true")
+    prepare_parser.add_argument("--terminal-disposition-authorization", type=Path)
     prepare_parser.add_argument("--authorization-reference")
     prepare_parser.add_argument("--replacement-worker", action="append", default=[])
     for name in ("retire", "recover", "cancel", "verify", "finalize"):
@@ -1263,6 +1638,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "inspect":
             value = inspect_legacy(
                 root, package, allow_blocked=args.terminalize_blocked_goal,
+                authorization_path=args.terminal_disposition_authorization,
                 authorization_reference=args.authorization_reference, require_clean=True,
             )
             return emit({"status": "PASS", **value})
@@ -1270,6 +1646,7 @@ def main(argv: list[str] | None = None) -> int:
             value = prepare(
                 root, package, args.transition_id,
                 allow_blocked=args.terminalize_blocked_goal,
+                authorization_path=args.terminal_disposition_authorization,
                 authorization_reference=args.authorization_reference,
                 replacement_rows=args.replacement_worker,
             )

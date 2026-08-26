@@ -258,9 +258,13 @@ A repository still governed by supported v1.16-style tracked executors and
 the adoption-layer `legacy_authority_bridge.py` `inspect -> prepare -> retire`
 flow, commit its identity-bound archive/receipt, run normal initialization and
 bootstrap, then `finalize` the first selected generation. Active work always
-fails closed; a BLOCKED Goal requires a specific terminal-disposition
-authorization. This capability preserves legacy bytes without importing them
-as v1.25-supervised generations.
+fails closed; a BLOCKED Goal requires an exact Goal/repository-bound
+terminal-disposition authorization file plus trusted-launcher SHA-256 pin.
+Only signature-verified canonical legacy entry points are retired; unrelated
+product modules are preserved. Once the complete tracked retirement evidence is
+committed, a fresh clone verifies from that evidence without Git-private
+quarantine. This capability preserves legacy bytes without importing them as
+v1.25-supervised generations.
 
 See [docs/PROJECT_LIFECYCLE_KIT.md](docs/PROJECT_LIFECYCLE_KIT.md),
 [docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md](docs/LIFECYCLE_LINEAGE_AND_ADOPTION.md),

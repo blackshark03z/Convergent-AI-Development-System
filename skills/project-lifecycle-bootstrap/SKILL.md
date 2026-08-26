@@ -5,7 +5,7 @@ description: Establish or adopt the bounded Project Lifecycle Kit operating cont
 
 # Project lifecycle bootstrap
 
-Project Lifecycle Kit v1.4.0 is mandatory by the portable adoption contract,
+Project Lifecycle Kit v1.4.1 is mandatory by the portable adoption contract,
 not kernel-enforced security. It does not replace
 `documentation-handoff-continuity v1.1.0`, which remains the sole
 authority for active operational intent.
@@ -76,9 +76,11 @@ python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py --r
 ```
 
 Preparation is product-read-only. Never infer authorization to terminalize a
-BLOCKED Goal: it requires the exact `--terminalize-blocked-goal` flag and a
-specific `--authorization-reference`. Commit the verified retirement receipt
-before initialization. After normal v1.25 bootstrap, run bridge `finalize` to
+BLOCKED Goal: it requires the exact `--terminalize-blocked-goal` flag, a
+schema-valid `--terminal-disposition-authorization` file, and its trusted
+launcher SHA-256 binding. A reference string is never authorization. Commit the
+verified retirement receipt and authorization evidence before initialization.
+After normal v1.25 bootstrap, run bridge `finalize` to
 bind the first selected generation. Do not copy, edit, or manufacture either
 receipt by hand, and do not revive legacy authority after activation.
 

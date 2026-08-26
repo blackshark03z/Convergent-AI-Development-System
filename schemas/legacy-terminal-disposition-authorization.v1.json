@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildos.invalid/schemas/legacy-terminal-disposition-authorization.v1.json",
+  "title": "Build OS exact legacy Goal terminal-disposition authorization",
+  "type": "object",
+  "required": [
+    "schema", "authorization_id", "repository", "legacy_goal",
+    "disposition", "authority", "authorization_sha256"
+  ],
+  "properties": {
+    "schema": {"const": "buildos.legacy-terminal-disposition-authorization.v1"},
+    "authorization_id": {"$ref": "#/$defs/id"},
+    "repository": {
+      "type": "object",
+      "required": ["origin", "root_commits", "branch", "head", "tree"],
+      "properties": {
+        "origin": {"type": "string", "minLength": 1},
+        "root_commits": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/commit"}
+        },
+        "branch": {"type": "string", "minLength": 1},
+        "head": {"$ref": "#/$defs/commit"},
+        "tree": {"$ref": "#/$defs/commit"}
+      },
+      "additionalProperties": false
+    },
+    "legacy_goal": {
+      "type": "object",
+      "required": ["goal_id", "path", "status", "sha256", "decision_bindings"],
+      "properties": {
+        "goal_id": {"type": "string", "minLength": 1},
+        "path": {"const": ".ai/GOAL_STATE.json"},
+        "status": {"const": "BLOCKED"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "decision_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["index", "identity", "sha256"],
+            "properties": {
+              "index": {"type": "integer", "minimum": 0},
+              "identity": {"type": ["string", "null"]},
+              "sha256": {"$ref": "#/$defs/sha256"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "disposition": {"const": "TERMINALIZE_BLOCKED_LEGACY_GOAL_FOR_V125_ADOPTION"},
+    "authority": {
+      "type": "object",
+      "required": ["role", "identity", "authority_reference", "authorized_at"],
+      "properties": {
+        "role": {"const": "OWNER"},
+        "identity": {"type": "string", "minLength": 1, "maxLength": 256},
+        "authority_reference": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "authorized_at": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "additionalProperties": false
+    },
+    "authorization_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+  }
+}

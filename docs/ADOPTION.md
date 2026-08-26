@@ -83,8 +83,10 @@ python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py `
 bytes and creates a tracked transition receipt; commit that bounded retirement
 delta before calling `initialize.ps1`. A BLOCKED Goal is still resumable and
 requires both `--terminalize-blocked-goal` and a specific
-`--authorization-reference`; the flag never overrides a live task, claimed
-lease, ACTIVE Goal/node, dirty tree, identity drift, or malformed evidence.
+`--terminal-disposition-authorization` file whose canonical SHA-256 is pinned
+by the trusted launcher; a reference string is rejected. The flag never
+overrides a live task, claimed lease, ACTIVE Goal/node, dirty tree, identity
+drift, or malformed evidence.
 
 `initialize.ps1` validates a discovered transition receipt before writing any
 adoption file. Its authority record binds the receipt. After the first normal

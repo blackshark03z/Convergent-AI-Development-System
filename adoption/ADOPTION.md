@@ -30,7 +30,9 @@ For a clean repository with supported terminal v1.16-style authority, run
 then the explicit `prepare` and `retire` commands before this initializer.
 Commit the generated `.buildos-legacy` transition archive/receipt and
 fail-closed instruction replacement first. A BLOCKED Goal needs the exact
-`--terminalize-blocked-goal --authorization-reference <ref>` disposition; no
-flag can override a live task/lease/node, dirty Git state, or malformed proof.
+`--terminalize-blocked-goal --terminal-disposition-authorization <file>`
+disposition plus the trusted launcher SHA-256 binding documented in the bridge
+contract. A reference string is never authorization, and no flag can override
+a live task/lease/node, dirty Git state, or malformed proof.
 After normal v1.25 bootstrap, run bridge `finalize` to bind the first selected
 generation. See `docs/LEGACY_TERMINALITY_AND_ADOPTION.md`.

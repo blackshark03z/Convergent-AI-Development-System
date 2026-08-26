@@ -9,14 +9,16 @@ from pathlib import Path
 import re
 import sys
 
-from legacy_authority_bridge import BridgeError as LegacyBridgeError, authority_binding
+from legacy_authority_bridge import (
+    BridgeError as LegacyBridgeError,
+    authority_binding,
+    identify_legacy_executors,
+)
 
 KERNEL_VERSION = "1.25"
-LIFECYCLE_KIT_VERSION = "1.4.0"
+LIFECYCLE_KIT_VERSION = "1.4.1"
 CONTINUITY_SKILL_VERSION = "1.1.0"
 RECORD = ".buildos-authority.json"
-LEGACY_EXECUTABLES = ("scripts/ai.py", "scripts/ai_os.py")
-EXECUTOR_FILENAMES = {"ai.py", "ai_os.py", "buildos.py", "build_os.py"}
 LEGACY_STATE = (".ai/ACTIVE_TASK.md", ".ai/GOAL_STATE.json", ".ai/STATE.md", ".ai/runtime")
 WORKER_FILES = ("AGENTS.md", "WORKER_INSTRUCTIONS.md", "prompts/03_WORKER.md")
 
@@ -84,17 +86,11 @@ def check(root: Path) -> int:
     for key in expected:
         if record.get(key) != expected[key]:
             errors.append(f"AUTHORITY_IDENTITY_MISMATCH: {key}")
-    executors: set[str] = set()
-    for item in LEGACY_EXECUTABLES:
-        if (root / item).is_file():
-            executors.add(item)
-    for item in root.rglob("*"):
-        relative = item.relative_to(root)
-        if not item.is_file() or item.name not in EXECUTOR_FILENAMES or any(part in {".git", "archive", "archives"} for part in relative.parts):
-            continue
-        executors.add(relative.as_posix())
-    for item in sorted(executors):
+    executor_inventory = identify_legacy_executors(root)
+    for item in executor_inventory["executors"]:
         errors.append(f"LEGACY_EXECUTABLE_CALLABLE: {item}")
+    for item in executor_inventory["ambiguous"]:
+        errors.append(f"AMBIGUOUS_EXECUTOR_CANDIDATE: {item}")
     for item in LEGACY_STATE:
         if (root / item).exists():
             errors.append(f"LEGACY_STATE_AUTHORITATIVE: {item}")
@@ -104,7 +100,7 @@ def check(root: Path) -> int:
         if path.is_file() and legacy_version.search(path.read_text(encoding="utf-8", errors="replace")):
             errors.append(f"CONFLICTING_WORKER_INSTRUCTION: {relative}")
     if errors:
-        return fail(errors, canonical_executor=expected["canonical_executor"], cleanup_required=any(error.startswith(("LEGACY_EXECUTABLE_CALLABLE", "LEGACY_STATE_AUTHORITATIVE", "CONFLICTING_WORKER_INSTRUCTION")) for error in errors))
+        return fail(errors, canonical_executor=expected["canonical_executor"], cleanup_required=any(error.startswith(("LEGACY_EXECUTABLE_CALLABLE", "AMBIGUOUS_EXECUTOR_CANDIDATE", "LEGACY_STATE_AUTHORITATIVE", "CONFLICTING_WORKER_INSTRUCTION")) for error in errors))
     print(json.dumps({"status": "PASS", "invariant": "SINGLE_ACTIVE_EXECUTION_AUTHORITY", "canonical_executor": expected["canonical_executor"], "kernel_commit": expected["kernel_commit"], "legacy_archive_ignored": True}, sort_keys=True))
     return 0
 

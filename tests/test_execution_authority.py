@@ -10,6 +10,22 @@ import unittest
 
 PACKAGE = Path(__file__).resolve().parents[1]
 AUTHORITY = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "execution_authority.py"
+LEGACY_FACADE = '''#!/usr/bin/env python3
+"""Small agent-facing facade over the full ai_os.py kernel."""
+import argparse
+from pathlib import Path
+KERNEL = Path(__file__).resolve().parent / "ai_os.py"
+COMMANDS = ("start", "finish", "status", "next")
+def main():
+    parser = argparse.ArgumentParser(); sub = parser.add_subparsers(dest="command")
+    for command in COMMANDS: sub.add_parser(command)
+'''
+LEGACY_KERNEL = '''#!/usr/bin/env python3
+"""Senior AI Build OS v1.16 lifecycle and goal orchestration CLI."""
+import argparse
+ACTIVE_TASK = "ACTIVE_TASK.md"
+GOAL_STATE = "GOAL_STATE.json"
+'''
 
 
 def invoke(root: Path, *args: str) -> tuple[int, dict]:
@@ -34,7 +50,7 @@ class ExecutionAuthorityTests(unittest.TestCase):
     def test_callable_v121_cli_fails(self):
         with self.authority_root() as td:
             root = Path(td); self.record(root)
-            (root / "scripts").mkdir(); (root / "scripts" / "ai.py").write_text("legacy", encoding="utf-8")
+            (root / "scripts").mkdir(); (root / "scripts" / "ai.py").write_text(LEGACY_FACADE, encoding="utf-8")
             code, payload = invoke(root, "check")
             self.assertEqual(code, 2); self.assertIn("LEGACY_EXECUTABLE_CALLABLE: scripts/ai.py", payload["errors"])
             self.assertTrue(payload["cleanup_required"])
@@ -43,10 +59,19 @@ class ExecutionAuthorityTests(unittest.TestCase):
         with self.authority_root() as td:
             root = Path(td); self.record(root)
             (root / "legacy" / "scripts").mkdir(parents=True)
-            (root / "legacy" / "scripts" / "ai_os.py").write_text("legacy", encoding="utf-8")
+            (root / "legacy" / "scripts" / "ai_os.py").write_text(LEGACY_KERNEL, encoding="utf-8")
             code, payload = invoke(root, "check")
-            self.assertEqual(code, 2); self.assertIn("LEGACY_EXECUTABLE_CALLABLE: legacy/scripts/ai_os.py", payload["errors"])
+            self.assertEqual(code, 2); self.assertIn("AMBIGUOUS_EXECUTOR_CANDIDATE: legacy/scripts/ai_os.py", payload["errors"])
             self.assertTrue(payload["cleanup_required"])
+
+    def test_legitimate_product_ai_and_buildos_modules_pass(self):
+        with self.authority_root() as td:
+            root = Path(td); self.record(root)
+            (root / "src" / "product").mkdir(parents=True)
+            (root / "src" / "ai.py").write_text("def choose_move(): return 1\n", encoding="utf-8")
+            (root / "src" / "product" / "buildos.py").write_text("class ProductBuildOS: pass\n", encoding="utf-8")
+            code, payload = invoke(root, "check")
+            self.assertEqual(code, 0, payload)
 
     def test_authoritative_legacy_ai_state_fails(self):
         with self.authority_root() as td:

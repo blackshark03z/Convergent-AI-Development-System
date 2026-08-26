@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,33 @@ BRIDGE = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "legac
 AUTHORITY = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "execution_authority.py"
 AI = PACKAGE / "scripts" / "ai.py"
 TRANSITION = "legacy-v116-fixture"
+TERMINAL_AUTH_ENV = "BUILDOS_TRUSTED_LEGACY_TERMINAL_DISPOSITION_SHA256"
+TERMINAL_AUTH_SCHEMA = "buildos.legacy-terminal-disposition-authorization.v1"
+TERMINAL_DISPOSITION = "TERMINALIZE_BLOCKED_LEGACY_GOAL_FOR_V125_ADOPTION"
+
+LEGACY_FACADE = '''#!/usr/bin/env python3
+"""Small agent-facing facade over the full ai_os.py kernel."""
+import argparse
+from pathlib import Path
+KERNEL = Path(__file__).resolve().parent / "ai_os.py"
+COMMANDS = ("start", "finish", "status", "next")
+def main():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    for command in COMMANDS: sub.add_parser(command)
+if __name__ == "__main__": main()
+'''
+
+LEGACY_KERNEL = '''#!/usr/bin/env python3
+"""Senior AI Build OS v1.16 lifecycle and goal orchestration CLI."""
+import argparse
+ACTIVE_TASK = "ACTIVE_TASK.md"
+GOAL_STATE = "GOAL_STATE.json"
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_subparsers(dest="command", required=True)
+if __name__ == "__main__": main()
+'''
 
 
 def run_git(root: Path, *args: str, check: bool = True) -> str:
@@ -93,8 +121,8 @@ def legacy_fixture(
         run_git(root, "remote", "add", "origin", "https://example.invalid/legacy-fixture.git")
         (root / "app.txt").write_text("product baseline\n", encoding="utf-8")
         (root / "scripts").mkdir()
-        (root / "scripts" / "ai.py").write_text("print('legacy worker')\n", encoding="utf-8")
-        (root / "scripts" / "ai_os.py").write_text("print('legacy admin')\n", encoding="utf-8")
+        (root / "scripts" / "ai.py").write_text(LEGACY_FACADE, encoding="utf-8")
+        (root / "scripts" / "ai_os.py").write_text(LEGACY_KERNEL, encoding="utf-8")
         (root / "AGENTS.md").write_text("Use Senior AI Build OS v1.16 via scripts/ai.py.\n", encoding="utf-8")
         (root / ".ai" / "history").mkdir(parents=True)
         (root / ".ai" / "ACTIVE_TASK.md").write_text(task_text(task_status, lease), encoding="utf-8")
@@ -109,18 +137,77 @@ def legacy_fixture(
         yield root
 
 
-def prepare_args(*, blocked: bool = False) -> list[str]:
+def canonical_bytes(value: object) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def authorization_evidence(root: Path, *, mutate=None) -> tuple[Path, dict[str, str], dict]:
+    goal_path = root / ".ai" / "GOAL_STATE.json"
+    goal = json.loads(goal_path.read_text(encoding="utf-8"))
+    decisions = goal.get("decisions_required", [])
+    bindings = []
+    for index, row in enumerate(decisions):
+        identity = row.strip() if isinstance(row, str) and row.strip() else None
+        if isinstance(row, dict):
+            identity = next((str(row[key]).strip() for key in ("request_id", "decision_id", "id") if isinstance(row.get(key), str) and str(row[key]).strip()), None)
+        bindings.append({"index": index, "identity": identity, "sha256": hashlib.sha256(canonical_bytes(row)).hexdigest()})
+    repository = {
+        "origin": run_git(root, "remote", "get-url", "origin"),
+        "root_commits": sorted(run_git(root, "rev-list", "--max-parents=0", "HEAD").splitlines()),
+        "branch": run_git(root, "symbolic-ref", "--quiet", "--short", "HEAD"),
+        "head": run_git(root, "rev-parse", "HEAD"),
+        "tree": run_git(root, "rev-parse", "HEAD^{tree}"),
+    }
+    value = {
+        "schema": TERMINAL_AUTH_SCHEMA,
+        "authorization_id": "OWNER-AUTH-LEGACY-GOAL-TERMINAL-DISPOSITION",
+        "repository": repository,
+        "legacy_goal": {
+            "goal_id": goal.get("goal_id"),
+            "path": ".ai/GOAL_STATE.json",
+            "status": str(goal.get("status", "")).upper(),
+            "sha256": hashlib.sha256(goal_path.read_bytes()).hexdigest(),
+            "decision_bindings": bindings,
+        },
+        "disposition": TERMINAL_DISPOSITION,
+        "authority": {
+            "role": "OWNER",
+            "identity": "fixture-owner",
+            "authority_reference": "OWNER-AUTHORIZED-RC6-TERMINAL-DISPOSITION",
+            "authorized_at": "2026-08-25T00:00:00Z",
+        },
+    }
+    if mutate is not None:
+        mutate(value)
+    value["authorization_sha256"] = hashlib.sha256(canonical_bytes(value)).hexdigest()
+    path = Path(run_git(root, "rev-parse", "--git-path", "buildos-test-terminal-authorization.json"))
+    if not path.is_absolute():
+        path = root / path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(canonical_bytes(value))
+    environment = os.environ.copy()
+    environment[TERMINAL_AUTH_ENV] = hashlib.sha256(canonical_bytes(value)).hexdigest()
+    return path, environment, value
+
+
+def prepare_args(*, blocked: bool = False, authorization_path: Path | None = None) -> list[str]:
     rows = ["--transition-id", TRANSITION]
     if blocked:
-        rows.extend([
-            "--terminalize-blocked-goal", "--authorization-reference",
-            "OWNER-AUTH-LEGACY-GOAL-TERMINAL-DISPOSITION",
-        ])
+        rows.extend(["--terminalize-blocked-goal"])
+        if authorization_path is not None:
+            rows.extend(["--terminal-disposition-authorization", str(authorization_path)])
     return rows
 
 
 def prepare_and_retire(root: Path, *, blocked: bool = False) -> dict:
-    code, prepared = invoke(root, "prepare", *prepare_args(blocked=blocked))
+    authorization_path = None
+    environment = None
+    if blocked:
+        authorization_path, environment, _ = authorization_evidence(root)
+    code, prepared = invoke(
+        root, "prepare", *prepare_args(blocked=blocked, authorization_path=authorization_path),
+        env=environment,
+    )
     if code:
         raise AssertionError(prepared)
     code, retired = invoke(root, "retire", "--transition-id", TRANSITION)
@@ -159,18 +246,95 @@ class LegacyTerminalityTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertEqual(value["error"], "LEGACY_GOAL_LIVE:ACTIVE")
 
-    def test_blocked_goal_requires_specific_authorization(self):
+    def test_blocked_goal_requires_machine_verifiable_authorization(self):
         with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root:
             code, value = invoke(root, "prepare", *prepare_args())
             self.assertEqual(code, 2)
             self.assertIn("REQUIRES_TERMINAL_DISPOSITION_AUTHORIZATION", value["error"])
             code, value = invoke(root, "prepare", *prepare_args(blocked=True))
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_FILE_REQUIRED")
+            path, environment, _ = authorization_evidence(root)
+            code, value = invoke(
+                root, "prepare", *prepare_args(blocked=True, authorization_path=path),
+                env=environment,
+            )
             self.assertEqual(code, 0, value)
             self.assertEqual(value["state"], "TRANSITION_PREPARED")
 
+    def test_arbitrary_authorization_reference_is_refused(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root:
+            code, value = invoke(
+                root, "prepare", "--transition-id", TRANSITION,
+                "--terminalize-blocked-goal", "--authorization-reference",
+                "NOT-A-REAL-OWNER-AUTHORIZATION",
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_REFERENCE_UNSUPPORTED")
+
+    def test_authorization_for_another_goal_is_refused(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root:
+            path, environment, _ = authorization_evidence(
+                root, mutate=lambda value: value["legacy_goal"].update(goal_id="OTHER-GOAL"),
+            )
+            code, value = invoke(
+                root, "prepare", *prepare_args(blocked=True, authorization_path=path), env=environment,
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_GOAL_MISMATCH")
+
+    def test_authorization_copied_from_another_repository_is_refused(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as source, legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as target:
+            path, environment, _ = authorization_evidence(source)
+            run_git(target, "remote", "set-url", "origin", "https://example.invalid/other-legacy-repository.git")
+            code, value = invoke(
+                target, "prepare", *prepare_args(blocked=True, authorization_path=path), env=environment,
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_REPOSITORY_MISMATCH")
+
+    def test_authorization_for_earlier_goal_fingerprint_is_refused(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root:
+            path, environment, _ = authorization_evidence(
+                root, mutate=lambda value: value["legacy_goal"].update(sha256="0" * 64),
+            )
+            code, value = invoke(
+                root, "prepare", *prepare_args(blocked=True, authorization_path=path), env=environment,
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_GOAL_MISMATCH")
+
+    def test_goal_mutation_after_authorization_is_refused(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root:
+            path, environment, _ = authorization_evidence(root)
+            goal_path = root / ".ai" / "GOAL_STATE.json"
+            goal = json.loads(goal_path.read_text(encoding="utf-8"))
+            goal["tasks"]["ONE"]["outcome"] = "mutated after authorization"
+            goal_path.write_text(json.dumps(goal, indent=2) + "\n", encoding="utf-8")
+            run_git(root, "add", ".ai/GOAL_STATE.json")
+            run_git(root, "commit", "-qm", "mutate goal after authorization")
+            code, value = invoke(
+                root, "prepare", *prepare_args(blocked=True, authorization_path=path), env=environment,
+            )
+            self.assertEqual(code, 2)
+            self.assertIn("TERMINAL_DISPOSITION_AUTHORIZATION_", value["error"])
+
+    def test_authorization_requires_exact_trusted_launcher_hash(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root:
+            path, environment, _ = authorization_evidence(root)
+            environment[TERMINAL_AUTH_ENV] = "0" * 64
+            code, value = invoke(
+                root, "prepare", *prepare_args(blocked=True, authorization_path=path), env=environment,
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_TRUSTED_BINDING_MISMATCH")
+
     def test_blocked_goal_authorization_never_overrides_active_node(self):
         with legacy_fixture(goal_status="BLOCKED", node_status="ACTIVE") as root:
-            code, value = invoke(root, "prepare", *prepare_args(blocked=True))
+            path, environment, _ = authorization_evidence(root)
+            code, value = invoke(
+                root, "prepare", *prepare_args(blocked=True, authorization_path=path), env=environment,
+            )
             self.assertEqual(code, 2)
             self.assertIn("LEGACY_GOAL_NODE_LIVE", value["error"])
 
@@ -217,7 +381,8 @@ class LegacyTerminalityTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn("REQUIRES_TERMINAL_DISPOSITION_AUTHORIZATION", value["error"])
             code, value = invoke(root, "prepare", *prepare_args(blocked=True))
-            self.assertEqual(code, 0, value)
+            self.assertEqual(code, 2)
+            self.assertEqual(value["error"], "TERMINAL_DISPOSITION_AUTHORIZATION_UNEXPECTED")
 
     def test_ai_regular_file_is_refused_before_mutation(self):
         with legacy_fixture() as root:
@@ -355,6 +520,118 @@ class LegacyRetirementTests(unittest.TestCase):
             run_git(root, "add", "-A")
             run_git(root, "commit", "-qm", "commit portable retirement archive")
             self.assertEqual(run_git(root, "status", "--porcelain"), "")
+
+    def test_committed_retirement_verifies_in_original_and_fresh_clone_without_quarantine(self):
+        with legacy_fixture() as root, tempfile.TemporaryDirectory(prefix="buildos-v116-fresh-clone-") as raw:
+            prepare_and_retire(root)
+            run_git(root, "add", "-A")
+            run_git(root, "commit", "-qm", "commit durable retirement")
+            code, original = invoke(root, "verify", "--transition-id", TRANSITION, "--require-clean")
+            self.assertEqual(code, 0, original)
+            clone = Path(raw) / "clone"
+            run_git(root, "clone", "-q", str(root), str(clone))
+            run_git(clone, "remote", "set-url", "origin", "https://example.invalid/legacy-fixture.git")
+            common = Path(run_git(clone, "rev-parse", "--git-common-dir"))
+            if not common.is_absolute():
+                common = clone / common
+            self.assertFalse((common / "buildos-legacy-bridge" / TRANSITION / "retired-ai").exists())
+            code, copied = invoke(clone, "verify", "--transition-id", TRANSITION, "--require-clean")
+            self.assertEqual(code, 0, copied)
+            self.assertEqual(copied["receipt_sha256"], original["receipt_sha256"])
+
+    def test_blocked_goal_authorization_evidence_is_durable_in_fresh_clone(self):
+        with legacy_fixture(goal_status="BLOCKED", node_status="BLOCKED") as root, tempfile.TemporaryDirectory(prefix="buildos-v116-auth-clone-") as raw:
+            prepare_and_retire(root, blocked=True)
+            authorization = root / ".buildos-legacy" / "archives" / TRANSITION / "terminal-disposition-authorization.json"
+            self.assertTrue(authorization.is_file())
+            run_git(root, "add", "-A")
+            run_git(root, "commit", "-qm", "commit authorized durable retirement")
+            clone = Path(raw) / "clone"
+            run_git(root, "clone", "-q", str(root), str(clone))
+            run_git(clone, "remote", "set-url", "origin", "https://example.invalid/legacy-fixture.git")
+            code, value = invoke(clone, "verify", "--transition-id", TRANSITION, "--require-clean")
+            self.assertEqual(code, 0, value)
+            copied = clone / authorization.relative_to(root)
+            self.assertEqual(copied.read_bytes(), authorization.read_bytes())
+
+    def test_fresh_clone_still_requires_tracked_archive_and_exact_members(self):
+        with legacy_fixture() as root, tempfile.TemporaryDirectory(prefix="buildos-v116-fresh-clone-") as raw:
+            prepare_and_retire(root)
+            run_git(root, "add", "-A")
+            run_git(root, "commit", "-qm", "commit durable retirement")
+            clone = Path(raw) / "clone"
+            run_git(root, "clone", "-q", str(root), str(clone))
+            run_git(clone, "remote", "set-url", "origin", "https://example.invalid/legacy-fixture.git")
+            archive = clone / ".buildos-legacy" / "archives" / TRANSITION / "legacy-ai.zip"
+            archive.unlink()
+            code, missing = invoke(clone, "verify", "--transition-id", TRANSITION)
+            self.assertEqual(code, 2)
+            self.assertEqual(missing["error"], "ARCHIVED_AI_STATE_MISSING")
+        with legacy_fixture() as root, tempfile.TemporaryDirectory(prefix="buildos-v116-fresh-clone-") as raw:
+            prepare_and_retire(root)
+            run_git(root, "add", "-A")
+            run_git(root, "commit", "-qm", "commit durable retirement")
+            clone = Path(raw) / "clone"
+            run_git(root, "clone", "-q", str(root), str(clone))
+            run_git(clone, "remote", "set-url", "origin", "https://example.invalid/legacy-fixture.git")
+            archive = clone / ".buildos-legacy" / "archives" / TRANSITION / "legacy-ai.zip"
+            with zipfile.ZipFile(archive, "a", compression=zipfile.ZIP_STORED) as stored:
+                stored.writestr(".ai/extra-forged-state.json", b"{}\n")
+            code, tampered = invoke(clone, "verify", "--transition-id", TRANSITION)
+            self.assertEqual(code, 2)
+            self.assertIn("ARCHIVED_AI_FILE_SET_MISMATCH", tampered["error"])
+
+    def test_incomplete_retirement_cannot_verify_or_recover_without_quarantine(self):
+        with legacy_fixture() as root:
+            self.assertEqual(invoke(root, "prepare", *prepare_args())[0], 0)
+            environment = os.environ.copy()
+            environment["BUILDOS_LEGACY_BRIDGE_FAIL_AFTER"] = "ai_quarantine"
+            self.assertEqual(invoke(root, "retire", "--transition-id", TRANSITION, env=environment)[0], 2)
+            common = Path(run_git(root, "rev-parse", "--git-common-dir"))
+            if not common.is_absolute():
+                common = root / common
+            quarantine = common / "buildos-legacy-bridge" / TRANSITION / "retired-ai"
+            shutil.rmtree(quarantine)
+            code, recovered = invoke(root, "recover", "--transition-id", TRANSITION)
+            self.assertEqual(code, 2)
+            self.assertIn("QUARANTINED_AI_STATE", recovered["error"])
+            self.assertFalse((root / ".buildos-legacy" / "archives" / TRANSITION / "receipt.json").exists())
+
+    def test_legitimate_product_executor_basenames_survive_byte_identically(self):
+        with legacy_fixture() as root:
+            product_files = {
+                "src/ai.py": b"def choose_move(board):\n    return 'product-ai'\n",
+                "src/product/buildos.py": b"class ProductBuildOS:\n    pass\n",
+            }
+            for relative, content in product_files.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            run_git(root, "add", "src")
+            run_git(root, "commit", "-qm", "add legitimate product modules")
+            prepare_and_retire(root)
+            for relative, content in product_files.items():
+                self.assertEqual((root / relative).read_bytes(), content)
+
+    def test_spoofed_canonical_or_renamed_legacy_executor_is_refused_without_retirement(self):
+        with legacy_fixture() as root:
+            (root / "scripts" / "ai.py").write_text("def product_ai(): return True\n", encoding="utf-8")
+            run_git(root, "add", "scripts/ai.py")
+            run_git(root, "commit", "-qm", "spoof canonical executor basename")
+            code, value = invoke(root, "prepare", *prepare_args())
+            self.assertEqual(code, 2)
+            self.assertIn("AMBIGUOUS_LEGACY_EXECUTOR_CANDIDATE", value["error"])
+            self.assertTrue((root / "scripts" / "ai.py").is_file())
+        with legacy_fixture() as root:
+            renamed = root / "tools" / "renamed_lifecycle.py"
+            renamed.parent.mkdir()
+            renamed.write_text(LEGACY_KERNEL, encoding="utf-8")
+            run_git(root, "add", "tools/renamed_lifecycle.py")
+            run_git(root, "commit", "-qm", "add renamed legacy executor")
+            code, value = invoke(root, "prepare", *prepare_args())
+            self.assertEqual(code, 2)
+            self.assertIn("AMBIGUOUS_LEGACY_EXECUTOR_CANDIDATE", value["error"])
+            self.assertTrue(renamed.is_file())
 
     def test_require_clean_requires_tracked_transition_evidence(self):
         with legacy_fixture() as root:
@@ -550,10 +827,10 @@ class LegacyRetirementTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertEqual(replay["error"], "LEGACY_BRIDGE_ALREADY_PRESENT")
             (root / "other").mkdir()
-            (root / "other" / "ai.py").write_text("print('dual')\n", encoding="utf-8")
+            (root / "other" / "ai.py").write_text(LEGACY_FACADE, encoding="utf-8")
             code, dual = invoke(root, "verify", "--transition-id", TRANSITION)
             self.assertEqual(code, 2)
-            self.assertIn("LEGACY_EXECUTOR_CALLABLE", dual["error"])
+            self.assertIn("AMBIGUOUS_LEGACY_EXECUTOR_CANDIDATE", dual["error"])
 
 
 class LegacyAdoptionBindingTests(unittest.TestCase):
@@ -572,6 +849,21 @@ class LegacyAdoptionBindingTests(unittest.TestCase):
             self.assertEqual(record["legacy_transition"]["schema"], "buildos.legacy-authority-transition.v1")
             code, checked = authority(root, "check")
             self.assertEqual(code, 0, checked)
+
+    def test_post_transition_authority_ignores_legitimate_product_modules(self):
+        with legacy_fixture() as root:
+            for relative in ("src/ai.py", "src/product/buildos.py"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("def product_behavior(): return True\n", encoding="utf-8")
+            run_git(root, "add", "src")
+            run_git(root, "commit", "-qm", "add product modules with historical basenames")
+            self._retired_commit(root)
+            self.assertEqual(authority(root, "write-record")[0], 0)
+            code, checked = authority(root, "check")
+            self.assertEqual(code, 0, checked)
+            self.assertTrue((root / "src" / "ai.py").is_file())
+            self.assertTrue((root / "src" / "product" / "buildos.py").is_file())
 
     def test_bound_authority_fails_if_transition_archive_disappears(self):
         with legacy_fixture() as root:

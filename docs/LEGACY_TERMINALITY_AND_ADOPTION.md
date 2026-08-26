@@ -19,14 +19,31 @@ A legacy task is terminal only when it is absent or is exactly `COMPLETED` or
 `ABORTED` with a `RELEASED` lease.  `READY`, `ACTIVE`, `PAUSED`, and `BLOCKED`
 tasks remain live and are refused.  A legacy Goal is terminal only when absent,
 `COMPLETED`, or `ABORTED`; a `COMPLETED` Goal may contain only `DONE` or
-`DEFERRED` nodes.  `ACTIVE` is refused.  `BLOCKED` remains resumable and
-is refused unless an administrator supplies both an explicit terminal-disposition
-flag and a non-empty authorization reference.  Even then, an ACTIVE Goal node
-or claimed task lease is refused.
+`DEFERRED` nodes. `ACTIVE` is refused. `BLOCKED` remains resumable and is
+refused unless an owner supplies both the explicit terminal-disposition flag
+and an exact `buildos.legacy-terminal-disposition-authorization.v1` file.
+Even then, an ACTIVE Goal node or claimed task lease is refused.
 
-The authorization is a narrow disposition of the exact fingerprinted legacy
-Goal.  It is not `--force`, does not accept dirty work, and grants no product or
-provider action.
+The authorization binds the repository origin/root commits/branch/HEAD/tree,
+exact Goal ID and `GOAL_STATE.json` SHA-256, every decision/request identity and
+fingerprint, the one terminal disposition, and the issuing OWNER identity. It
+has a canonical self-hash and must also be pinned by the trusted launcher in
+`BUILDOS_TRUSTED_LEGACY_TERMINAL_DISPOSITION_SHA256`. This reuses the Work
+Loop's trusted-transport model: self-asserted role text alone is not authority.
+A random reference, wrong/copy/stale authorization, or Goal/repository drift is
+refused. The older `--authorization-reference` option is retained only to emit
+a typed refusal; it cannot authorize transition.
+
+```powershell
+$env:BUILDOS_TRUSTED_LEGACY_TERMINAL_DISPOSITION_SHA256 = '<canonical-file-sha256>'
+python skills/project-lifecycle-bootstrap/scripts/legacy_authority_bridge.py `
+  --root <repo> prepare --transition-id <id> `
+  --terminalize-blocked-goal `
+  --terminal-disposition-authorization <authorization.json>
+```
+
+The authorization is not `--force`, does not accept dirty work, and grants no
+product or provider action.
 
 ## Provenance and authority transition
 
@@ -47,6 +64,15 @@ cleanliness, origin/root identity, state and hashes, then:
 3. installs either explicitly supplied replacement worker instructions or a
    canonical fail-closed transition notice;
 4. publishes one tracked `buildos.legacy-authority-transition.v1` receipt last.
+
+Supported legacy Git history contains exactly `scripts/ai.py` and
+`scripts/ai_os.py` as execution entry points. The bridge requires strong Build
+OS lifecycle signatures at those canonical paths. A canonical file with
+unrecognized content, or a strong legacy signature at any other path, is an
+explicit ambiguous-authority refusal. Unrelated product files such as
+`src/ai.py` or a package-local `buildos.py` are not authority and are never
+retired merely because of their basename. The post-transition authority checker
+uses the same identification contract.
 
 The receipt binds the source HEAD/tree, repository roots and origin, package and
 frozen-kernel identity, task/Goal/lease disposition, operator authorization,
@@ -91,7 +117,11 @@ idempotent and compare each source/archive/replacement hash. Legacy `.ai` is
 atomically renamed into a Git-private quarantine before archive creation; the
 quarantined tree is never recursively deleted by the transition, and the
 canonical deterministic ZIP container bytes as well as every member are bound
-by the receipt. A crash before
+by the receipt. Quarantine is mandatory recovery evidence until the receipt,
+ZIP, executor/instruction archives, optional authorization evidence, and archive
+attributes are all Git-tracked. After that durable boundary, tracked evidence
+is sufficient in a fresh clone. A retained quarantine is still verified when
+present, but its absence does not invalidate committed provenance. A crash before
 retirement leaves `LEGACY_ACTIVE`; cancellation is supported.  A crash during
 retirement leaves no v1.25 authority and `recover` completes the same bound
 transaction or refuses unexpected drift.  A crash after tracked receipt
@@ -119,7 +149,8 @@ The candidate must prove all of the following with deterministic fixtures:
    evidence;
 2. live tasks, leases, Goals, dirty trees, malformed/tampered state and tracked
    `.buildos` are rejected without laundering;
-3. a BLOCKED Goal requires an exact authorization reference and no active node;
+3. a BLOCKED Goal requires an exact schema-valid, Goal/repository-bound,
+   trusted-launcher-pinned authorization and no active node;
 4. copied, stale, replayed, path-traversing, symlink/reparse and HEAD/dirty
    race inputs fail closed;
 5. interruption at each retirement boundary recovers deterministically and
@@ -130,4 +161,8 @@ The candidate must prove all of the following with deterministic fixtures:
    v1.25 bootstrap, activation binding and a read-only/NO_SOURCE_DELTA Work Loop;
 9. frozen-kernel bytes remain exactly equal to `FROZEN_KERNEL.sha256`;
 10. changed bytes receive new candidate identity and evidence without a stable
-    or independent-R3 claim.
+    or independent-R3 claim;
+11. a committed transition verifies in a fresh clone without Git-private
+    quarantine, while incomplete retirement still requires quarantine;
+12. unrelated `ai.py`/`buildos.py` product modules survive byte-identically and
+    ambiguous legacy signatures are refused rather than removed.
