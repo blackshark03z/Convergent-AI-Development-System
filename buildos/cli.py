@@ -80,7 +80,7 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
 
     reconcile = commands.add_parser(
         "reconcile",
-        help="record canonical evidence resolving one uncertain external dispatch",
+        help="record a confirmed effect; verified no-effect proof requires the Python verifier seam",
     )
     identity = reconcile.add_mutually_exclusive_group(required=True)
     identity.add_argument("--effect-id")
@@ -165,6 +165,11 @@ def execute(args: argparse.Namespace) -> int:
             _json(value)
             return 0
         if args.command == "reconcile":
+            if args.outcome == "NO_EFFECT_CONFIRMED":
+                raise EffectSafetyError(
+                    "free-form CLI evidence cannot confirm no effect; "
+                    "use an explicit trusted verifier integration",
+                )
             carried = None
             effect_id = args.effect_id
             if args.legacy_effect_id:

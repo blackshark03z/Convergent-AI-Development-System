@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 import hashlib
 import json
 import re
-from typing import Mapping
+from typing import Callable, Mapping
 
 
-FORMAT = "buildos.effect-safety.v1"
+FORMAT = "buildos.effect-safety.v2"
 STATES = {
     "PREPARED",
     "NOT_DISPATCHED",
@@ -23,10 +24,20 @@ INTENT_FIELDS = {
     "idempotency_key", "provider_idempotency_enforced",
     "idempotency_evidence",
 }
+PROOF_KINDS = {"NO_EFFECT_CONFIRMED", "PROVIDER_IDEMPOTENCY"}
+_TRUSTED_PROOF_SEAL = object()
 
 
 class EffectSafetyError(ValueError):
     """An effect record or transition is unsafe or malformed."""
+
+
+@dataclass(frozen=True)
+class VerifiedRetryProof:
+    """Opaque result produced only by the explicit trusted-verifier seam."""
+
+    value: dict
+    _seal: object
 
 
 def _text(value: object, *, label: str, maximum: int = 1_024) -> str:
@@ -88,6 +99,45 @@ def effect_identity(intent: Mapping[str, object]) -> str:
     return hashlib.sha256(_canonical(identity)).hexdigest()
 
 
+def _proof_binding(intent: Mapping[str, object], identity: str) -> dict:
+    normalized = normalize_intent(intent)
+    return {
+        "effect_identity": identity,
+        "operation": normalized["operation"],
+        "target": normalized["target"],
+        "request_digest": normalized["request_digest"],
+        "idempotency_key": normalized["idempotency_key"],
+    }
+
+
+def _normalize_proof(value: Mapping[str, object], binding: Mapping[str, object]) -> dict:
+    expected = {
+        "kind", "effect_identity", "operation", "target", "request_digest",
+        "idempotency_key", "evidence", "reference",
+    }
+    if not isinstance(value, Mapping) or set(value) != expected:
+        raise EffectSafetyError("verified retry proof fields are invalid")
+    kind = str(value.get("kind") or "").strip().upper()
+    if kind not in PROOF_KINDS:
+        raise EffectSafetyError("verified retry proof kind is invalid")
+    for field in (
+        "effect_identity", "operation", "target", "request_digest",
+        "idempotency_key",
+    ):
+        if value.get(field) != binding.get(field):
+            raise EffectSafetyError(f"verified retry proof does not match exact {field}")
+    if kind == "PROVIDER_IDEMPOTENCY" and not binding.get("idempotency_key"):
+        raise EffectSafetyError("provider idempotency proof requires the exact intent key")
+    evidence = _text(value.get("evidence"), label="verified retry evidence", maximum=2_048)
+    reference = _text(value.get("reference"), label="verified retry reference", maximum=2_048)
+    return {
+        "kind": kind,
+        **dict(binding),
+        "evidence": evidence,
+        "reference": reference,
+    }
+
+
 def prepare(intent: Mapping[str, object]) -> dict:
     normalized = normalize_intent(intent)
     return {
@@ -98,6 +148,7 @@ def prepare(intent: Mapping[str, object]) -> dict:
         "dispatch_count": 0,
         "provider_reference": None,
         "outcome_evidence": None,
+        "verified_retry_proof": None,
     }
 
 
@@ -106,7 +157,7 @@ def validate_record(value: Mapping[str, object]) -> dict:
         raise EffectSafetyError("effect record format is invalid")
     expected = {
         "format", "effect_identity", "intent", "state", "dispatch_count",
-        "provider_reference", "outcome_evidence",
+        "provider_reference", "outcome_evidence", "verified_retry_proof",
     }
     if set(value) != expected:
         raise EffectSafetyError("effect record fields are invalid")
@@ -133,7 +184,73 @@ def validate_record(value: Mapping[str, object]) -> dict:
         raise EffectSafetyError("confirmed effect requires provider reference and evidence")
     if state in {"NOT_DISPATCHED", "NO_EFFECT_CONFIRMED"} and not evidence:
         raise EffectSafetyError("no-effect state requires positive evidence")
+    raw_proof = value.get("verified_retry_proof")
+    proof = None
+    if raw_proof is not None:
+        proof = _normalize_proof(
+            raw_proof, _proof_binding(intent, str(value["effect_identity"])),
+        )
+        if dict(raw_proof) != proof:
+            raise EffectSafetyError("verified retry proof is not canonical")
+        if proof["kind"] == "NO_EFFECT_CONFIRMED":
+            if state != "NO_EFFECT_CONFIRMED" or evidence != proof["evidence"]:
+                raise EffectSafetyError("verified no-effect proof does not match record state")
+        elif state != "DISPATCH_UNCERTAIN":
+            raise EffectSafetyError("verified idempotency proof requires uncertain dispatch")
+    if state == "NO_EFFECT_CONFIRMED" and (
+        proof is None or proof["kind"] != "NO_EFFECT_CONFIRMED"
+    ):
+        raise EffectSafetyError("no-effect confirmation requires trusted verified proof")
     return deepcopy(dict(value))
+
+
+def verify_retry_proof(
+    record: Mapping[str, object],
+    *,
+    kind: str,
+    verifier: Callable[[dict], Mapping[str, object]] | None,
+) -> VerifiedRetryProof:
+    """Ask one explicit trusted integration to verify an exact retry proof.
+
+    Raw mappings and CLI evidence never become authority. If no trusted
+    verifier is supplied, or its response differs from the exact binding, this
+    seam fails closed.
+    """
+    current = validate_record(record)
+    if current["state"] != "DISPATCH_UNCERTAIN":
+        raise EffectSafetyError("retry proof verification requires uncertain dispatch")
+    normalized_kind = str(kind or "").strip().upper()
+    if normalized_kind not in PROOF_KINDS:
+        raise EffectSafetyError("retry proof verification kind is invalid")
+    if verifier is None or not callable(verifier):
+        raise EffectSafetyError("trusted retry verifier is required")
+    challenge = {
+        "kind": normalized_kind,
+        **_proof_binding(current["intent"], current["effect_identity"]),
+    }
+    response = verifier(deepcopy(challenge))
+    proof = _normalize_proof(response, challenge)
+    if proof["kind"] != normalized_kind:
+        raise EffectSafetyError("verified retry proof kind does not match request")
+    return VerifiedRetryProof(proof, _TRUSTED_PROOF_SEAL)
+
+
+def apply_verified_retry_proof(
+    record: Mapping[str, object], proof: VerifiedRetryProof,
+) -> dict:
+    current = validate_record(record)
+    if current["state"] != "DISPATCH_UNCERTAIN":
+        raise EffectSafetyError("verified retry proof requires uncertain dispatch")
+    if not isinstance(proof, VerifiedRetryProof) or proof._seal is not _TRUSTED_PROOF_SEAL:
+        raise EffectSafetyError("trusted verified retry proof is required")
+    normalized = _normalize_proof(
+        proof.value, _proof_binding(current["intent"], current["effect_identity"]),
+    )
+    current["verified_retry_proof"] = normalized
+    if normalized["kind"] == "NO_EFFECT_CONFIRMED":
+        current["state"] = "NO_EFFECT_CONFIRMED"
+        current["outcome_evidence"] = normalized["evidence"]
+    return validate_record(current)
 
 
 def mark_dispatch_uncertain(record: Mapping[str, object]) -> dict:
@@ -170,7 +287,14 @@ def record_dispatch_outcome(record: Mapping[str, object], outcome: Mapping[str, 
     return validate_record(result)
 
 
-def reconcile(record: Mapping[str, object], *, outcome: str, evidence: str, reference: str | None = None) -> dict:
+def reconcile(
+    record: Mapping[str, object],
+    *,
+    outcome: str,
+    evidence: str,
+    reference: str | None = None,
+    verified_proof: VerifiedRetryProof | None = None,
+) -> dict:
     result = validate_record(record)
     if result["state"] != "DISPATCH_UNCERTAIN":
         raise EffectSafetyError("only an uncertain dispatch can be reconciled")
@@ -185,7 +309,11 @@ def reconcile(record: Mapping[str, object], *, outcome: str, evidence: str, refe
     elif normalized == "NO_EFFECT_CONFIRMED":
         if provider_reference is not None:
             raise EffectSafetyError("no-effect reconciliation cannot carry a provider reference")
-        result["state"] = "NO_EFFECT_CONFIRMED"
+        if verified_proof is None:
+            raise EffectSafetyError(
+                "NO_EFFECT_CONFIRMED requires an explicit trusted verifier",
+            )
+        return apply_verified_retry_proof(result, verified_proof)
     else:
         raise EffectSafetyError("reconciliation outcome must be CONFIRMED or NO_EFFECT_CONFIRMED")
     result["outcome_evidence"] = proof
@@ -195,16 +323,14 @@ def reconcile(record: Mapping[str, object], *, outcome: str, evidence: str, refe
 def retry_safety(record: Mapping[str, object]) -> dict:
     value = validate_record(record)
     state = value["state"]
-    intent = value["intent"]
     if state == "PREPARED":
         return {"safe": True, "reason_code": "DISPATCH_NOT_CROSSED"}
     if state in {"NOT_DISPATCHED", "NO_EFFECT_CONFIRMED"}:
         return {"safe": True, "reason_code": "POSITIVE_NO_EFFECT_PROOF"}
     if (
         state == "DISPATCH_UNCERTAIN"
-        and intent["provider_idempotency_enforced"]
-        and intent["idempotency_key"]
-        and intent["idempotency_evidence"]
+        and value["verified_retry_proof"] is not None
+        and value["verified_retry_proof"]["kind"] == "PROVIDER_IDEMPOTENCY"
     ):
         return {"safe": True, "reason_code": "EXACT_PROVIDER_IDEMPOTENCY"}
     if state == "CONFIRMED":

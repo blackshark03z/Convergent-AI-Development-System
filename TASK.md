@@ -7,7 +7,7 @@ Produce one stabilized simplified Build OS candidate ready for independent R3.
 - Thin Guard preserves scope, dirty-worktree, deletion/type-change, control-path and RC1 regressions.
 - High-cost local execution blocks stale state and otherwise invokes native argv once.
 - External intent precedes dispatch; known, ambiguous and reconciled outcomes survive reload.
-- Blind retry is rejected; exact idempotency or positive no-effect proof is required.
+- Blind retry is rejected; only exact trusted idempotency or positive no-effect proof can establish retry eligibility.
 - Repository-local evidence is sufficient for Worker and Tech Lead replacement.
 - The simplified CLI is the default; legacy lifecycle machinery is disconnected/demoted.
 - Focused, integration and one full active-suite stabilization gate pass.
@@ -29,6 +29,7 @@ promotion, push, merge or deployment.
 # Material Decisions
 
 - Semantic effect identity binds operation, target and request digest—not a task, worker or changeable idempotency key.
+- Caller strings and self-declared provider semantics are assertions, never trusted retry authority.
 - Effect records live in the common Git administration directory, outside product history and across worktrees.
 - External dispatch is an explicit Python integration seam; the CLI only inspects/reconciles effect truth.
 - Legacy unresolved effects remain read-only detectable; closed legacy lifecycle data is historical.
@@ -40,5 +41,7 @@ promotion, push, merge or deployment.
 - Provider-free Effect Safety, durable ambiguity, explicit dispatch API, thin CLI and fresh-policy reads are implemented and focused tests pass.
 - Legacy lifecycle source/tests/assets are disconnected under `legacy/v125`; unresolved legacy effects have read-only detection and explicit effect-only reconciliation.
 - All fourteen mandatory scenarios are mapped to active executable evidence in `docs/SCENARIO_EVIDENCE.md`.
-- Focused thin-guard/high-cost security: 33 passed. Post-fix effect safety: 14 passed. Affected package/end-to-end: 7 passed. Final full active stabilization: 46 passed, 0 failed, 0 skipped.
-- Next: if no verified receipt exists for the current clean HEAD, build/read back exactly one candidate; after a matching receipt exists, the next safe action is independent R3.
+- Targeted R3 repair evidence: effect safety 20 passed; candidate package 5 passed; Git/scope 10 passed; affected CLI/end-to-end/high-cost integration 19 passed. Replacement stabilization discovered and passed 54 source-checkout tests with 0 failures and 0 skips.
+- Independent R3 blocked the prior candidate on untrusted retry assertions, unusable exact `PREPARED` records after pre-dispatch drift, and extracted-package test inconsistency.
+- The targeted repair adds exact trusted-proof binding, exact `PREPARED` reuse before any dispatch crossing, portable/source test separation and raw Git-mode type-change detection.
+- Next: if no verified replacement receipt exists for the current clean HEAD, build/read back exactly one replacement; after a matching receipt exists, the next safe action is targeted independent R3 recheck.

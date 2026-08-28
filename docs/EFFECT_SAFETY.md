@@ -9,8 +9,9 @@ Identity binds:
 - target;
 - exact request SHA-256.
 
-An optional provider idempotency key is bound inside the exact intent and may
-justify retry, but changing the key cannot create a new semantic effect identity.
+An optional provider idempotency key and claimed provider semantics are bound
+inside the exact intent as assertions. They never justify retry by themselves,
+and changing the key cannot create a new semantic effect identity.
 
 The durable states are:
 
@@ -35,10 +36,19 @@ An exception, invalid response or process interruption after the uncertainty
 marker never becomes inferred no-dispatch. Reload reads the same record from
 the common Git administration directory.
 
-A retry check is advisory and never dispatches. It reports safe only for exact
-provider-enforced idempotency evidence or positive canonical no-effect proof.
-Changing `effect_id` cannot bypass the same semantic effect identity.
+A retry check is advisory and never dispatches. It reports safe only after an
+explicit trusted verifier returns proof bound to the exact semantic identity,
+operation, target, request digest and idempotency key where applicable. The
+verified proof is sealed by the verifier seam before it can enter durable state.
+Raw CLI/API strings and self-declared booleans remain untrusted. With no trusted
+verifier the operation fails closed. Changing `effect_id` or idempotency key
+cannot bypass the same semantic effect identity.
 
 Provider integrations stay outside the core. They receive the normalized exact
 intent and must return either a content-bound `CONFIRMED` result or positive
 `NOT_DISPATCHED` evidence. Arbitrary shell text is not an external adapter.
+
+An exact `PREPARED` record has not crossed dispatch. If final Git observation
+blocked the first invocation, fixing Git and invoking the exact same intent may
+reuse that record and cross the dispatch seam once. Changed intent or any
+`DISPATCH_UNCERTAIN` record fails closed through this path.

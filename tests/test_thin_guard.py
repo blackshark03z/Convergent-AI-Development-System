@@ -156,7 +156,7 @@ class ThinGuardRegressionTests(unittest.TestCase):
             self.assertIn("STRICT_PATH_VIOLATION", result["reason_codes"])
             self.assertIn("PROHIBITED_PATH_CHANGED", result["reason_codes"])
 
-    def test_dirty_type_change_outside_strict_scope_blocks(self):
+    def test_staged_index_type_change_outside_strict_scope_blocks_portably(self):
         with repository() as (root, base):
             blob = run_git(root, "hash-object", "-w", "--stdin", stdin="link-target\n")
             run_git(root, "update-index", "--cacheinfo", f"120000,{blob},outside.txt")
@@ -164,6 +164,7 @@ class ThinGuardRegressionTests(unittest.TestCase):
             result = self.guard(root, base, strict_paths=["app.py"])
 
             self.assertEqual(result["result"], "BLOCK")
+            self.assertIn("outside.txt", result["dirty_paths"])
             self.assertIn("outside.txt", result["type_changed_paths"])
             violation = next(
                 item for item in result["blocking_violations"]

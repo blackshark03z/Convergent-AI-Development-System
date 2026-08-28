@@ -7,6 +7,7 @@ import subprocess
 import sys
 import unittest
 
+from buildos import effect_store
 from buildos.external_effect import execute_external_effect
 from tests.test_thin_guard import AI, append, repository, run_git, snapshot_files
 
@@ -72,7 +73,7 @@ class SimplifiedCliTests(unittest.TestCase):
             self.assertEqual(json.loads(passed.stdout)["result"], "PASS")
             self.assertFalse((root / ".buildos" / "control" / "CURRENT").exists())
 
-    def test_effect_retry_check_and_reconcile_use_durable_effect_only(self):
+    def test_free_form_cli_no_effect_evidence_cannot_make_retry_safe(self):
         with repository() as (root, base):
             execute_external_effect(
                 root,
@@ -91,10 +92,14 @@ class SimplifiedCliTests(unittest.TestCase):
 
             self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
             self.assertFalse(json.loads(retry.stdout)["retry_safety"]["safe"])
-            self.assertEqual(reconciled.returncode, 0, reconciled.stdout + reconciled.stderr)
+            self.assertEqual(reconciled.returncode, 2, reconciled.stdout + reconciled.stderr)
+            self.assertIn("trusted verifier", json.loads(reconciled.stdout)["message"])
             self.assertEqual(
                 json.loads(inspected.stdout)["effect"]["state"],
-                "NO_EFFECT_CONFIRMED",
+                "DISPATCH_UNCERTAIN",
+            )
+            self.assertFalse(
+                json.loads(inspected.stdout)["effect"]["retry_safety"]["safe"],
             )
             self.assertEqual(run_git(root, "status", "--porcelain"), "")
 
@@ -133,7 +138,7 @@ class SimplifiedCliTests(unittest.TestCase):
             self.assertEqual(legacy["unresolved"][0]["effect_id"], "legacy-attempt")
             self.assertEqual(before, after)
 
-    def test_legacy_effect_reconciliation_carries_only_ambiguity_not_task_state(self):
+    def test_legacy_free_form_no_effect_reconciliation_fails_without_carry(self):
         with repository() as (root, _):
             control = root / ".buildos" / "control"
             generations = control / "generations"
@@ -165,14 +170,10 @@ class SimplifiedCliTests(unittest.TestCase):
                 "--outcome", "NO_EFFECT_CONFIRMED",
                 "--evidence", "canonical provider query proves no legacy effect",
             )
-            inspected = cli(root, "effect", "inspect", "--effect-id", "legacy.legacy-attempt")
-
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(
-                json.loads(inspected.stdout)["effect"]["state"],
-                "NO_EFFECT_CONFIRMED",
-            )
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("trusted verifier", json.loads(result.stdout)["message"])
             self.assertEqual(legacy_bytes, (current.read_bytes(), generation_file.read_bytes()))
+            self.assertEqual(effect_store.list_records(root), [])
 
 
 if __name__ == "__main__":

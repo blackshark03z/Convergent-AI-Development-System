@@ -15,7 +15,7 @@ The active tests map the frozen end-to-end scenarios to executable evidence:
 11. Known external success: `test_known_success_records_intent_before_exactly_one_dispatch`.
 12. Ambiguity survives reload: `test_dispatch_exception_preserves_ambiguity_across_reload`.
 13. Blind retry is rejected, including changed `effect_id` or idempotency key: the dedicated blind-retry regressions.
-14. Retry is only considered safe after positive no-effect or exact provider idempotency tests.
+14. Retry is only considered safe after exact trusted-verifier proof for positive no-effect or provider idempotency.
 
 Candidate identity/readback/secret checks are covered by
 `tests/test_candidate_package.py` and repeated on the one final archive.

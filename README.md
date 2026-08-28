@@ -70,24 +70,30 @@ Exact intent is durable before dispatch. The record becomes
 `DISPATCH_UNCERTAIN` before the one provider call. A crash or ambiguous response
 therefore cannot be mistaken for no dispatch.
 
-Inspect or reconcile durable effect truth:
+Inspect durable effect truth or record a confirmed occurrence:
 
 ```powershell
 python scripts/ai.py --root D:\path\to\repo effect list
 python scripts/ai.py --root D:\path\to\repo effect inspect --effect-id <id>
 python scripts/ai.py --root D:\path\to\repo effect retry-check --effect-id <id>
 python scripts/ai.py --root D:\path\to\repo reconcile `
-  --effect-id <id> --outcome NO_EFFECT_CONFIRMED `
-  --evidence "canonical provider lookup proves absence"
+  --effect-id <id> --outcome CONFIRMED `
+  --reference <provider-reference> --evidence "provider result metadata"
 ```
 
-For an unresolved v1.25 effect, use `--legacy-effect-id <id>` instead. This
-copies only the exact unresolved effect ambiguity into the new Effect Safety
-store for reconciliation; it does not migrate or reactivate the legacy task.
+Free-form CLI evidence is never trusted retry proof. Positive no-effect or
+provider-idempotency proof can be accepted only through the explicit Python
+trusted-verifier seam, bound to the exact effect identity, operation, target,
+request digest and idempotency key where applicable. With no trusted verifier,
+the request fails closed.
+
+For a confirmed unresolved v1.25 effect, use `--legacy-effect-id <id>` instead.
+This copies only the exact unresolved effect ambiguity into the new Effect
+Safety store; it does not migrate or reactivate the legacy task.
 
 Ambiguous effects are never redispatched automatically. Retry is only reported
-safe when exact provider-enforced idempotency or positive no-effect evidence is
-present.
+safe when exact trusted provider-idempotency or positive no-effect proof has
+been persisted. Caller assertions remain non-authoritative metadata.
 
 Effect records live under the repository's common Git administration directory
 (`buildos/effects`), not product history. This is the only default durable
@@ -101,11 +107,23 @@ runtime state in the simplified architecture.
 - [docs/EFFECT_SAFETY.md](docs/EFFECT_SAFETY.md): effect contract and recovery semantics.
 - [docs/LEGACY_V125.md](docs/LEGACY_V125.md): historical compatibility boundary.
 
-Run active tests with:
+From a Git source checkout, run the full active stabilization suite with:
 
 ```powershell
 python scripts/self_test.py
 ```
+
+That suite intentionally includes source-only Git and package-construction
+tests. It fails clearly outside a Git checkout. From freshly extracted
+candidate bytes, run the portable suite instead:
+
+```powershell
+python scripts/portable_self_test.py
+```
+
+The portable suite validates every packaged source byte against the embedded
+manifest without requiring `.git` or attempting to build a package from a
+package.
 
 Historical v1.25 lifecycle sources remain repository evidence during the
 transition, but they are disconnected from the default CLI and are not active

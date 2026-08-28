@@ -33,12 +33,13 @@ requires OS sandboxing and is outside the cooperative-local threat model.
 
 External effects use one narrow Python dispatch seam. Core semantics are
 provider-free. Exact operation, target and request digest define semantic
-effect identity. Optional idempotency evidence is bound to that identity but
-cannot change or disguise it. Durable state is written before
+effect identity. Optional idempotency assertions are bound to that identity but
+cannot change, disguise or authorize it. Only proof returned through the
+explicit trusted-verifier seam can affect retry eligibility. Durable state is written before
 the dispatch boundary; `DISPATCH_UNCERTAIN` is durable before the provider call.
 
-Retry is only considered safe after positive canonical no-effect evidence or
-provider-enforced idempotency bound to the same exact effect identity/request.
+Retry is only considered safe after trusted positive no-effect proof or trusted
+provider-idempotency proof bound to the same exact effect identity/request.
 Build OS does not automatically retry.
 
 ## State

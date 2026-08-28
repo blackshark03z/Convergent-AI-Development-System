@@ -8,10 +8,12 @@ from unittest.mock import Mock, patch
 from buildos import effect_store
 from buildos.effect_safety import (
     EffectSafetyError,
+    apply_verified_retry_proof,
     mark_dispatch_uncertain,
     prepare,
     reconcile,
     retry_safety,
+    verify_retry_proof,
 )
 from buildos.external_effect import (
     effect_retry_safety,
@@ -19,6 +21,7 @@ from buildos.external_effect import (
     inspect_effect,
     list_effects,
     reconcile_effect,
+    verify_effect_retry_proof,
 )
 from buildos.git_adapter import boundary_snapshot
 from tests.test_thin_guard import append, repository, run_git
@@ -40,6 +43,16 @@ def intent(effect_id: str = "publish-release", *, idempotent: bool = False) -> d
     return value
 
 
+def trusted_response(challenge: dict, **changes: object) -> dict:
+    value = {
+        **challenge,
+        "evidence": "verified provider read-back",
+        "reference": "provider-query-42",
+    }
+    value.update(changes)
+    return value
+
+
 class EffectSafetyModelTests(unittest.TestCase):
     def test_ambiguous_dispatch_is_not_retry_safe_without_positive_proof(self):
         record = mark_dispatch_uncertain(prepare(intent()))
@@ -49,25 +62,73 @@ class EffectSafetyModelTests(unittest.TestCase):
             {"safe": False, "reason_code": "AMBIGUOUS_DISPATCH_NO_RETRY_PROOF"},
         )
 
-    def test_exact_provider_idempotency_makes_ambiguous_retry_considerable(self):
+    def test_self_declared_provider_idempotency_is_not_retry_proof(self):
         record = mark_dispatch_uncertain(prepare(intent(idempotent=True)))
         self.assertEqual(
             retry_safety(record),
-            {"safe": True, "reason_code": "EXACT_PROVIDER_IDEMPOTENCY"},
+            {"safe": False, "reason_code": "AMBIGUOUS_DISPATCH_NO_RETRY_PROOF"},
         )
 
-    def test_positive_no_effect_reconciliation_makes_retry_considerable(self):
+    def test_free_form_no_effect_evidence_cannot_make_retry_safe(self):
         record = mark_dispatch_uncertain(prepare(intent()))
-        resolved = reconcile(
-            record,
-            outcome="NO_EFFECT_CONFIRMED",
-            evidence="canonical provider lookup proves target absent",
+        with self.assertRaisesRegex(EffectSafetyError, "trusted verifier"):
+            reconcile(
+                record,
+                outcome="NO_EFFECT_CONFIRMED",
+                evidence="trust me",
+            )
+        self.assertEqual(
+            retry_safety(record),
+            {"safe": False, "reason_code": "AMBIGUOUS_DISPATCH_NO_RETRY_PROOF"},
         )
+
+    def test_only_exact_trusted_no_effect_proof_makes_retry_eligible(self):
+        record = mark_dispatch_uncertain(prepare(intent()))
+        proof = verify_retry_proof(
+            record,
+            kind="NO_EFFECT_CONFIRMED",
+            verifier=lambda challenge: trusted_response(challenge),
+        )
+        resolved = apply_verified_retry_proof(record, proof)
+
         self.assertEqual(resolved["state"], "NO_EFFECT_CONFIRMED")
         self.assertEqual(
             retry_safety(resolved),
             {"safe": True, "reason_code": "POSITIVE_NO_EFFECT_PROOF"},
         )
+
+    def test_only_exact_trusted_idempotency_proof_makes_retry_eligible(self):
+        record = mark_dispatch_uncertain(prepare(intent(idempotent=True)))
+        proof = verify_retry_proof(
+            record,
+            kind="PROVIDER_IDEMPOTENCY",
+            verifier=lambda challenge: trusted_response(challenge),
+        )
+        resolved = apply_verified_retry_proof(record, proof)
+
+        self.assertEqual(resolved["state"], "DISPATCH_UNCERTAIN")
+        self.assertEqual(
+            retry_safety(resolved),
+            {"safe": True, "reason_code": "EXACT_PROVIDER_IDEMPOTENCY"},
+        )
+
+    def test_trusted_proof_must_match_exact_effect_binding(self):
+        record = mark_dispatch_uncertain(prepare(intent(idempotent=True)))
+        for field, value in (
+            ("target", "provider://other/target"),
+            ("operation", "delete"),
+            ("request_digest", hashlib.sha256(b"other request").hexdigest()),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(EffectSafetyError, f"exact {field}"):
+                    verify_retry_proof(
+                        record,
+                        kind="PROVIDER_IDEMPOTENCY",
+                        verifier=lambda challenge, field=field, value=value: trusted_response(
+                            challenge, **{field: value},
+                        ),
+                    )
+                self.assertFalse(retry_safety(record)["safe"])
 
     def test_claimed_provider_idempotency_requires_key_and_evidence(self):
         value = intent()
@@ -143,9 +204,13 @@ class ExternalEffectBoundaryTests(unittest.TestCase):
 
             result = self.execute(root, base, dispatcher, intent=same_effect)
 
-            self.assertEqual(result["reason_codes"], ["BLIND_RETRY_BLOCKED"])
+            self.assertEqual(result["reason_codes"], ["EFFECT_INTENT_MISMATCH"])
             self.assertEqual(result["effect_state"], "DISPATCH_UNCERTAIN")
             self.assertEqual(len(list_effects(root)), 1)
+            self.assertEqual(
+                result["retry_safety"],
+                {"safe": False, "reason_code": "EXACT_INTENT_MISMATCH"},
+            )
             dispatcher.assert_not_called()
 
     def test_changed_idempotency_key_cannot_disguise_same_ambiguous_effect(self):
@@ -161,23 +226,40 @@ class ExternalEffectBoundaryTests(unittest.TestCase):
 
             result = self.execute(root, base, dispatcher, intent=changed_key)
 
-            self.assertEqual(result["reason_codes"], ["BLIND_RETRY_BLOCKED"])
+            self.assertEqual(result["reason_codes"], ["EFFECT_INTENT_MISMATCH"])
             self.assertEqual(len(list_effects(root)), 1)
             self.assertEqual(
-                result["retry_safety"]["reason_code"],
-                "EXACT_PROVIDER_IDEMPOTENCY",
+                result["retry_safety"],
+                {"safe": False, "reason_code": "EXACT_INTENT_MISMATCH"},
             )
             dispatcher.assert_not_called()
 
-    def test_positive_no_effect_reconciliation_survives_reload(self):
+    def test_free_form_no_effect_reconciliation_fails_closed(self):
         with repository() as (root, base):
             self.execute(root, base, Mock(side_effect=RuntimeError("ambiguous")))
 
-            reconciled = reconcile_effect(
+            with self.assertRaisesRegex(EffectSafetyError, "trusted verifier"):
+                reconcile_effect(
+                    root,
+                    "publish-release",
+                    outcome="NO_EFFECT_CONFIRMED",
+                    evidence="trust me",
+                )
+
+            self.assertEqual(
+                effect_retry_safety(root, "publish-release"),
+                {"safe": False, "reason_code": "AMBIGUOUS_DISPATCH_NO_RETRY_PROOF"},
+            )
+
+    def test_verified_no_effect_reconciliation_survives_reload(self):
+        with repository() as (root, base):
+            self.execute(root, base, Mock(side_effect=RuntimeError("ambiguous")))
+
+            reconciled = verify_effect_retry_proof(
                 root,
                 "publish-release",
-                outcome="NO_EFFECT_CONFIRMED",
-                evidence="canonical provider search proves release absent",
+                kind="NO_EFFECT_CONFIRMED",
+                verifier=lambda challenge: trusted_response(challenge),
             )
 
             self.assertEqual(reconciled["state"], "NO_EFFECT_CONFIRMED")
@@ -186,7 +268,7 @@ class ExternalEffectBoundaryTests(unittest.TestCase):
                 {"safe": True, "reason_code": "POSITIVE_NO_EFFECT_PROOF"},
             )
 
-    def test_exact_idempotent_ambiguity_is_reported_safe_but_not_auto_retried(self):
+    def test_self_declared_idempotency_remains_unsafe_and_is_not_auto_retried(self):
         with repository() as (root, base):
             first = Mock(side_effect=RuntimeError("ambiguous"))
             self.execute(root, base, first, intent=intent(idempotent=True))
@@ -199,7 +281,7 @@ class ExternalEffectBoundaryTests(unittest.TestCase):
             self.assertEqual(result["reason_codes"], ["BLIND_RETRY_BLOCKED"])
             self.assertEqual(
                 result["retry_safety"],
-                {"safe": True, "reason_code": "EXACT_PROVIDER_IDEMPOTENCY"},
+                {"safe": False, "reason_code": "AMBIGUOUS_DISPATCH_NO_RETRY_PROOF"},
             )
             retry_dispatcher.assert_not_called()
 
@@ -234,6 +316,69 @@ class ExternalEffectBoundaryTests(unittest.TestCase):
             self.assertEqual(result["reason_codes"], ["BLOCK_STALE_STATE"])
             self.assertEqual(inspect_effect(root, "publish-release")["state"], "PREPARED")
             dispatcher.assert_not_called()
+
+    def test_exact_prepared_effect_dispatches_once_after_git_is_fixed(self):
+        with repository() as (root, base):
+            real_observer = boundary_snapshot
+
+            def drift(observed_root: Path | str, observed_base: str) -> dict:
+                append(root / "app.py", "between-check drift\n")
+                return real_observer(observed_root, observed_base)
+
+            first_dispatcher = Mock()
+            with patch("buildos.external_effect.boundary_snapshot", side_effect=drift):
+                first = self.execute(
+                    root, base, first_dispatcher, strict_paths=["app.py"],
+                )
+            run_git(root, "restore", "app.py")
+            second_dispatcher = Mock(return_value={
+                "status": "CONFIRMED",
+                "reference": "provider-result-43",
+                "evidence": "provider acknowledged exact request",
+            })
+
+            second = self.execute(
+                root, base, second_dispatcher, strict_paths=["app.py"],
+            )
+            loaded = inspect_effect(root, "publish-release")
+
+            self.assertEqual(first["reason_codes"], ["BLOCK_STALE_STATE"])
+            first_dispatcher.assert_not_called()
+            second_dispatcher.assert_called_once()
+            self.assertTrue(second["dispatched"])
+            self.assertEqual(loaded["state"], "CONFIRMED")
+            self.assertEqual(loaded["dispatch_count"], 1)
+
+    def test_prepared_effect_with_changed_exact_intent_fails_closed(self):
+        for field, value in (
+            ("request_digest", hashlib.sha256(b"different request").hexdigest()),
+            ("target", "provider://account/other-release"),
+            ("operation", "delete"),
+        ):
+            with self.subTest(field=field), repository() as (root, base):
+                real_observer = boundary_snapshot
+
+                def drift(observed_root: Path | str, observed_base: str) -> dict:
+                    append(root / "app.py", "between-check drift\n")
+                    return real_observer(observed_root, observed_base)
+
+                with patch("buildos.external_effect.boundary_snapshot", side_effect=drift):
+                    self.execute(root, base, Mock(), strict_paths=["app.py"])
+                run_git(root, "restore", "app.py")
+                changed = intent()
+                changed[field] = value
+                dispatcher = Mock()
+
+                result = self.execute(
+                    root, base, dispatcher, intent=changed, strict_paths=["app.py"],
+                )
+
+                self.assertEqual(result["guard_result"], "BLOCK")
+                self.assertEqual(result["reason_codes"], ["EFFECT_INTENT_MISMATCH"])
+                dispatcher.assert_not_called()
+                self.assertEqual(
+                    inspect_effect(root, "publish-release")["state"], "PREPARED",
+                )
 
     def test_provider_can_report_definite_non_dispatch(self):
         with repository() as (root, base):

@@ -40,10 +40,17 @@ def git(root: Path, *args: str) -> str:
 
 
 def source_files(root: Path, head: str) -> list[str]:
-    tracked = git(root, "ls-tree", "-r", "--name-only", head).splitlines()
+    tracked = [
+        path.replace("\\", "/")
+        for path in git(root, "ls-tree", "-r", "--name-only", head).splitlines()
+        if path
+    ]
+    if MANIFEST_NAME in tracked:
+        raise CandidateError(
+            "source checkout must not track an embedded candidate manifest",
+        )
     result = [
-        path.replace("\\", "/") for path in tracked
-        if path and not path.replace("\\", "/").startswith(EXCLUDED_PREFIXES)
+        path for path in tracked if not path.startswith(EXCLUDED_PREFIXES)
     ]
     if not result or any(path.startswith(".git/") or "../" in path for path in result):
         raise CandidateError("candidate source file set is invalid")

@@ -6,11 +6,13 @@ from typing import Callable, Iterable, Mapping
 
 from .effect_safety import (
     EffectSafetyError,
+    apply_verified_retry_proof,
     mark_dispatch_uncertain,
     normalize_intent,
     reconcile as reconcile_record,
     record_dispatch_outcome,
     retry_safety,
+    verify_retry_proof,
 )
 from . import effect_store
 from .git_adapter import boundary_snapshot
@@ -59,17 +61,38 @@ def execute_external_effect(
     if evaluated["result"] == "BLOCK":
         return evidence
 
-    record, created = effect_store.create(evaluated["observed_root"], normalized_intent)
+    try:
+        record, created = effect_store.create(
+            evaluated["observed_root"], normalized_intent,
+        )
+    except effect_store.EffectStoreError as exc:
+        evidence.update({
+            "guard_result": "BLOCK",
+            "reason_codes": ["EFFECT_INTENT_MISMATCH"],
+            "effect_error": str(exc),
+        })
+        return evidence
     evidence["effect_state"] = record["state"]
     evidence["effect_identity"] = record["effect_identity"]
     if not created:
-        safety = retry_safety(record)
-        evidence.update({
-            "guard_result": "BLOCK",
-            "reason_codes": ["BLIND_RETRY_BLOCKED"],
-            "retry_safety": safety,
-        })
-        return evidence
+        if record["intent"] != normalized_intent:
+            evidence.update({
+                "guard_result": "BLOCK",
+                "reason_codes": ["EFFECT_INTENT_MISMATCH"],
+                "retry_safety": {
+                    "safe": False,
+                    "reason_code": "EXACT_INTENT_MISMATCH",
+                },
+            })
+            return evidence
+        if record["state"] != "PREPARED":
+            safety = retry_safety(record)
+            evidence.update({
+                "guard_result": "BLOCK",
+                "reason_codes": ["BLIND_RETRY_BLOCKED"],
+                "retry_safety": safety,
+            })
+            return evidence
 
     try:
         pre_dispatch = boundary_snapshot(
@@ -162,6 +185,24 @@ def reconcile_effect(
         transition=lambda current: reconcile_record(
             current, outcome=outcome, evidence=evidence, reference=reference,
         ),
+    )
+
+
+def verify_effect_retry_proof(
+    root: Path | str,
+    effect_id: str,
+    *,
+    kind: str,
+    verifier: Callable[[dict], Mapping[str, object]] | None,
+) -> dict:
+    """Persist proof only after an explicit trusted verifier checks exact binding."""
+    current = effect_store.load(root, effect_id)
+    proof = verify_retry_proof(current, kind=kind, verifier=verifier)
+    return effect_store.update(
+        root,
+        effect_id,
+        expected_state="DISPATCH_UNCERTAIN",
+        transition=lambda record: apply_verified_retry_proof(record, proof),
     )
 
 

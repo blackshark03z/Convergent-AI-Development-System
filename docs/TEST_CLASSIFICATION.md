@@ -16,5 +16,11 @@ assurance or generic execution-plan behavior are retired under
 `legacy/v125/tests`. They are not weakened or translated into requirements for
 the simplified kernel.
 
-The stabilization gate discovers only `tests/test_*.py`. Historical tests are
-preserved for reference but are not an active compatibility promise.
+The source-checkout stabilization gate discovers only `tests/test_*.py`. It may
+use Git fixtures and package construction and therefore requires a real Git
+checkout. The extracted-candidate gate discovers only
+`portable_tests/test_*.py`; it requires no `.git`, never constructs a nested
+candidate and validates packaged bytes against `CANDIDATE_MANIFEST.json`.
+
+Historical tests are preserved for reference but are not an active
+compatibility promise.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ SCRIPTS = PACKAGE / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from build_simplified_candidate import build, secret_findings
+from build_simplified_candidate import CandidateError, build, secret_findings
 from verify_simplified_candidate import verify
 from tests.test_thin_guard import run_git
 
@@ -73,6 +74,43 @@ class SimplifiedCandidateTests(unittest.TestCase):
             "config.py": b"api_" + b"key = 'this-is-a-long-fake-key'\n",
         })
         self.assertEqual(findings, ["config.py:pattern-4", "private.pem:pattern-1"])
+
+    def test_extracted_candidate_has_distinct_green_portable_self_test(self):
+        with tempfile.TemporaryDirectory(prefix="buildos-portable-candidate-") as raw:
+            container = Path(raw)
+            source = container / "source"
+            output = container / "output"
+            extracted = container / "extracted"
+            copy_source(source)
+            built = build(source, output)
+            with zipfile.ZipFile(built["archive_path"], "r") as archive:
+                archive.extractall(extracted)
+
+            source_only = subprocess.run(
+                [sys.executable, "scripts/self_test.py"],
+                cwd=extracted, text=True, capture_output=True, timeout=30,
+            )
+            portable = subprocess.run(
+                [sys.executable, "scripts/portable_self_test.py"],
+                cwd=extracted, text=True, capture_output=True, timeout=30,
+            )
+
+            self.assertEqual(source_only.returncode, 2)
+            self.assertIn("SOURCE_CHECKOUT_REQUIRED", source_only.stdout)
+            self.assertEqual(portable.returncode, 0, portable.stdout + portable.stderr)
+            self.assertIn("SIMPLIFIED_PORTABLE_SUITE=PASS", portable.stdout)
+
+    def test_tracked_embedded_manifest_fails_closed_instead_of_repackaging(self):
+        with tempfile.TemporaryDirectory(prefix="buildos-manifest-source-") as raw:
+            container = Path(raw)
+            source = container / "source"
+            copy_source(source)
+            (source / "CANDIDATE_MANIFEST.json").write_text("{}\n", encoding="utf-8")
+            run_git(source, "add", "CANDIDATE_MANIFEST.json")
+            run_git(source, "commit", "-qm", "embedded package manifest")
+
+            with self.assertRaisesRegex(CandidateError, "embedded candidate manifest"):
+                build(source, container / "output")
 
 
 if __name__ == "__main__":

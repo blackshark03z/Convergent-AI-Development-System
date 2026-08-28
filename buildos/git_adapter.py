@@ -172,6 +172,41 @@ def _worktree_changed_paths(root: Path, *, diff_filter: str) -> list[str]:
     return sorted({line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()})
 
 
+def _raw_type_changed_paths(root: Path, *comparison: str) -> list[str]:
+    """Read Git mode changes directly, including staged index-only changes.
+
+    Filesystem symlink support differs by platform. Git's raw old/new modes are
+    the portable authority for an index or worktree type transition.
+    """
+    proc = _run(
+        root, "diff", "--raw", "-z", "--no-renames", *comparison,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr or proc.stdout or "git type-change observation failed").strip())
+    tokens = proc.stdout.split("\0")
+    result: set[str] = set()
+    index = 0
+    while index + 1 < len(tokens):
+        metadata = tokens[index]
+        path = tokens[index + 1]
+        index += 2
+        if not metadata.startswith(":") or not path:
+            continue
+        fields = metadata[1:].split()
+        if len(fields) < 5:
+            raise RuntimeError("git raw type-change observation is malformed")
+        old_mode, new_mode, _old_blob, _new_blob, status = fields[:5]
+        mode_changed = (
+            old_mode != new_mode
+            and old_mode != "000000"
+            and new_mode != "000000"
+        )
+        if status.startswith("T") or mode_changed:
+            result.add(path.replace("\\", "/"))
+    return sorted(result)
+
+
 def _control_path(path: str) -> bool:
     normalized = path.replace("\\", "/")
     while normalized.startswith("./"):
@@ -216,7 +251,10 @@ def boundary_snapshot(root: Path | str, base: str) -> dict[str, Any]:
     dirty_entries = _dirty_entries(git_root)
     dirty_paths = sorted({entry["path"] for entry in dirty_entries})
     worktree_deletions = _worktree_changed_paths(git_root, diff_filter="D")
-    worktree_type_changes = _worktree_changed_paths(git_root, diff_filter="T")
+    index_type_changes = _raw_type_changed_paths(
+        git_root, "--cached", "HEAD", "--",
+    )
+    worktree_type_changes = _raw_type_changed_paths(git_root, "--")
 
     index = _run(git_root, "ls-files", "--stage", "-z", check=True).stdout
     result = {
@@ -234,8 +272,10 @@ def boundary_snapshot(root: Path | str, base: str) -> dict[str, Any]:
         "changed_paths": sorted({*committed_paths, *dirty_paths}),
         "deleted_paths": sorted({*committed_deletions, *worktree_deletions}),
         "type_changed_paths": sorted({
-            *committed_type_changes, *worktree_type_changes,
+            *committed_type_changes, *index_type_changes, *worktree_type_changes,
         }),
+        "index_type_changed_paths": index_type_changes,
+        "worktree_type_changed_paths": worktree_type_changes,
         "tracked_control_paths": tracked_control_paths(git_root),
         "changed_control_paths": sorted({
             path for path in {*committed_paths, *dirty_paths}
@@ -312,7 +352,8 @@ def snapshot(
     deletions_since_base = [path for path in changed_paths(root, base_sha, head, diff_filter="D") if not _control_path(path)]
     type_changes_since_base = [path for path in changed_paths(root, base_sha, head, diff_filter="T") if not _control_path(path)]
     worktree_deletions = [path for path in _worktree_changed_paths(root, diff_filter="D") if not _control_path(path)]
-    worktree_type_changes = [path for path in _worktree_changed_paths(root, diff_filter="T") if not _control_path(path)]
+    index_type_changes = [path for path in _raw_type_changed_paths(root, "--cached", "HEAD", "--") if not _control_path(path)]
+    worktree_type_changes = [path for path in _raw_type_changed_paths(root, "--") if not _control_path(path)]
     tracked_control = tracked_control_paths(root)
     result = {
         "available": True,
@@ -334,6 +375,7 @@ def snapshot(
         "type_changes_since_base": type_changes_since_base,
         "worktree_deletions": worktree_deletions,
         "worktree_type_changes": worktree_type_changes,
+        "index_type_changes": index_type_changes,
         "changes_since_product": since_product,
         "changes_since_validated": product_changes,
         "tracked_control_paths": tracked_control,
@@ -348,6 +390,7 @@ def snapshot(
         "type_changes_since_base": result["type_changes_since_base"],
         "worktree_deletions": result["worktree_deletions"],
         "worktree_type_changes": result["worktree_type_changes"],
+        "index_type_changes": result["index_type_changes"],
     }
     result["product_state_digest"] = hashlib.sha256(
         (json.dumps(product_state, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
