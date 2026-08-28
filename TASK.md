@@ -40,4 +40,5 @@ promotion, push, merge or deployment.
 - Provider-free Effect Safety, durable ambiguity, explicit dispatch API, thin CLI and fresh-policy reads are implemented and focused tests pass.
 - Legacy lifecycle source/tests/assets are disconnected under `legacy/v125`; unresolved legacy effects have read-only detection and explicit effect-only reconciliation.
 - All fourteen mandatory scenarios are mapped to active executable evidence in `docs/SCENARIO_EVIDENCE.md`.
-- Next: run focused/affected checks, commit this checkpoint, run the full active stabilization suite once, then build and read back one candidate.
+- Focused security: 33 passed. Affected integration/package: 12 passed. Final full active stabilization: 45 passed, 0 failed, 0 skipped.
+- Next: if no verified receipt exists for the current clean HEAD, build/read back exactly one candidate; after a matching receipt exists, the next safe action is independent R3.
