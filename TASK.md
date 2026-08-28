@@ -1,0 +1,41 @@
+# Goal
+
+Produce one stabilized simplified Build OS candidate ready for independent R3.
+
+# Acceptance
+
+- Thin Guard preserves scope, dirty-worktree, deletion/type-change, control-path and RC1 regressions.
+- High-cost local execution blocks stale state and otherwise invokes native argv once.
+- External intent precedes dispatch; known, ambiguous and reconciled outcomes survive reload.
+- Blind retry is rejected; exact idempotency or positive no-effect proof is required.
+- Repository-local evidence is sufficient for Worker and Tech Lead replacement.
+- The simplified CLI is the default; legacy lifecycle machinery is disconnected/demoted.
+- Focused, integration and one full active-suite stabilization gate pass.
+- Exactly one package candidate passes identity, checksum, readback and secret checks.
+
+# Non-goals
+
+No task lifecycle, adoption, continuation, executor migration, grants, command
+classifier, provider plugin framework, generic retry scheduler, self-R3,
+promotion, push, merge or deployment.
+
+# Constraints
+
+- Stable ancestor: `ec01a97cce41f3628d00e14f01b76462dd616fe2`.
+- Simplification baseline: `8970dc87a1bad6d649b4bb46272144c2e92b8118`.
+- Frozen v1.26 checkout `13490a05fd2bc3d001b289b0e8d186973707ecb2` is read-only experimental evidence.
+- Durable runtime state is allowed only for external-effect ambiguity.
+
+# Material Decisions
+
+- Effect identity binds operation, target, request digest and optional idempotency key—not a task or worker.
+- Effect records live in the common Git administration directory, outside product history and across worktrees.
+- External dispatch is an explicit Python integration seam; the CLI only inspects/reconciles effect truth.
+- Legacy unresolved effects remain read-only detectable; closed legacy lifecycle data is historical.
+
+# Progress / Discoveries / Next
+
+- Phase 1A Thin Guard committed at `59398a7`.
+- Phase 1B high-cost boundary committed at `8970dc8`.
+- Provider-free Effect Safety, durable ambiguity, explicit dispatch API, thin CLI and fresh-policy reads are implemented and focused tests pass.
+- Next: demote legacy tests/entrypoints, finish end-to-end continuity/security scenarios, stabilize once, then build one candidate.
