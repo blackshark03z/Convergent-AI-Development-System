@@ -1,5 +1,17 @@
 # Build OS vNext release candidate
 
+An experimental simplification path now runs beside the v1.25 lifecycle path:
+
+```powershell
+python scripts/ai.py --root D:\path\to\product check `
+  --base <commit-or-ref> --boundary R3 `
+  --expected app.py --strict app.py --prohibited "secrets/**"
+```
+
+`check` derives `PASS`, `WARN`, or `BLOCK` only from the current Git delta and
+the explicit path policy. It writes no Build OS state and does not execute the
+requested boundary. See [docs/SIMPLIFICATION_PHASE_0.md](docs/SIMPLIFICATION_PHASE_0.md).
+
 vNext evolves the v1.24 transactional candidate into an evidence-carrying Work
 Loop:
 

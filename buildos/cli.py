@@ -14,6 +14,7 @@ from .grounding import GroundingError, grounding_projection, load_grounding_repo
 from .model import KernelError
 from .store import InjectedFailure, RecoveryRequired
 from .telemetry import TelemetryError
+from .thin_guard import GuardInputError, check as check_boundary
 from .work_contract import (
     WorkContractError,
     load_contract,
@@ -116,6 +117,16 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     )
     p.add_argument("--root", type=Path, default=Path.cwd(), help="target repository")
     commands = p.add_subparsers(dest="command", required=True)
+
+    check = commands.add_parser(
+        "check",
+        help="derive a near-stateless live Git/scope boundary decision",
+    )
+    check.add_argument("--base", required=True, help="relevant base commit or ref")
+    check.add_argument("--boundary", required=True, help="caller-declared consequential boundary")
+    check.add_argument("--expected", action="append", default=[], help="advisory expected path or glob")
+    check.add_argument("--strict", action="append", default=[], help="hard allowed path or glob")
+    check.add_argument("--prohibited", action="append", default=[], help="hard prohibited path or glob")
 
     contract = commands.add_parser(
         "contract",
@@ -272,6 +283,26 @@ def parse_invocation(
 
 def execute(args: argparse.Namespace) -> int:
     """Execute an already parsed invocation without reinterpreting argv."""
+    if args.command == "check":
+        try:
+            value = check_boundary(
+                args.root,
+                base=args.base,
+                boundary=args.boundary,
+                expected_paths=args.expected,
+                strict_paths=args.strict,
+                prohibited_paths=args.prohibited,
+            )
+            _json(value)
+            return 2 if value["result"] == "BLOCK" else 0
+        except (GuardInputError, OSError, RuntimeError) as exc:
+            _json({
+                "result": "BLOCK",
+                "reason_codes": ["INVALID_GUARD_INPUT"],
+                "error": type(exc).__name__,
+                "message": str(exc),
+            })
+            return 2
     if args.command == "contract":
         try:
             contract, contract_hash = load_contract(args.file)
