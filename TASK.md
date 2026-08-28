@@ -28,7 +28,7 @@ promotion, push, merge or deployment.
 
 # Material Decisions
 
-- Effect identity binds operation, target, request digest and optional idempotency key—not a task or worker.
+- Semantic effect identity binds operation, target and request digest—not a task, worker or changeable idempotency key.
 - Effect records live in the common Git administration directory, outside product history and across worktrees.
 - External dispatch is an explicit Python integration seam; the CLI only inspects/reconciles effect truth.
 - Legacy unresolved effects remain read-only detectable; closed legacy lifecycle data is historical.
@@ -40,5 +40,5 @@ promotion, push, merge or deployment.
 - Provider-free Effect Safety, durable ambiguity, explicit dispatch API, thin CLI and fresh-policy reads are implemented and focused tests pass.
 - Legacy lifecycle source/tests/assets are disconnected under `legacy/v125`; unresolved legacy effects have read-only detection and explicit effect-only reconciliation.
 - All fourteen mandatory scenarios are mapped to active executable evidence in `docs/SCENARIO_EVIDENCE.md`.
-- Focused security: 33 passed. Affected integration/package: 12 passed. Final full active stabilization: 45 passed, 0 failed, 0 skipped.
+- Focused thin-guard/high-cost security: 33 passed. Post-fix effect safety: 14 passed. Affected package/end-to-end: 7 passed. Final full active stabilization: 46 passed, 0 failed, 0 skipped.
 - Next: if no verified receipt exists for the current clean HEAD, build/read back exactly one candidate; after a matching receipt exists, the next safe action is independent R3.

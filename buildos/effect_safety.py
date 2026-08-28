@@ -82,7 +82,7 @@ def effect_identity(intent: Mapping[str, object]) -> str:
     normalized = normalize_intent(intent)
     identity = {
         key: normalized[key] for key in (
-            "operation", "target", "request_digest", "idempotency_key",
+            "operation", "target", "request_digest",
         )
     }
     return hashlib.sha256(_canonical(identity)).hexdigest()

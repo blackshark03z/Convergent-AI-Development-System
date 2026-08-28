@@ -148,6 +148,27 @@ class ExternalEffectBoundaryTests(unittest.TestCase):
             self.assertEqual(len(list_effects(root)), 1)
             dispatcher.assert_not_called()
 
+    def test_changed_idempotency_key_cannot_disguise_same_ambiguous_effect(self):
+        with repository() as (root, base):
+            first_intent = intent(effect_id="first-key", idempotent=True)
+            self.execute(
+                root, base, Mock(side_effect=RuntimeError("ambiguous")),
+                intent=first_intent,
+            )
+            changed_key = intent(effect_id="changed-key", idempotent=True)
+            changed_key["idempotency_key"] = "release-request-002"
+            dispatcher = Mock()
+
+            result = self.execute(root, base, dispatcher, intent=changed_key)
+
+            self.assertEqual(result["reason_codes"], ["BLIND_RETRY_BLOCKED"])
+            self.assertEqual(len(list_effects(root)), 1)
+            self.assertEqual(
+                result["retry_safety"]["reason_code"],
+                "EXACT_PROVIDER_IDEMPOTENCY",
+            )
+            dispatcher.assert_not_called()
+
     def test_positive_no_effect_reconciliation_survives_reload(self):
         with repository() as (root, base):
             self.execute(root, base, Mock(side_effect=RuntimeError("ambiguous")))

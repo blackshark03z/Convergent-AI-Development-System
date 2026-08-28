@@ -7,8 +7,10 @@ Identity binds:
 
 - operation;
 - target;
-- exact request SHA-256;
-- optional provider idempotency key.
+- exact request SHA-256.
+
+An optional provider idempotency key is bound inside the exact intent and may
+justify retry, but changing the key cannot create a new semantic effect identity.
 
 The durable states are:
 

@@ -32,8 +32,9 @@ shell-free native spawn. A microscopic malicious-process race after that point
 requires OS sandboxing and is outside the cooperative-local threat model.
 
 External effects use one narrow Python dispatch seam. Core semantics are
-provider-free. Exact operation, target, request digest and optional exact
-idempotency evidence define effect identity. Durable state is written before
+provider-free. Exact operation, target and request digest define semantic
+effect identity. Optional idempotency evidence is bound to that identity but
+cannot change or disguise it. Durable state is written before
 the dispatch boundary; `DISPATCH_UNCERTAIN` is durable before the provider call.
 
 Retry is only considered safe after positive canonical no-effect evidence or
