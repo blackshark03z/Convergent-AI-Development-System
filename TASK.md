@@ -38,4 +38,6 @@ promotion, push, merge or deployment.
 - Phase 1A Thin Guard committed at `59398a7`.
 - Phase 1B high-cost boundary committed at `8970dc8`.
 - Provider-free Effect Safety, durable ambiguity, explicit dispatch API, thin CLI and fresh-policy reads are implemented and focused tests pass.
-- Next: demote legacy tests/entrypoints, finish end-to-end continuity/security scenarios, stabilize once, then build one candidate.
+- Legacy lifecycle source/tests/assets are disconnected under `legacy/v125`; unresolved legacy effects have read-only detection and explicit effect-only reconciliation.
+- All fourteen mandatory scenarios are mapped to active executable evidence in `docs/SCENARIO_EVIDENCE.md`.
+- Next: run focused/affected checks, commit this checkpoint, run the full active stabilization suite once, then build and read back one candidate.

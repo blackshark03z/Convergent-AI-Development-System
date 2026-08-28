@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the deterministic v1.25 release-candidate proof suite."""
+"""Run the active simplified Build OS test suite."""
 from pathlib import Path
 import subprocess
 import sys
@@ -14,7 +14,7 @@ def main() -> int:
         check=False,
     )
     if proc.returncode == 0:
-        print("FULL_CANDIDATE_SELF_TEST=PASS")
+        print("SIMPLIFIED_ACTIVE_SUITE=PASS")
     return proc.returncode
 
 

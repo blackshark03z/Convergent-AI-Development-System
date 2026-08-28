@@ -18,6 +18,7 @@ from .external_effect import (
 )
 from .guarded_local import execute_high_cost
 from .legacy_effects import inspect_legacy_effects
+from .legacy_reconciliation import carry_legacy_ambiguity
 from .scope_policy import load_scope_policy
 from .thin_guard import GuardInputError, check as check_boundary
 
@@ -81,7 +82,9 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
         "reconcile",
         help="record canonical evidence resolving one uncertain external dispatch",
     )
-    reconcile.add_argument("--effect-id", required=True)
+    identity = reconcile.add_mutually_exclusive_group(required=True)
+    identity.add_argument("--effect-id")
+    identity.add_argument("--legacy-effect-id")
     reconcile.add_argument(
         "--outcome", required=True,
         choices=["CONFIRMED", "NO_EFFECT_CONFIRMED"],
@@ -162,14 +165,19 @@ def execute(args: argparse.Namespace) -> int:
             _json(value)
             return 0
         if args.command == "reconcile":
+            carried = None
+            effect_id = args.effect_id
+            if args.legacy_effect_id:
+                carried = carry_legacy_ambiguity(args.root, args.legacy_effect_id)
+                effect_id = carried["effect"]["intent"]["effect_id"]
             value = reconcile_effect(
                 args.root,
-                args.effect_id,
+                effect_id,
                 outcome=args.outcome,
                 evidence=args.evidence,
                 reference=args.reference,
             )
-            _json({"result": "PASS", "effect": value})
+            _json({"result": "PASS", "effect": value, "legacy_source": carried})
             return 0
         raise GuardInputError(f"unsupported command: {args.command}")
     except (

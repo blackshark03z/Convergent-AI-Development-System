@@ -70,3 +70,13 @@ def inspect_legacy_effects(root: Path | str) -> dict:
             "unresolved": [],
             "error": str(exc),
         }
+
+
+def unresolved_legacy_effect(root: Path | str, effect_id: str) -> dict:
+    observed = inspect_legacy_effects(root)
+    if observed["status"] == "UNREADABLE":
+        raise ValueError(observed["error"])
+    matches = [row for row in observed["unresolved"] if row["effect_id"] == effect_id]
+    if len(matches) != 1:
+        raise ValueError(f"unresolved legacy effect is absent or ambiguous: {effect_id}")
+    return matches[0]

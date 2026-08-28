@@ -133,6 +133,47 @@ class SimplifiedCliTests(unittest.TestCase):
             self.assertEqual(legacy["unresolved"][0]["effect_id"], "legacy-attempt")
             self.assertEqual(before, after)
 
+    def test_legacy_effect_reconciliation_carries_only_ambiguity_not_task_state(self):
+        with repository() as (root, _):
+            control = root / ".buildos" / "control"
+            generations = control / "generations"
+            generations.mkdir(parents=True)
+            generation_file = generations / "g0001.json"
+            generation_file.write_text(json.dumps({
+                "state": {
+                    "execution": {
+                        "effect_ledger": {
+                            "legacy-attempt": {
+                                "state": "DISPATCH_UNCONFIRMED",
+                                "action_id": "publish",
+                                "effect_contract_hash": "1" * 64,
+                                "effect_input_sha256": "2" * 64,
+                                "idempotency_key": None,
+                                "provider_reference": None,
+                                "reconciliation": None,
+                            },
+                        },
+                    },
+                },
+            }), encoding="utf-8")
+            current = control / "CURRENT"
+            current.write_text(json.dumps({"file": "g0001.json"}), encoding="utf-8")
+            legacy_bytes = (current.read_bytes(), generation_file.read_bytes())
+
+            result = cli(
+                root, "reconcile", "--legacy-effect-id", "legacy-attempt",
+                "--outcome", "NO_EFFECT_CONFIRMED",
+                "--evidence", "canonical provider query proves no legacy effect",
+            )
+            inspected = cli(root, "effect", "inspect", "--effect-id", "legacy.legacy-attempt")
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(
+                json.loads(inspected.stdout)["effect"]["state"],
+                "NO_EFFECT_CONFIRMED",
+            )
+            self.assertEqual(legacy_bytes, (current.read_bytes(), generation_file.read_bytes()))
+
 
 if __name__ == "__main__":
     unittest.main()

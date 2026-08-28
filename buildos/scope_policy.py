@@ -15,8 +15,10 @@ MAX_BYTES = 64 * 1024
 def load_scope_policy(root: Path | str, policy_file: Path | str) -> dict[str, list[str]]:
     repository = Path(root).resolve()
     supplied = Path(policy_file)
-    target = supplied if supplied.is_absolute() else repository / supplied
-    target = target.resolve(strict=False)
+    unresolved = supplied if supplied.is_absolute() else repository / supplied
+    if unresolved.is_symlink():
+        raise GuardInputError("scope policy cannot be a symbolic link")
+    target = unresolved.resolve(strict=False)
     try:
         if os.path.commonpath([str(repository), str(target)]) != str(repository):
             raise GuardInputError("scope policy must remain inside the repository")

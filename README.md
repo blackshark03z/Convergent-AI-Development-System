@@ -81,6 +81,10 @@ python scripts/ai.py --root D:\path\to\repo reconcile `
   --evidence "canonical provider lookup proves absence"
 ```
 
+For an unresolved v1.25 effect, use `--legacy-effect-id <id>` instead. This
+copies only the exact unresolved effect ambiguity into the new Effect Safety
+store for reconciliation; it does not migrate or reactivate the legacy task.
+
 Ambiguous effects are never redispatched automatically. Retry is only reported
 safe when exact provider-enforced idempotency or positive no-effect evidence is
 present.

@@ -12,8 +12,9 @@ preserve obsolete semantics.
 One exception remains safety-relevant: read-only `inspect` checks legacy
 `.buildos/control/CURRENT` for unresolved external-effect ledger entries. Closed
 task state is historical. Unresolved provider reality is reported because it
-may require reconciliation; no task/project migration or commit adoption is
-performed.
+may require reconciliation. `reconcile --legacy-effect-id` carries only the
+exact request/contract identity into Effect Safety and leaves the legacy bytes
+read-only; no task/project migration or commit adoption is performed.
 
 The v1.26 executor-lifecycle candidate is frozen experimental evidence. It is
 not an upgrade predecessor, release authority or source for simplification.
