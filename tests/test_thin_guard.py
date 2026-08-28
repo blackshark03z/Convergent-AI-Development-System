@@ -175,11 +175,12 @@ class ThinGuardRegressionTests(unittest.TestCase):
         with repository() as (root, base):
             append(root / ".buildos" / "owned.txt")
 
-            result = self.guard(root, base, strict_paths=["app.py"])
+            result = self.guard(root, base)
 
             self.assertEqual(result["result"], "BLOCK")
             self.assertIn(".buildos/owned.txt", result["tracked_control_paths"])
             self.assertIn(".buildos/owned.txt", result["changed_control_paths"])
+            self.assertIn("CONTROL_PATH_CHANGED", result["reason_codes"])
 
     def test_api_and_cli_checks_do_not_mutate_repository_or_control_state(self):
         with repository() as (root, base):

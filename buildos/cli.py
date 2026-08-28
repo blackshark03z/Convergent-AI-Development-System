@@ -10,6 +10,7 @@ from typing import Any
 
 from .facade import BuildOS
 from . import git_adapter
+from .guarded_local import execute_high_cost
 from .grounding import GroundingError, grounding_projection, load_grounding_report
 from .model import KernelError
 from .store import InjectedFailure, RecoveryRequired
@@ -127,6 +128,16 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     check.add_argument("--expected", action="append", default=[], help="advisory expected path or glob")
     check.add_argument("--strict", action="append", default=[], help="hard allowed path or glob")
     check.add_argument("--prohibited", action="append", default=[], help="hard prohibited path or glob")
+
+    high_cost = commands.add_parser(
+        "high-cost",
+        help="guard and invoke one explicitly declared high-cost local command",
+    )
+    high_cost.add_argument("--base", required=True, help="relevant base commit or ref")
+    high_cost.add_argument("--expected", action="append", default=[], help="advisory expected path or glob")
+    high_cost.add_argument("--strict", action="append", default=[], help="hard allowed path or glob")
+    high_cost.add_argument("--prohibited", action="append", default=[], help="hard prohibited path or glob")
+    high_cost.add_argument("native_command", nargs=argparse.REMAINDER, help="native argv after --")
 
     contract = commands.add_parser(
         "contract",
@@ -283,6 +294,30 @@ def parse_invocation(
 
 def execute(args: argparse.Namespace) -> int:
     """Execute an already parsed invocation without reinterpreting argv."""
+    if args.command == "high-cost":
+        try:
+            value = execute_high_cost(
+                args.root,
+                base=args.base,
+                command=args.native_command,
+                expected_paths=args.expected,
+                strict_paths=args.strict,
+                prohibited_paths=args.prohibited,
+            )
+            _json(value)
+            if not value["executed"]:
+                return 2
+            return int(value["command_exit_code"])
+        except (GuardInputError, OSError, RuntimeError) as exc:
+            _json({
+                "guard_result": "BLOCK",
+                "reason_codes": ["INVALID_GUARD_INPUT"],
+                "executed": False,
+                "command_exit_code": None,
+                "error": type(exc).__name__,
+                "message": str(exc),
+            })
+            return 2
     if args.command == "check":
         try:
             value = check_boundary(

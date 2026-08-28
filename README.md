@@ -12,6 +12,16 @@ python scripts/ai.py --root D:\path\to\product check `
 the explicit path policy. It writes no Build OS state and does not execute the
 requested boundary. See [docs/SIMPLIFICATION_PHASE_0.md](docs/SIMPLIFICATION_PHASE_0.md).
 
+For one explicitly declared high-cost local action, use native argv after `--`:
+
+```powershell
+python scripts/ai.py --root D:\path\to\product high-cost `
+  --base <commit-or-ref> --strict app.py -- python focused_check.py
+```
+
+The command is never semantically classified or retried. External effects are
+outside this boundary's contract.
+
 vNext evolves the v1.24 transactional candidate into an evidence-carrying Work
 Loop:
 

@@ -95,6 +95,13 @@ def check(
             "relation_to_base": relation,
         })
 
+    for path in observed["changed_control_paths"]:
+        blocking.append({
+            "reason_code": "CONTROL_PATH_CHANGED",
+            "path": path,
+            "change_kinds": _change_kinds(observed, path),
+        })
+
     for entry in observed["dirty_entries"]:
         if entry["status"] in _UNMERGED:
             blocking.append({

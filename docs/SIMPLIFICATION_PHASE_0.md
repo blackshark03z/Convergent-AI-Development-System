@@ -32,6 +32,17 @@ grant, lease, generation, authority record, runtime anchor, migration or resume
 operation exists in this path.
 
 The output binds the decision to HEAD/tree plus index/worktree fingerprints.
-Phase 1A does not execute R3/R4 actions. Exact re-observation immediately
-before an action is deferred to the next guarded-execution slice; no persisted
-token is intended to bridge that TOCTOU boundary.
+Tracked `.buildos/**` deltas are a hard boundary violation, independent of the
+declared expected or strict paths.
+
+## Phase 1B explicit local boundary
+
+`high-cost` is an explicit cooperative declaration, not a command classifier.
+It evaluates the thin guard, re-observes the same canonical base and complete
+Git observation digest at the last practical point before spawning one native
+argv, and returns `BLOCK_STALE_STATE` if they differ. It does not use a shell,
+infer command meaning, retry, or create state or receipts.
+
+A microscopic race after the final observation remains outside the cooperative
+local threat model. Stronger protection would require OS/filesystem/network
+sandboxing rather than Build OS lifecycle machinery.
