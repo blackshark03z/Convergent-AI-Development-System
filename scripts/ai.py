@@ -1,107 +1,14 @@
 #!/usr/bin/env python3
-"""Worker facade with an opt-in context-epoch adoption preflight."""
-import argparse
-import json
-import os
+"""Repository-independent entrypoint for the simplified Build OS surface."""
 from pathlib import Path
-import subprocess
 import sys
 
 PACKAGE = Path(__file__).resolve().parents[1]
 if str(PACKAGE) not in sys.path:
     sys.path.insert(0, str(PACKAGE))
 
-from buildos.cli import execute, parse_invocation
-
-
-EXECUTION_AUTHORITY_CREATORS = {
-    "work", "admit", "bootstrap", "continue-task", "adopt-existing-change",
-}
-EXECUTION_AUTHORITY_MUTATORS = {
-    "record-commit", "validate", "rollover", "close", "block-for-source-fix",
-    "report-blocker", "replan", "effect", "review", "new-revision",
-}
-BREAK_GLASS_COMMANDS = {"abort", "recover"}
-DIAGNOSTIC_TELEMETRY_COMMANDS = {"status", "next", "assurance-plan", "telemetry-ingest"}
-ADMISSION_COMMANDS = EXECUTION_AUTHORITY_CREATORS | EXECUTION_AUTHORITY_MUTATORS
-MUTATING_COMMANDS = {
-    *EXECUTION_AUTHORITY_MUTATORS,
-    "work", "continue-task",
-}
-def _context_epoch_preflight_enabled(root: Path) -> bool:
-    """Enable the adoption-layer guard only for an explicitly enrolled project."""
-    override = os.environ.get("BUILDOS_CONTEXT_EPOCH_PREFLIGHT", "").strip().lower()
-    if override in {"1", "true", "yes", "on"}:
-        return True
-    if override in {"0", "false", "no", "off"}:
-        return False
-    context_epoch = _policy(root).get("context_epoch")
-    return isinstance(context_epoch, dict) and context_epoch.get("enabled") is True
-
-
-def _policy(root: Path) -> dict:
-    try:
-        value = json.loads((root / ".buildos-policy.json").read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-def _integrated_admission_enabled(root: Path) -> bool:
-    value = _policy(root).get("execution_admission")
-    return isinstance(value, dict) and value.get("enabled") is True
-
-
-def _run_preflight(command: list[str], *, root: Path) -> int:
-    proc = subprocess.run(command, cwd=root, text=True, encoding="utf-8", errors="replace", capture_output=True)
-    if proc.returncode:
-        print(proc.stdout.strip() or json.dumps({
-            "status": "ACTION_REQUIRED", "message": "integrated execution admission failed",
-        }, sort_keys=True))
-    return proc.returncode
-
-
-def _adoption_preflight(args: argparse.Namespace) -> int:
-    """Compose opt-in adoption checks behind the one public facade."""
-    command = args.command
-    if command not in ADMISSION_COMMANDS:
-        return 0
-    root = args.root.resolve()
-    if not _integrated_admission_enabled(root):
-        return 0
-    policy = _policy(root).get("execution_admission") or {}
-    if policy.get("require_authority_record") is not True:
-        print(json.dumps({
-            "status": "ACTION_REQUIRED",
-            "message": "execution_admission.require_authority_record must remain true",
-        }, sort_keys=True))
-        return 2
-    authority = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "execution_authority.py"
-    code = _run_preflight([sys.executable, str(authority), "--root", str(root), "check"], root=root)
-    if code:
-        return code
-    lifecycle = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "project_lifecycle.py"
-    return _run_preflight([sys.executable, str(lifecycle), "--root", str(root), "check"], root=root)
-
-
-def _epoch_preflight(args: argparse.Namespace) -> int:
-    if args.command not in MUTATING_COMMANDS:
-        return 0
-    root = args.root.resolve()
-    if not _context_epoch_preflight_enabled(root):
-        return 0
-    script = PACKAGE / "skills" / "project-lifecycle-bootstrap" / "scripts" / "context_epoch.py"
-    proc = subprocess.run([sys.executable, str(script), "--root", str(root), "preflight"], text=True, capture_output=True)
-    if proc.returncode:
-        # Keep the public facade JSON-only and fail closed before the kernel mutation.
-        print(proc.stdout.strip() or '{"status":"ACTION_REQUIRED","message":"context epoch ownership preflight failed"}')
-    return proc.returncode
-
-
-def run(argv: list[str] | None = None) -> int:
-    args = parse_invocation(argv, admin=False)
-    return _adoption_preflight(args) or _epoch_preflight(args) or execute(args)
+from buildos.cli import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(run(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))

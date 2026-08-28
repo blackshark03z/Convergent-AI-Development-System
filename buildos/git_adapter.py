@@ -144,11 +144,17 @@ def _path_identity(root: Path, path: str) -> dict[str, Any]:
         raise RuntimeError(f"cannot fingerprint in-progress product path: {path}") from exc
 
 
-def _worktree_fingerprint(root: Path, entries: list[dict[str, str]]) -> str:
+def _worktree_fingerprint(
+    root: Path,
+    entries: list[dict[str, str]],
+    *,
+    include_control: bool = False,
+) -> str:
     payload = {
         "entries": [
             {**entry, "identity": _path_identity(root, entry["path"])}
-            for entry in entries if not _control_path(entry["path"])
+            for entry in entries
+            if include_control or not _control_path(entry["path"])
         ],
     }
     return hashlib.sha256(
@@ -166,6 +172,41 @@ def _worktree_changed_paths(root: Path, *, diff_filter: str) -> list[str]:
     return sorted({line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()})
 
 
+def _raw_type_changed_paths(root: Path, *comparison: str) -> list[str]:
+    """Read Git mode changes directly, including staged index-only changes.
+
+    Filesystem symlink support differs by platform. Git's raw old/new modes are
+    the portable authority for an index or worktree type transition.
+    """
+    proc = _run(
+        root, "diff", "--raw", "-z", "--no-renames", *comparison,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr or proc.stdout or "git type-change observation failed").strip())
+    tokens = proc.stdout.split("\0")
+    result: set[str] = set()
+    index = 0
+    while index + 1 < len(tokens):
+        metadata = tokens[index]
+        path = tokens[index + 1]
+        index += 2
+        if not metadata.startswith(":") or not path:
+            continue
+        fields = metadata[1:].split()
+        if len(fields) < 5:
+            raise RuntimeError("git raw type-change observation is malformed")
+        old_mode, new_mode, _old_blob, _new_blob, status = fields[:5]
+        mode_changed = (
+            old_mode != new_mode
+            and old_mode != "000000"
+            and new_mode != "000000"
+        )
+        if status.startswith("T") or mode_changed:
+            result.add(path.replace("\\", "/"))
+    return sorted(result)
+
+
 def _control_path(path: str) -> bool:
     normalized = path.replace("\\", "/")
     while normalized.startswith("./"):
@@ -178,6 +219,89 @@ def tracked_control_paths(root: Path | str) -> list[str]:
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or proc.stdout or "git tracked-control observation failed").strip())
     return sorted({line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()})
+
+
+def boundary_snapshot(root: Path | str, base: str) -> dict[str, Any]:
+    """Observe the exact live Git delta used by the thin boundary guard.
+
+    This is intentionally read-only.  It reports the immutable commit/tree
+    identity plus fingerprints for the live index and dirty worktree; it does
+    not create a grant, snapshot record, lock, or runtime directory.
+    """
+    requested_root = Path(root).resolve()
+    top = _run(requested_root, "rev-parse", "--show-toplevel", check=False)
+    if top.returncode != 0:
+        raise RuntimeError("repository root is not an observable Git worktree")
+    git_root = Path(top.stdout.strip()).resolve()
+    if os.path.normcase(str(requested_root)) != os.path.normcase(str(git_root)):
+        raise RuntimeError(f"repository root must be the Git top-level: {git_root}")
+
+    base_sha = resolve_commit(git_root, base)
+    observed = snapshot(git_root, base_sha=base_sha)
+    if not observed.get("available") or not observed.get("head"):
+        raise RuntimeError("current Git HEAD is not observable")
+
+    committed_paths = changed_paths(git_root, base_sha, observed["head"])
+    committed_deletions = changed_paths(
+        git_root, base_sha, observed["head"], diff_filter="D",
+    )
+    committed_type_changes = changed_paths(
+        git_root, base_sha, observed["head"], diff_filter="T",
+    )
+    dirty_entries = _dirty_entries(git_root)
+    dirty_paths = sorted({entry["path"] for entry in dirty_entries})
+    worktree_deletions = _worktree_changed_paths(git_root, diff_filter="D")
+    index_type_changes = _raw_type_changed_paths(
+        git_root, "--cached", "HEAD", "--",
+    )
+    worktree_type_changes = _raw_type_changed_paths(git_root, "--")
+
+    index = _run(git_root, "ls-files", "--stage", "-z", check=True).stdout
+    result = {
+        "root": str(git_root),
+        "branch": observed["branch"],
+        "base": base_sha,
+        "head": observed["head"],
+        "tree": observed["tree"],
+        "relation_to_base": observed["relation_to_base"],
+        "case_insensitive_paths": observed["case_insensitive_paths"],
+        "dirty": bool(dirty_entries),
+        "dirty_entries": dirty_entries,
+        "committed_paths": committed_paths,
+        "dirty_paths": dirty_paths,
+        "changed_paths": sorted({*committed_paths, *dirty_paths}),
+        "deleted_paths": sorted({*committed_deletions, *worktree_deletions}),
+        "type_changed_paths": sorted({
+            *committed_type_changes, *index_type_changes, *worktree_type_changes,
+        }),
+        "index_type_changed_paths": index_type_changes,
+        "worktree_type_changed_paths": worktree_type_changes,
+        "tracked_control_paths": tracked_control_paths(git_root),
+        "changed_control_paths": sorted({
+            path for path in {*committed_paths, *dirty_paths}
+            if _control_path(path)
+        }),
+        "index_fingerprint": hashlib.sha256(
+            index.encode("utf-8", "surrogatepass")
+        ).hexdigest(),
+        "worktree_fingerprint": _worktree_fingerprint(
+            git_root, dirty_entries, include_control=True,
+        ),
+    }
+    identity = {
+        key: result[key] for key in (
+            "root", "branch", "base", "head", "tree", "relation_to_base",
+            "dirty_entries", "committed_paths", "deleted_paths",
+            "type_changed_paths", "tracked_control_paths",
+            "index_fingerprint", "worktree_fingerprint",
+        )
+    }
+    result["observed_state_digest"] = hashlib.sha256(
+        (json.dumps(
+            identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ) + "\n").encode("utf-8")
+    ).hexdigest()
+    return result
 
 
 def snapshot(
@@ -228,7 +352,8 @@ def snapshot(
     deletions_since_base = [path for path in changed_paths(root, base_sha, head, diff_filter="D") if not _control_path(path)]
     type_changes_since_base = [path for path in changed_paths(root, base_sha, head, diff_filter="T") if not _control_path(path)]
     worktree_deletions = [path for path in _worktree_changed_paths(root, diff_filter="D") if not _control_path(path)]
-    worktree_type_changes = [path for path in _worktree_changed_paths(root, diff_filter="T") if not _control_path(path)]
+    index_type_changes = [path for path in _raw_type_changed_paths(root, "--cached", "HEAD", "--") if not _control_path(path)]
+    worktree_type_changes = [path for path in _raw_type_changed_paths(root, "--") if not _control_path(path)]
     tracked_control = tracked_control_paths(root)
     result = {
         "available": True,
@@ -250,6 +375,7 @@ def snapshot(
         "type_changes_since_base": type_changes_since_base,
         "worktree_deletions": worktree_deletions,
         "worktree_type_changes": worktree_type_changes,
+        "index_type_changes": index_type_changes,
         "changes_since_product": since_product,
         "changes_since_validated": product_changes,
         "tracked_control_paths": tracked_control,
@@ -264,6 +390,7 @@ def snapshot(
         "type_changes_since_base": result["type_changes_since_base"],
         "worktree_deletions": result["worktree_deletions"],
         "worktree_type_changes": result["worktree_type_changes"],
+        "index_type_changes": result["index_type_changes"],
     }
     result["product_state_digest"] = hashlib.sha256(
         (json.dumps(product_state, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")

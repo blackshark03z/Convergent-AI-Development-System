@@ -1,3 +1,3 @@
-"""Senior AI Build OS v1.25 evidence-carrying Work Loop candidate."""
+"""Build OS simplified consequential-boundary guard."""
 
-__version__ = "1.25-rc4"
+__version__ = "simplified-rc1"
