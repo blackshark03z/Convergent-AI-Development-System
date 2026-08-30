@@ -45,6 +45,7 @@ class SimplifiedEndToEndScenarios(unittest.TestCase):
         architecture = (PACKAGE / "ARCHITECTURE.md").read_text(encoding="utf-8")
         task = (PACKAGE / "TASK.md").read_text(encoding="utf-8")
         status = run_git(PACKAGE, "status", "--porcelain=v2", "--branch")
+        branch = run_git(PACKAGE, "branch", "--show-current")
         log = run_git(PACKAGE, "log", "-3", "--oneline")
 
         for heading in (
@@ -57,7 +58,8 @@ class SimplifiedEndToEndScenarios(unittest.TestCase):
         self.assertIn("Git owns product bytes and history", architecture)
         self.assertIn("Next:", task)
         self.assertIn("8970dc8", task)
-        self.assertIn("# branch.head task/build-os-thin-guard-foundation", status)
+        self.assertTrue(branch)
+        self.assertIn(f"# branch.head {branch}", status)
         self.assertTrue(log)
         self.assertLess(len(agents), 4_000)
         self.assertLess(len(task), 10_000)
