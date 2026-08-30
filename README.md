@@ -12,6 +12,26 @@ understand -> inspect -> edit -> focused test -> ordinary commit -> continue
 No task lifecycle, grant, adoption or continuation operation is required for
 ordinary development.
 
+## Starting or handing off a project
+
+Initialize a new or existing project directory with the canonical context files:
+
+```powershell
+python scripts/bootstrap_project.py --root D:\path\to\project
+```
+
+Inspect legibility without changing anything:
+
+```powershell
+python scripts/bootstrap_project.py --root D:\path\to\project --check
+```
+
+The command creates only missing files and preserves existing files exactly.
+Afterward, a new Tech Lead or Worker follows the target repository's root
+`AGENTS.md`. Durable repository context should carry repository-grounded facts,
+so a long chat handoff is unnecessary; genuinely missing owner intent still
+requires clarification.
+
 ## Public surface
 
 Read current Git and external-effect truth without writes:

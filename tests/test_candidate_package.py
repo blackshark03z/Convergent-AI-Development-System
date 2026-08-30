@@ -52,6 +52,15 @@ class SimplifiedCandidateTests(unittest.TestCase):
             self.assertFalse(any(name.startswith("legacy/") for name in names))
             self.assertIn("ARCHITECTURE.md", names)
             self.assertIn("tests/test_effect_safety.py", names)
+            for name in (
+                "scripts/bootstrap_project.py",
+                "skills/core/project-cold-start.md",
+                "skills/core/workspace-hygiene.md",
+                "templates/project/AGENTS.md",
+                "templates/project/TASK.md",
+                "templates/project/ARCHITECTURE.md",
+            ):
+                self.assertIn(name, names)
 
     def test_archive_is_deterministic_for_same_exact_source(self):
         with tempfile.TemporaryDirectory(prefix="buildos-candidate-") as raw:

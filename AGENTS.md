@@ -1,7 +1,10 @@
 # Worker operating map
 
-Start with `TASK.md`, then verify it against `git status`, `git log -5`, the
-relevant diff and source. Git and current runtime observations beat stale prose.
+On first contact, in a new Tech Lead/Worker session, or whenever prior context
+is unknown or stale, **MUST** follow
+[`skills/core/project-cold-start.md`](skills/core/project-cold-start.md) before
+planning or implementation. Rerun it from current reality; completion is not
+persisted authority.
 
 Canonical commands:
 
