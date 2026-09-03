@@ -1,10 +1,10 @@
 # Goal
 
-<!-- Tech Lead/Owner: state the active outcome. -->
+<!-- Tech Lead/Owner: state one active, bounded, end-to-end product outcome. -->
 
 # Acceptance
 
-<!-- Tech Lead/Owner: state observable completion criteria. -->
+<!-- Tech Lead/Owner: define observable completion criteria before implementation. Do not weaken them post hoc merely to make implementation pass. -->
 
 # Non-goals
 

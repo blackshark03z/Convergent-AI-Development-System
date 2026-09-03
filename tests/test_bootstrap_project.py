@@ -151,7 +151,9 @@ class BootstrapProjectTests(unittest.TestCase):
         architecture = (TEMPLATES / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
         self.assertIn("cold-start", agents)
-        self.assertIn("Git/source wins", agents)
+        self.assertIn("Git/source owns implementation reality", agents)
+        self.assertIn("tests/CI as verification evidence", agents)
+        self.assertIn("predefined Goal acceptance oracle", agents)
         for heading in (
             "# Goal", "# Acceptance", "# Non-goals", "# Constraints",
             "# Material Decisions", "# Progress", "# Discoveries / Blockers",

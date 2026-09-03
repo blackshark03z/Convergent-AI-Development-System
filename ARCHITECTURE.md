@@ -2,13 +2,18 @@
 
 ## Ownership
 
-Git owns product bytes and history. Native tests and CI own verification truth.
-The Owner/Tech Lead owns intent. Workers own repository reasoning, implementation
-and normal reversible local decisions. Build OS only guards explicit
-consequential boundaries.
+The Owner/Tech Lead owns desired outcome and business intent. Identified
+Git/source owns implementation reality. Identified runtime evidence owns
+observed behavior for the source/configuration/environment exercised. Native
+tests and CI provide verification evidence; predefined Goal acceptance
+determines completion. Workers own repository reasoning, implementation and
+normal reversible local decisions. Build OS only guards explicit consequential
+boundaries.
 
-Normal development is not a Build OS lifecycle. An ordinary commit is neither
-a permission transition nor an adoption event.
+Normal development follows the canonical Convergent AI Development Standard in
+`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`; that standard is advisory operating
+discipline, not kernel state. Normal development is not a Build OS lifecycle.
+An ordinary commit is neither a permission transition nor an adoption event.
 
 ## Thin Guard
 

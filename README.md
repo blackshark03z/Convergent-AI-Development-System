@@ -28,9 +28,12 @@ python scripts/bootstrap_project.py --root D:\path\to\project --check
 
 The command creates only missing files and preserves existing files exactly.
 Afterward, a new Tech Lead or Worker follows the target repository's root
-`AGENTS.md`. Durable repository context should carry repository-grounded facts,
-so a long chat handoff is unnecessary; genuinely missing owner intent still
-requires clarification.
+`AGENTS.md`. AI-assisted development follows the canonical
+[`Convergent AI Development Standard v1.0`](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md);
+project files point to that standard rather than duplicating it. Durable
+repository context should carry repository-grounded facts, so a long chat
+handoff is unnecessary; genuinely missing owner intent still requires
+clarification.
 
 ## Public surface
 
@@ -124,6 +127,7 @@ runtime state in the simplified architecture.
 - [AGENTS.md](AGENTS.md): short operating map for a fresh Worker.
 - [ARCHITECTURE.md](ARCHITECTURE.md): durable ownership and safety invariants.
 - [TASK.md](TASK.md): current goal and progress only.
+- [docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md): canonical AI development invariants, DoD, rabbit-hole rule and freeze rule.
 - [docs/EFFECT_SAFETY.md](docs/EFFECT_SAFETY.md): effect contract and recovery semantics.
 - [docs/LEGACY_V125.md](docs/LEGACY_V125.md): historical compatibility boundary.
 

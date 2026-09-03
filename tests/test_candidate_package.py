@@ -54,6 +54,7 @@ class SimplifiedCandidateTests(unittest.TestCase):
             self.assertIn("tests/test_effect_safety.py", names)
             for name in (
                 "scripts/bootstrap_project.py",
+                "docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md",
                 "skills/core/project-cold-start.md",
                 "skills/core/workspace-hygiene.md",
                 "templates/project/AGENTS.md",

@@ -19,13 +19,16 @@ invoked only at an explicitly declared consequential boundary.
 
 Stable invariants:
 
-- Git owns product truth and history; tests/CI own verification truth.
-- Owner/Tech Lead owns intent; `TASK.md` is current context, not runtime authority.
+- Owner/Tech Lead owns desired outcome; identified Git/source owns implementation reality.
+- Identified runtime evidence owns observed behavior; tests/CI provide verification evidence.
+- Goal-defined acceptance determines completion; `TASK.md` is current context, not runtime authority.
 - `expected_paths` warns; `strict_paths` and `prohibited_paths` block.
 - Tracked `.buildos/**` changes cannot cross a guarded boundary.
 - High-cost local actions re-observe immediately before native spawn.
 - External intent is durable before dispatch; ambiguity is never blindly retried.
 - No lifecycle state, generations, adoption, continuation, grants or migration.
 
+Follow the canonical development standard in
+[`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md).
 Durable architecture belongs in `ARCHITECTURE.md`. Keep temporary progress in
 `TASK.md`; do not build parsers, schemas or migrations around it.
