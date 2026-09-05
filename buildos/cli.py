@@ -50,7 +50,7 @@ def _scope(args: argparse.Namespace) -> dict[str, list[str]]:
 def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     del admin
     result = argparse.ArgumentParser(
-        description="Build OS: deterministic guards for explicit consequential boundaries",
+        description="CADS: deterministic guards for explicit consequential boundaries",
     )
     result.add_argument("--root", type=Path, default=Path.cwd(), help="exact repository root")
     commands = result.add_subparsers(dest="command", required=True)

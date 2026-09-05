@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repository-independent entrypoint for the simplified Build OS surface."""
+"""Repository-independent entrypoint for the CADS guard surface."""
 from pathlib import Path
 import sys
 

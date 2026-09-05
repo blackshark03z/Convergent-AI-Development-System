@@ -1,47 +1,44 @@
 # Goal
 
-Produce one stabilized simplified Build OS candidate ready for independent R3.
+Rename the product-facing identity from Build OS to **Convergent AI Development
+System (CADS)** without changing architecture, runtime semantics, authority, or
+compatibility contracts.
 
 # Acceptance
 
-- Thin Guard preserves scope, dirty-worktree, deletion/type-change, control-path and RC1 regressions.
-- High-cost local execution blocks stale state and otherwise invokes native argv once.
-- External intent precedes dispatch; known, ambiguous and reconciled outcomes survive reload.
-- Blind retry is rejected; only exact trusted idempotency or positive no-effect proof can establish retry eligibility.
-- Repository-local evidence is sufficient for Worker and Tech Lead replacement.
-- The simplified CLI is the default; legacy lifecycle machinery is disconnected/demoted.
-- Focused, integration and one full active-suite stabilization gate pass.
-- Exactly one package candidate passes identity, checksum, readback and secret checks.
+- Active product-facing docs, CLI descriptions, scripts, skills and project templates use `Convergent AI Development System (CADS)` or `CADS` consistently.
+- Existing compatibility identifiers remain unchanged where they are technical contracts: Python package `buildos`, `.buildos/**`, `buildos/effects`, schema IDs, CLI/script filenames and historical legacy evidence.
+- The canonical Convergent AI Development Standard remains the development standard inside CADS rather than being renamed into a second concept.
+- Historical simplification/legacy evidence is not mechanically rewritten merely for branding.
+- The full active source-checkout suite passes from the exact rename revision; portable verification remains an extracted-candidate-only gate and is not falsely claimed from a source checkout.
+- One clean local task commit is produced; no push, merge or deployment.
 
 # Non-goals
 
-No task lifecycle, adoption, continuation, executor migration, grants, command
-classifier, provider plugin framework, generic retry scheduler, self-R3,
-promotion, push, merge or deployment.
+No architecture redesign, lifecycle reintroduction, package/module rename,
+protocol/schema migration, state-path migration, GitHub repository rename,
+remote push, merge or deployment.
 
 # Constraints
 
-- Stable ancestor: `ec01a97cce41f3628d00e14f01b76462dd616fe2`.
-- Simplification baseline: `8970dc87a1bad6d649b4bb46272144c2e92b8118`.
-- Frozen v1.26 checkout `13490a05fd2bc3d001b289b0e8d186973707ecb2` is read-only experimental evidence.
-- Durable runtime state is allowed only for external-effect ambiguity.
+- Rename baseline: `7a6053db2b98ce09601a0a4f57e91d7295e8ed3a` (`origin/master`).
+- Work occurs in isolated worktree `D:\Buil OS\_worktrees\cads-rename` on branch `task-cads-rename`.
+- Compatibility-first: branding may change; technical identity changes require separate justification and migration work.
 
 # Material Decisions
 
-- Semantic effect identity binds operation, target and request digest—not a task, worker or changeable idempotency key.
-- Caller strings and self-declared provider semantics are assertions, never trusted retry authority.
-- Effect records live in the common Git administration directory, outside product history and across worktrees.
-- External dispatch is an explicit Python integration seam; the CLI only inspects/reconciles effect truth.
-- Legacy unresolved effects remain read-only detectable; closed legacy lifecycle data is historical.
+- This is a product-facing rename only; architecture and runtime behavior remain unchanged.
+- Technical compatibility identifiers such as `buildos`, `.buildos/**`, schema IDs and effect-state paths remain stable.
+- Historical evidence retains the old name where it describes earlier phases rather than current product identity.
+- The simplified thin-guard lineage remains rooted in baseline `8970dc8`; this rename does not reopen that architecture decision.
 
 # Progress / Discoveries / Next
 
-- Phase 1A Thin Guard committed at `59398a7`.
-- Phase 1B high-cost boundary committed at `8970dc8`.
-- Provider-free Effect Safety, durable ambiguity, explicit dispatch API, thin CLI and fresh-policy reads are implemented and focused tests pass.
-- Legacy lifecycle source/tests/assets are disconnected under `legacy/v125`; unresolved legacy effects have read-only detection and explicit effect-only reconciliation.
-- All fourteen mandatory scenarios are mapped to active executable evidence in `docs/SCENARIO_EVIDENCE.md`.
-- Targeted R3 repair evidence: effect safety 20 passed; candidate package 5 passed; Git/scope 10 passed; affected CLI/end-to-end/high-cost integration 19 passed. Replacement stabilization discovered and passed 54 source-checkout tests with 0 failures and 0 skips.
-- Independent R3 blocked the prior candidate on untrusted retry assertions, unusable exact `PREPARED` records after pre-dispatch drift, and extracted-package test inconsistency.
-- The targeted repair adds exact trusted-proof binding, exact `PREPARED` reuse before any dispatch crossing, portable/source test separation and raw Git-mode type-change detection.
-- Next: if no verified replacement receipt exists for the current clean HEAD, build/read back exactly one replacement; after a matching receipt exists, the next safe action is targeted independent R3 recheck.
+- Confirmed the configured Build OS project root contains the real Git repository as a nested checkout; avoided committing against the parent non-repository state.
+- Confirmed current canonical remote baseline at `origin/master` and created an isolated rename worktree from it.
+- Audited active branding references and separated product-facing names from compatibility/protocol identifiers.
+- Full active source-checkout suite passes 66/66. The portable runner correctly rejects the source checkout with `EXTRACTED_CANDIDATE_REQUIRED`; no candidate package is created for this branding-only task.
+- Final diff/scope review is clean: 13 active files changed, `git diff --check` passes, CLI help identifies `CADS`, and compatibility identifiers remain unchanged by design.
+- This task closes when the reviewed rename is captured in one local commit.
+
+Next: after closure, await Owner decision for any repository-slug rename, promotion, push or merge.

@@ -4,7 +4,7 @@ An advisory, repeatable procedure for reconstructing current project context.
 It creates no authority or persisted cold-start status.
 
 Use the canonical development semantics in
-`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md` when the Build OS skill library is
+`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md` when the CADS skill library is
 available. Do not copy or redefine that Standard inside project context files.
 
 ## When to use

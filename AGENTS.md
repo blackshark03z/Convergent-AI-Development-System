@@ -14,7 +14,7 @@ python scripts/self_test.py
 python scripts/ai.py --root . check --base <sha> --boundary R3 --policy <file>
 ```
 
-Normal edits, focused tests and ordinary commits use native tools. Build OS is
+Normal edits, focused tests and ordinary commits use native tools. CADS is
 invoked only at an explicitly declared consequential boundary.
 
 Stable invariants:
