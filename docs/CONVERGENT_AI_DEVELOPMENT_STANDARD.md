@@ -1,8 +1,9 @@
 # Convergent AI Development Standard v1.0
 
-This is the canonical development standard for AI-assisted work with Thin Build
-OS. It is a reasoning and operating standard, not a lifecycle engine, state
-machine, policy runtime, project profile system, or second Build OS.
+This is the canonical development standard used by Convergent AI Development
+System (CADS). It is a reasoning and operating standard, not a lifecycle engine,
+state machine, policy runtime, project profile system, or a second orchestration
+system.
 
 The invariants are universal. The depth of implementation and verification is
 proportional to consequence, irreversibility, complexity, expected lifetime,
@@ -95,9 +96,9 @@ normal project tools.
 
 External effects, destructive or hard-to-recover owner-data changes,
 privileged/security-sensitive effects, and explicitly high-cost actions cross an
-explicit consequence decision when applicable. Thin Build OS guards only
-boundaries it can actually guarantee; it is not a semantic command classifier or
-general sandbox.
+explicit consequence decision when applicable. CADS guards only boundaries it
+can actually guarantee; it is not a semantic command classifier or general
+sandbox.
 
 ## Goal Definition of Done
 

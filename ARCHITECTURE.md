@@ -1,4 +1,4 @@
-# Simplified Build OS architecture
+# Convergent AI Development System (CADS) architecture
 
 ## Ownership
 
@@ -7,12 +7,12 @@ Git/source owns implementation reality. Identified runtime evidence owns
 observed behavior for the source/configuration/environment exercised. Native
 tests and CI provide verification evidence; predefined Goal acceptance
 determines completion. Workers own repository reasoning, implementation and
-normal reversible local decisions. Build OS only guards explicit consequential
+normal reversible local decisions. CADS only guards explicit consequential
 boundaries.
 
 Normal development follows the canonical Convergent AI Development Standard in
 `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`; that standard is advisory operating
-discipline, not kernel state. Normal development is not a Build OS lifecycle.
+discipline, not kernel state. Normal development is not a CADS lifecycle.
 An ordinary commit is neither a permission transition nor an adoption event.
 
 ## Thin Guard
@@ -31,7 +31,7 @@ fixed and the check is rerun.
 
 ## Explicit execution boundaries
 
-`high-cost` is a cooperative caller declaration. Build OS does not infer danger
+`high-cost` is a cooperative caller declaration. CADS does not infer danger
 from command text. It compares exact observation digests immediately before one
 shell-free native spawn. A microscopic malicious-process race after that point
 requires OS sandboxing and is outside the cooperative-local threat model.
@@ -45,7 +45,7 @@ the dispatch boundary; `DISPATCH_UNCERTAIN` is durable before the provider call.
 
 Retry is only considered safe after trusted positive no-effect proof or trusted
 provider-idempotency proof bound to the same exact effect identity/request.
-Build OS does not automatically retry.
+CADS does not automatically retry.
 
 ## State
 

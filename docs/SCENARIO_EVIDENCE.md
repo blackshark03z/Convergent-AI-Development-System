@@ -9,7 +9,7 @@ The active tests map the frozen end-to-end scenarios to executable evidence:
 5. Clean descendant unauthorized delta blocks: `test_clean_descendant_outside_strict_scope_blocks`.
 6. Worker replacement: repo-local cold-start test plus `AGENTS.md`/Git/source.
 7. Tech Lead replacement: the same test verifies `TASK.md` goal/acceptance/constraints and `ARCHITECTURE.md`.
-8. Build OS/worktree replacement: `test_effect_ambiguity_survives_replacement_worktree_without_migration`.
+8. CADS/worktree replacement: `test_effect_ambiguity_survives_replacement_worktree_without_migration`.
 9. Policy change: `test_scope_policy_is_reread_on_every_invocation_without_migration`.
 10. High-cost drift: committed and dirty `BLOCK_STALE_STATE` tests.
 11. Known external success: `test_known_success_records_intent_before_exactly_one_dispatch`.

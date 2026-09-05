@@ -2,7 +2,7 @@
 
 On first contact, in a new Tech Lead/Worker session, or when context may be
 stale, cold-start from this repository before planning or implementation. If
-the Build OS skill library is available, follow its Project Cold-Start playbook
+the CADS skill library is available, follow its Project Cold-Start playbook
 and canonical Convergent AI Development Standard. Do not copy that Standard into
 this project unless project-specific differences require durable documentation.
 Otherwise:
@@ -19,7 +19,7 @@ Otherwise:
 Preserve owner work. Keep normal development native to the project. Maintain
 bounded divergence: normally one active workline, no unrelated valuable dirty
 stack, and Goal-created experiments/residue that can converge at closure. If
-Build OS is available, use it only at explicitly consequential boundaries; do
+CADS is available, use it only at explicitly consequential boundaries; do
 not add or infer lifecycle, adoption, or continuation concepts.
 
 `TASK.md` holds active context. `ARCHITECTURE.md` holds durable architecture.

@@ -1,7 +1,8 @@
-# Build OS — simplified consequential-boundary guard
+# Convergent AI Development System (CADS)
 
-Build OS leaves normal development to Git, editors, tests, CI and the Worker.
-It deterministically checks explicit consequential boundaries.
+CADS combines the Convergent AI Development Standard, project-entry/cold-start
+protocols, and a thin guard for explicit consequential boundaries. Normal
+development stays native to Git, editors, tests, CI and the Worker.
 
 Normal work stays native:
 
@@ -78,7 +79,7 @@ python scripts/ai.py --root D:\path\to\repo high-cost `
   --base <commit> --strict "src/**" -- python focused_tool.py
 ```
 
-Build OS does not classify the command. It re-observes exact Git state at the
+CADS does not classify the command. It re-observes exact Git state at the
 last practical point, uses native argv without a shell, and either returns
 `BLOCK_STALE_STATE` or invokes the command once.
 
@@ -121,6 +122,10 @@ been persisted. Caller assertions remain non-authoritative metadata.
 Effect records live under the repository's common Git administration directory
 (`buildos/effects`), not product history. This is the only default durable
 runtime state in the simplified architecture.
+
+Compatibility note: the Python package name `buildos`, tracked guard namespace
+`.buildos/**`, and `buildos/effects` state location remain stable internal
+identifiers. The product-facing name is Convergent AI Development System (CADS).
 
 ## Repository map
 

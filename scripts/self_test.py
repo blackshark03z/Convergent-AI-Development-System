@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the active simplified Build OS test suite."""
+"""Run the active CADS test suite."""
 from pathlib import Path
 import subprocess
 import sys

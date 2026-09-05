@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility filename exposing only the simplified Build OS surface."""
+"""Compatibility filename exposing the CADS guard surface."""
 from pathlib import Path
 import sys
 

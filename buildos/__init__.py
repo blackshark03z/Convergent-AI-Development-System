@@ -1,3 +1,3 @@
-"""Build OS simplified consequential-boundary guard."""
+"""CADS consequential-boundary guard compatibility package."""
 
 __version__ = "simplified-rc1"
