@@ -6,6 +6,20 @@ is unknown or stale, **MUST** follow
 planning or implementation. Rerun it from current reality; completion is not
 persisted authority.
 
+Mandatory procedure routing:
+
+- First contact, new session, or stale/unknown context -> `skills/core/project-cold-start.md`.
+- New/materially changed Goal or missing acceptance -> `skills/core/product-goal-framing.md`.
+- Normal implementation under an established Goal -> `skills/core/goal-execution.md`.
+- Bug, regression, failing test, or unexpected runtime/provider behavior -> `skills/core/systematic-debugging.md`.
+- Before a material `FIXED`/`DONE`/product-ready/completion claim -> `skills/core/product-acceptance.md`.
+- Workspace bloat, competing worklines, or Goal closure residue -> `skills/core/workspace-hygiene.md`.
+- Explicit consequential action -> the existing CADS Thin Guard; procedure routing never expands guard authority.
+
+If more than one trigger applies, reconstruct trustworthy context first, then use
+the procedure closest to the current decision. These procedures are advisory
+playbooks, not persisted lifecycle state.
+
 Canonical commands:
 
 ```powershell

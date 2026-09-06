@@ -36,6 +36,14 @@ repository context should carry repository-grounded facts, so a long chat
 handoff is unnecessary; genuinely missing owner intent still requires
 clarification.
 
+The root `AGENTS.md` acts as a thin event router into six advisory core
+playbooks: Project Cold-Start, Product Goal Framing, Goal Execution, Systematic
+Debugging, Product Acceptance, and Workspace Hygiene. They operationalize the
+Standard at the moment a decision is needed; they do not create persisted
+phases, task state, grants, adoption, or an orchestration runtime. Testing,
+runtime identity and observability stay embedded in the relevant procedure
+rather than becoming mandatory subsystems of their own.
+
 ## Public surface
 
 Read current Git and external-effect truth without writes:

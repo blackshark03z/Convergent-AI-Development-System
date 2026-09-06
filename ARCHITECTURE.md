@@ -15,6 +15,22 @@ Normal development follows the canonical Convergent AI Development Standard in
 discipline, not kernel state. Normal development is not a CADS lifecycle.
 An ordinary commit is neither a permission transition nor an adoption event.
 
+## Advisory procedure routing
+
+Root `AGENTS.md` routes current work into a small skill library: cold-start for
+trustworthy context, Product Goal Framing for Goal/CUJ/acceptance, Goal Execution
+for small coherent implementation, Systematic Debugging for current blockers,
+Product Acceptance before completion claims, and Workspace Hygiene for bounded
+closure/bloat. Routing is evaluated from current reality and is not persisted.
+The skills may reference one another to resume the same Goal, but there is no
+workflow engine, phase database or new authority layer.
+
+Project templates expose the minimum context these procedures need. `TASK.md`
+may carry a Critical User Journey and representative acceptance fixture;
+`ARCHITECTURE.md` may carry explicit code/data/config/runtime/effect authority
+boundaries when relevant. Empty/inapplicable sections do not create obligations
+for every project.
+
 ## Thin Guard
 
 Every check derives a disposable `PASS`, `WARN` or `BLOCK` from current Git

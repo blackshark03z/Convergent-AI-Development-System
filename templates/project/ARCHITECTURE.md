@@ -14,6 +14,10 @@
 
 <!-- Durable flows that a new contributor must understand, when relevant. -->
 
+# Authority / State Boundaries
+
+<!-- Populate only when relevant: code/source authority, data authority, configuration authority, runtime identity and consequential external-effect authority. -->
+
 # Stable Invariants
 
 <!-- Properties that changes must preserve. -->

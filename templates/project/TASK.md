@@ -2,9 +2,17 @@
 
 <!-- Tech Lead/Owner: state one active, bounded, end-to-end product outcome. -->
 
+# Critical User Journey
+
+<!-- Tech Lead/Owner: state the shortest real user/product path that proves the Goal, when applicable. -->
+
 # Acceptance
 
 <!-- Tech Lead/Owner: define observable completion criteria before implementation. Do not weaken them post hoc merely to make implementation pass. -->
+
+# Acceptance Fixture / Golden Input
+
+<!-- Tech Lead/Owner: identify the representative real input/project/state used to drive the same journey until acceptance, when applicable. -->
 
 # Non-goals
 
@@ -30,6 +38,7 @@
 
 <!-- Worker may maintain the next bounded action supported by current reality. -->
 
-Goal, Acceptance, Constraints and Material Decisions are owned by the Tech
-Lead/Owner. Progress, Discoveries / Blockers and Next Safe Action may be
-maintained by the Worker. Repository and Git truth beat stale task prose.
+Goal, Critical User Journey, Acceptance, Acceptance Fixture / Golden Input,
+Constraints and Material Decisions are owned by the Tech Lead/Owner. Progress,
+Discoveries / Blockers and Next Safe Action may be maintained by the Worker.
+Repository and Git truth beat stale task prose.
