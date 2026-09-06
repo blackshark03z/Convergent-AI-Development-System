@@ -17,6 +17,7 @@ Mandatory procedure routing:
 - New/materially changed user journey, navigation, or discoverability problem -> `skills/product/user-facing-workflow.md`.
 - New/materially changed screen, component, interaction, responsive layout, or visual hierarchy -> `skills/product/frontend-design.md`.
 - Before user-facing Product Acceptance, or when usability/accessibility/recovery quality is in doubt -> `skills/product/ui-quality-review.md`.
+- Accepted material direction that could change a later session's approach -> persist a Decision Record under `docs/decisions/` using `docs/DECISION_CONTINUITY.md`; this is cross-cutting, not a new lifecycle phase.
 - Explicit consequential action -> the existing CADS Thin Guard; procedure routing never expands guard authority.
 
 If more than one trigger applies, reconstruct trustworthy context first. Frame the
@@ -41,6 +42,7 @@ Stable invariants:
 - Owner/Tech Lead owns desired outcome; identified Git/source owns implementation reality.
 - Identified runtime evidence owns observed behavior; tests/CI provide verification evidence.
 - Goal-defined acceptance determines completion; `TASK.md` is current context, not runtime authority.
+- Accepted Decision Records own durable rationale/settled material direction; chat memory and agent reports do not.
 - `expected_paths` warns; `strict_paths` and `prohibited_paths` block.
 - Tracked `.buildos/**` changes cannot cross a guarded boundary.
 - High-cost local actions re-observe immediately before native spawn.

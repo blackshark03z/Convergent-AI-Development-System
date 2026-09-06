@@ -35,7 +35,12 @@ first.
 6. Identify only the authority/state boundaries material to this Goal: source,
    runtime, configuration, data and consequential external effects when
    relevant.
-7. Choose rigor proportional to consequence. Personal/local tools still need
+7. Apply the Decision Continuity materiality test. If an Owner/Tech Lead choice
+   here would materially change a later session's scope, approach, acceptance,
+   architecture, authoritative path or expensive research, persist it under
+   `docs/decisions/` rather than leaving it only in chat. Use
+   `docs/DECISION_CONTINUITY.md` when available.
+8. Choose rigor proportional to consequence. Personal/local tools still need
    correct acceptance and data safety; they do not automatically need
    enterprise lifecycle machinery.
 
@@ -63,8 +68,10 @@ When authorized, keep the minimum current Goal context in `TASK.md`:
 - Acceptance Fixture / Golden Input, when applicable;
 - Non-goals;
 - Constraints; and
-- material owner/Tech Lead decisions.
+- material owner/Tech Lead decisions relevant to the current Goal.
 
+`TASK.md` may summarize the current decision, but material rationale/direction
+that must survive Goal/chat turnover belongs in an accepted Decision Record.
 Do not add task IDs, lifecycle stages, schemas, persisted status or a planning
 database around this procedure.
 

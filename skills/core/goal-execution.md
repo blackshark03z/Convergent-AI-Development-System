@@ -66,6 +66,15 @@ continuing to harden because work has already started.
 Do not generalize a local fix into a policy subsystem unless repeated evidence,
 material consequence, or the Goal itself requires that generalization.
 
+## Decision continuity
+
+When implementation reveals a material trade-off whose loss could make a later
+session choose a different architecture, authoritative path, provider/framework,
+deliberate non-goal or expensive line of investigation, ensure the accepted
+Owner/Tech Lead decision is persisted under `docs/decisions/` using the Decision
+Continuity Protocol when available. Do not record routine reversible edits or
+turn every checkpoint into a Decision Record.
+
 ## Result contract
 
 Continue the same Goal until one of these is true:

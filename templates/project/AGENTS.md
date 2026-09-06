@@ -7,12 +7,15 @@ and canonical Convergent AI Development Standard. Do not copy that Standard into
 this project unless project-specific differences require durable documentation.
 Otherwise:
 
-1. Read `TASK.md`, `ARCHITECTURE.md`, `README.md` and relevant durable docs.
+1. Read `TASK.md`, `ARCHITECTURE.md`, `docs/decisions/README.md`, `README.md`
+   and only relevant durable docs/Decision Records.
 2. Inspect Git status, canonical branch/HEAD, recent history, relevant diffs and
    source.
 3. Treat tests/CI as verification evidence and identified runtime as observed
    behavior; neither overrides the predefined Goal acceptance oracle.
-4. State the active Goal, Critical User Journey, acceptance, constraints,
+4. Treat accepted Decision Records as durable rationale/settled material
+   direction; chat memory and agent reports are not durable decision authority.
+5. State the active Goal, Critical User Journey, acceptance, constraints,
    completed work, blockers, active workline, remaining work and next safe
    action. Ask only for missing owner intent that current reality cannot recover.
 
@@ -25,6 +28,7 @@ When the CADS skill library is available, route ordinary work by current event:
 - new/materially changed user journey, navigation, or discoverability problem -> User-Facing Workflow;
 - new/materially changed screen/component/interaction/responsive layout -> Frontend Design;
 - before user-facing Product Acceptance, or when usability/accessibility/recovery quality is in doubt -> UI Quality Review;
+- accepted material direction that could change a later session's approach -> persist/update a Decision Record under `docs/decisions/`;
 - before a material completion claim -> Product Acceptance; and
 - workspace bloat / competing worklines / Goal closure residue -> Workspace Hygiene.
 

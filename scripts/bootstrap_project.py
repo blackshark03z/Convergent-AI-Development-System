@@ -10,7 +10,12 @@ import sys
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_ROOT = SOURCE_ROOT / "templates" / "project"
-CANONICAL_FILES = ("AGENTS.md", "TASK.md", "ARCHITECTURE.md")
+CANONICAL_FILES = (
+    "AGENTS.md",
+    "TASK.md",
+    "ARCHITECTURE.md",
+    "docs/decisions/README.md",
+)
 
 
 class BootstrapError(RuntimeError):
@@ -70,6 +75,7 @@ def run(root: Path, *, check: bool = False) -> tuple[dict[str, object], int]:
         target = resolved / name
         data = template_bytes(name)
         try:
+            target.parent.mkdir(parents=True, exist_ok=True)
             with target.open("xb") as stream:
                 stream.write(data)
         except FileExistsError:

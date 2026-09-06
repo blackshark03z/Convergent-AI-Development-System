@@ -22,11 +22,13 @@ Use before planning or implementation when:
 1. Root `AGENTS.md` for the operating map.
 2. `TASK.md` for active intent, predefined acceptance, constraints and progress.
 3. `ARCHITECTURE.md` for durable design and invariants.
-4. `README.md` and only the durable documentation relevant to the task.
-5. `git status` for canonical branch/HEAD, owner work and uncommitted state.
-6. Recent Git history, normally `git log -5`.
-7. Relevant diffs and source for implementation reality.
-8. Tests/CI for verification evidence and current identified runtime observations
+4. `docs/decisions/README.md`, when present, for the active material-decision
+   index; open only Decision Records relevant to the current Goal.
+5. `README.md` and only the durable documentation relevant to the task.
+6. `git status` for canonical branch/HEAD, owner work and uncommitted state.
+7. Recent Git history, normally `git log -5`.
+8. Relevant diffs and source for implementation reality.
+9. Tests/CI for verification evidence and current identified runtime observations
    for observed behavior.
 
 Preserve uncommitted owner work. Do not treat a branch name, old chat, agent
@@ -57,10 +59,11 @@ must not be stored as lifecycle state.
 ## Reconcile contradictions
 
 Check for competing architecture documents, a stale `TASK.md`, README claims
-that disagree with code, completion claims supported only by tests, legacy
-documents presented as current, unidentified runtime/source skew, multiple
-competing worklines, large mixed dirty stacks, and the absence of a clear active
-Goal.
+that disagree with code, accepted material direction that exists only in chat,
+Decision Records whose supersession/current status is ambiguous, completion
+claims supported only by tests, legacy documents presented as current,
+unidentified runtime/source skew, multiple competing worklines, large mixed
+dirty stacks, and the absence of a clear active Goal.
 
 Apply domain-specific authority:
 
@@ -69,14 +72,17 @@ Apply domain-specific authority:
 - Identified runtime evidence: observed behavior.
 - Tests/CI: verification evidence.
 - Durable docs: still-valid design/context.
+- Accepted Decision Records: durable rationale and settled material direction.
 - `TASK.md`: current work context.
-- Agent reports: claims; chat memory: hints.
+- Agent reports: claims; chat memory: hints, never durable decision authority.
 
 When authorized, normalize ordinary documentation using the smallest model:
 
 - `AGENTS.md`: map and operating instructions;
 - `TASK.md`: active Goal context only;
-- `ARCHITECTURE.md`: durable architecture decisions;
+- `ARCHITECTURE.md`: durable current architecture;
+- `docs/decisions/`: material accepted rationale/direction that must survive
+  session changes, following `docs/DECISION_CONTINUITY.md` when available;
 - `README.md`: user/developer usage where appropriate; and
 - Git/source/tests/runtime: current evidence in their respective domains.
 

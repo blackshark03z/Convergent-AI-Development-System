@@ -33,7 +33,11 @@ that definition.
 7. Check that the change has converged: one authoritative product path, no
    accidental competing implementation, and no unpreserved Goal value trapped
    outside the Product HEAD.
-8. If Goal-created workspaces/residue now need closure, hand off to
+8. Check decision continuity: no material accepted Goal/product/architecture
+   direction that would alter a later session remains only in chat, memory or an
+   agent report. Persist it under `docs/decisions/` before closure when the
+   materiality test is met.
+9. If Goal-created workspaces/residue now need closure, hand off to
    `workspace-hygiene.md`; cleanup is not itself proof of product acceptance.
 
 ## Authority and verdicts

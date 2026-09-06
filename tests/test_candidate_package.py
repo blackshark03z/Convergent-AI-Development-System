@@ -55,6 +55,9 @@ class SimplifiedCandidateTests(unittest.TestCase):
             for name in (
                 "scripts/bootstrap_project.py",
                 "docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md",
+                "docs/DECISION_CONTINUITY.md",
+                "docs/decisions/README.md",
+                "docs/decisions/0001-durable-decision-continuity.md",
                 "skills/core/project-cold-start.md",
                 "skills/core/product-goal-framing.md",
                 "skills/core/goal-execution.md",
@@ -65,6 +68,7 @@ class SimplifiedCandidateTests(unittest.TestCase):
                 "skills/product/frontend-design.md",
                 "skills/product/ui-quality-review.md",
                 "templates/project/AGENTS.md",
+                "templates/project/docs/decisions/README.md",
                 "templates/project/TASK.md",
                 "templates/project/ARCHITECTURE.md",
             ):

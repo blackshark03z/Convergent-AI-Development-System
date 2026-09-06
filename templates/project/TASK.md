@@ -24,7 +24,7 @@
 
 # Material Decisions
 
-<!-- Tech Lead/Owner: record decisions that materially shape the work. -->
+<!-- Tech Lead/Owner: summarize decisions that materially shape the current Goal. If losing the rationale/direction could make a later session choose a materially different approach, persist an accepted Decision Record under docs/decisions/ as well. -->
 
 # Progress
 
