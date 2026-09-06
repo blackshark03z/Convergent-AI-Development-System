@@ -22,12 +22,18 @@ When the CADS skill library is available, route ordinary work by current event:
 - new or materially changed Goal / missing acceptance -> Product Goal Framing;
 - implementation under an established Goal -> Goal Execution;
 - bug / regression / failing test / unexpected runtime behavior -> Systematic Debugging;
+- new/materially changed user journey, navigation, or discoverability problem -> User-Facing Workflow;
+- new/materially changed screen/component/interaction/responsive layout -> Frontend Design;
+- before user-facing Product Acceptance, or when usability/accessibility/recovery quality is in doubt -> UI Quality Review;
 - before a material completion claim -> Product Acceptance; and
 - workspace bloat / competing worklines / Goal closure residue -> Workspace Hygiene.
 
-Use the CADS Thin Guard only for explicitly consequential boundaries. Procedure
-routing does not grant authority and must not be turned into lifecycle state,
-phase tracking, adoption, continuation, or a task database.
+For user-facing work, frame the Product Goal first, resolve workflow/information
+architecture before visual implementation, debug concrete defects scientifically,
+and review the real rendered UI before Product Acceptance. Use the CADS Thin
+Guard only for explicitly consequential boundaries. Procedure routing does not
+grant authority and must not be turned into lifecycle state, phase tracking,
+adoption, continuation, or a task database.
 
 Preserve owner work. Keep normal development native to the project. Maintain
 bounded divergence: normally one active workline, no unrelated valuable dirty

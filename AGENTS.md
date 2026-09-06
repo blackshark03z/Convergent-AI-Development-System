@@ -14,11 +14,16 @@ Mandatory procedure routing:
 - Bug, regression, failing test, or unexpected runtime/provider behavior -> `skills/core/systematic-debugging.md`.
 - Before a material `FIXED`/`DONE`/product-ready/completion claim -> `skills/core/product-acceptance.md`.
 - Workspace bloat, competing worklines, or Goal closure residue -> `skills/core/workspace-hygiene.md`.
+- New/materially changed user journey, navigation, or discoverability problem -> `skills/product/user-facing-workflow.md`.
+- New/materially changed screen, component, interaction, responsive layout, or visual hierarchy -> `skills/product/frontend-design.md`.
+- Before user-facing Product Acceptance, or when usability/accessibility/recovery quality is in doubt -> `skills/product/ui-quality-review.md`.
 - Explicit consequential action -> the existing CADS Thin Guard; procedure routing never expands guard authority.
 
-If more than one trigger applies, reconstruct trustworthy context first, then use
-the procedure closest to the current decision. These procedures are advisory
-playbooks, not persisted lifecycle state.
+If more than one trigger applies, reconstruct trustworthy context first. Frame the
+Product Goal before UI work; resolve user journey/information architecture before
+visual implementation; use Systematic Debugging for actual defects; run UI
+Quality Review before user-facing Product Acceptance. These procedures are
+advisory playbooks, not persisted lifecycle state.
 
 Canonical commands:
 

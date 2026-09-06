@@ -156,7 +156,8 @@ class BootstrapProjectTests(unittest.TestCase):
         self.assertIn("predefined Goal acceptance oracle", agents)
         for procedure in (
             "Product Goal Framing", "Goal Execution", "Systematic Debugging",
-            "Product Acceptance", "Workspace Hygiene",
+            "Product Acceptance", "Workspace Hygiene", "User-Facing Workflow",
+            "Frontend Design", "UI Quality Review",
         ):
             self.assertIn(procedure, agents)
         for heading in (
@@ -184,6 +185,15 @@ class BootstrapProjectTests(unittest.TestCase):
             "systematic-debugging.md",
             "product-acceptance.md",
             "workspace-hygiene.md",
+        ):
+            self.assertTrue((skills / name).is_file(), name)
+
+    def test_product_ui_skill_library_contains_conditional_playbooks(self):
+        skills = PACKAGE / "skills" / "product"
+        for name in (
+            "user-facing-workflow.md",
+            "frontend-design.md",
+            "ui-quality-review.md",
         ):
             self.assertTrue((skills / name).is_file(), name)
 
