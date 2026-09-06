@@ -15,6 +15,14 @@ Normal development follows the canonical Convergent AI Development Standard in
 discipline, not kernel state. Normal development is not a CADS lifecycle.
 An ordinary commit is neither a permission transition nor an adoption event.
 
+The advisory procedure library has two layers: six universal core playbooks and
+conditional product/UI playbooks. User-Facing Workflow shapes task flow and
+information architecture; Frontend Design implements the interface and relevant
+states/accessibility; UI Quality Review examines the real rendered journey before
+user-facing Product Acceptance. These procedures create no design authority or
+persisted UX phase. A shared design-system artifact remains optional and
+project-specific rather than part of bootstrap or kernel architecture.
+
 ## Advisory procedure routing
 
 Root `AGENTS.md` routes current work into a small skill library: cold-start for

@@ -1,85 +1,89 @@
 # Goal
 
-Add a thin event-routed core playbook layer so recurring AI-development failure
-modes are handled at the right moment without turning CADS into a lifecycle or
-workflow engine.
+Add a thin conditional UI/UX procedure layer so AI-built user-facing products
+converge on discoverable workflows, deliberate frontend implementation, and
+real rendered usability without turning CADS into a design OS.
 
 # Critical User Journey
 
-Fresh Tech Lead/Worker enters a project -> reconstructs current reality -> frames
-one bounded Goal and acceptance -> implements in small coherent changes -> uses
-systematic debugging on the first blocker -> resumes the same real journey ->
-proves the canonical runtime/output -> requests Owner acceptance when required ->
-performs only bounded workspace closure.
+A Tech Lead/Worker with a user-facing Goal -> frames the Product Goal -> shapes
+the user journey/navigation around operator intent -> implements the interface
+with complete relevant states/accessibility -> exercises the real rendered flow
+-> reviews only high-impact UX findings -> fixes blockers -> proceeds to Product
+Acceptance.
 
 # Acceptance
 
-- Root/project `AGENTS.md` route current events to six core advisory playbooks.
-- Four new core skills cover Product Goal Framing, Goal Execution, Systematic
-  Debugging and Product Acceptance while existing Cold-Start and Workspace
-  Hygiene remain authoritative for their concerns.
-- `TASK.md` template carries Critical User Journey and Acceptance Fixture /
-  Golden Input without adding schema/lifecycle state.
-- `ARCHITECTURE.md` template can state code/data/config/runtime/effect authority
-  boundaries when relevant.
-- Testing/runtime/observability/UX are not promoted into mandatory core
-  subsystems; Thin Guard and the canonical Standard remain semantically
-  unchanged.
-- Bootstrap/candidate tests prove procedure wiring and all six skills are
-  packaged; the full active source-checkout suite passes.
-- One clean local task commit is produced; no push, merge or deployment.
+- Add exactly three conditional product/UI skills: User-Facing Workflow,
+  Frontend Design, and UI Quality Review.
+- Root/project `AGENTS.md` route user-facing triggers into those skills while the
+  existing six core playbooks remain universal and unchanged in role.
+- Workflow/information architecture precedes visual implementation when both are
+  material; Systematic Debugging remains the path for concrete defects; UI
+  Quality Review precedes user-facing Product Acceptance.
+- Frontend Design embeds relevant interaction states, responsive verification,
+  accessibility basics, reuse-first visual discipline, and actual rendered UI
+  verification.
+- UI Quality Review returns only high-impact `BLOCKER`, `HIGH`, or
+  `DEFERRED_POLISH` findings and does not create an open-ended redesign chain.
+- No mandatory design system, `DESIGN.md`, Figma workflow, accessibility
+  subsystem, visual scoring engine, or persisted UX lifecycle is introduced.
+- Candidate packaging/tests prove all three product/UI skills and router wiring;
+  the full active source-checkout suite passes.
+- One clean local task commit is produced before any promotion decision.
 
 # Acceptance Fixture / Golden Input
 
-Bootstrap a temporary empty project from the current package and verify the
-resulting canonical project files plus a simplified candidate package built from
-the exact source revision.
+Use the CADS project bootstrap/template and candidate-package tests as the
+mechanical fixture, plus current root `AGENTS.md` routing as the procedure
+contract. The skills themselves must remain self-contained advisory procedures.
 
 # Non-goals
 
-No Thin Guard redesign, Standard v2, task/lifecycle engine, persisted skill
-state, testing framework, observability platform, UX framework, provider system,
-legacy rewrite, remote push, merge or deployment.
+No Thin Guard redesign, Standard v2, design-system framework, component library,
+CSS/token runtime, screenshot scoring service, browser automation framework,
+legacy rewrite, provider integration, or product-specific UI redesign.
 
 # Constraints
 
-- Preserve the simplified native-development architecture.
-- Keep procedure routing advisory and current-reality-driven.
+- Preserve the simplified native-development architecture and existing six core
+  playbooks.
 - Do not modify `buildos/**`, legacy lifecycle sources, or the canonical
-  Convergent AI Development Standard for this Goal.
-- Reuse existing bootstrap/package mechanisms rather than adding a new loader or
-  registry.
+  Convergent AI Development Standard.
+- Product/UI skills are conditional; non-user-facing projects must not pay their
+  process cost.
+- Accessibility uses established semantic/native and WCAG/WAI-ARIA-aligned
+  practice inside the relevant skills rather than a new subsystem.
 
 # Material Decisions
 
-- Core remains exactly six playbooks: Project Cold-Start, Product Goal Framing,
-  Goal Execution, Systematic Debugging, Product Acceptance, Workspace Hygiene.
-- `AGENTS.md` is the event router; skills are procedures; project templates hold
-  context; scripts/tests verify mechanical wiring only; Thin Guard retains only
-  consequential-action safety.
-- Stable Goal + small coherent implementation batches is the execution model.
-- A removed blocker returns immediately to the original journey; non-blocking
-  anomalies become deferred debt.
+- `skills/core/` remains exactly the six universal procedures already promoted.
+- UI/UX procedures live under `skills/product/` because they are conditional on
+  user-facing work.
+- User-Facing Workflow owns task flow/navigation/discoverability reasoning;
+  Frontend Design owns implementation craft and rendered-state verification; UI
+  Quality Review owns bounded usability/accessibility review before acceptance.
+- A design-system skill is deferred until repeated evidence across projects
+  proves a shared-rule problem that cannot be handled locally.
 - The simplified thin-guard lineage remains rooted in baseline `8970dc8`; this
   Goal does not reopen or reinterpret that architecture decision.
 
 # Progress / Discoveries / Next
 
-- Final architecture review completed before implementation.
-- Local branch `task/cads-event-routed-core-playbooks` created from clean
-  `origin/master` baseline `199a7768c5f909f62d3fd83c1252a095ae6c10de`.
-- Existing Standard already contains most durable invariants; the missing layer
-  is event-triggered procedure routing, not another Standard revision.
-- Existing bootstrap is intentionally non-destructive and project templates are
-  the correct place for CUJ/golden-input and authority-boundary context.
-- Focused bootstrap/candidate tests pass 18/18.
-- Full suite exposed one compatibility-only failure: root `TASK.md` must retain
-  the historical `# Progress / Discoveries / Next` heading used by the E2E
-  cold-start contract. The root task now preserves that contract without
-  weakening the new project template.
-- The affected E2E cold-start test passes after the compatibility fix.
-- Full active source-checkout suite passes 67/67 with
+- Researched current UX/service/accessibility standards and representative
+  GitHub agent skills before implementation.
+- Chosen minimum sufficient layer: three conditional product/UI skills, not a
+  broad UI/UX framework.
+- Started from clean `master` synchronized with `origin/master` and created
+  branch `task/cads-uiux-product-skills`.
+- Implemented the three conditional product/UI skills plus router/docs/test
+  wiring without modifying `buildos/**`, legacy sources, or the canonical
+  Standard.
+- `git diff --check` passes and the changed-file scope matches the Goal.
+- Focused bootstrap/candidate tests pass 19/19.
+- Full active source-checkout suite passes 68/68 with
   `SIMPLIFIED_ACTIVE_SUITE=PASS`.
 
-Next: review final diff/scope, rerun verification on the exact final bytes, then
-capture one clean local task commit. No push, merge or deployment.
+Next: verify the final documentation-only checkpoint still satisfies the E2E
+cold-start contract, review/stage the exact Goal scope, then capture one clean
+local commit. No push, merge or deployment is part of this checkpoint.

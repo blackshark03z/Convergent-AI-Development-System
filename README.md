@@ -38,11 +38,15 @@ clarification.
 
 The root `AGENTS.md` acts as a thin event router into six advisory core
 playbooks: Project Cold-Start, Product Goal Framing, Goal Execution, Systematic
-Debugging, Product Acceptance, and Workspace Hygiene. They operationalize the
-Standard at the moment a decision is needed; they do not create persisted
-phases, task state, grants, adoption, or an orchestration runtime. Testing,
-runtime identity and observability stay embedded in the relevant procedure
-rather than becoming mandatory subsystems of their own.
+Debugging, Product Acceptance, and Workspace Hygiene. Conditional product/UI
+work adds three advisory playbooks: User-Facing Workflow, Frontend Design, and UI
+Quality Review. They operationalize the Standard at the moment a decision is
+needed; they do not create persisted phases, task state, grants, adoption, or an
+orchestration runtime. Testing, runtime identity, observability, accessibility,
+and UI review stay embedded in the relevant procedure rather than becoming
+mandatory subsystems of their own. A design-system layer is intentionally not
+mandatory; introduce shared design rules only when repeated product evidence
+shows they are needed.
 
 ## Public surface
 
@@ -142,6 +146,9 @@ identifiers. The product-facing name is Convergent AI Development System (CADS).
 - [TASK.md](TASK.md): current goal and progress only.
 - [docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md): canonical AI development invariants, DoD, rabbit-hole rule and freeze rule.
 - [docs/EFFECT_SAFETY.md](docs/EFFECT_SAFETY.md): effect contract and recovery semantics.
+- [skills/product/user-facing-workflow.md](skills/product/user-facing-workflow.md): task-flow, navigation and discoverability procedure for user-facing Goals.
+- [skills/product/frontend-design.md](skills/product/frontend-design.md): deliberate frontend implementation, states, accessibility and rendered verification.
+- [skills/product/ui-quality-review.md](skills/product/ui-quality-review.md): high-impact usability/accessibility review before user-facing acceptance.
 - [docs/LEGACY_V125.md](docs/LEGACY_V125.md): historical compatibility boundary.
 
 From a Git source checkout, run the full active stabilization suite with:
