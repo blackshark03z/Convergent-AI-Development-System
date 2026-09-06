@@ -11,7 +11,12 @@ import unittest
 PACKAGE = Path(__file__).resolve().parents[1]
 SCRIPT = PACKAGE / "scripts" / "bootstrap_project.py"
 TEMPLATES = PACKAGE / "templates" / "project"
-CANONICAL = ("AGENTS.md", "TASK.md", "ARCHITECTURE.md")
+CANONICAL = (
+    "AGENTS.md",
+    "TASK.md",
+    "ARCHITECTURE.md",
+    "docs/decisions/README.md",
+)
 
 
 def invoke(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -83,6 +88,23 @@ class BootstrapProjectTests(unittest.TestCase):
     def test_existing_architecture_is_preserved_byte_for_byte(self):
         self.assert_existing_file_preserved("ARCHITECTURE.md")
 
+    def test_existing_decision_index_is_preserved_byte_for_byte(self):
+        with tempfile.TemporaryDirectory(prefix="buildos-bootstrap-") as raw:
+            root = Path(raw)
+            target = root / "docs" / "decisions" / "README.md"
+            target.parent.mkdir(parents=True)
+            original = b"owner decision index\r\n"
+            target.write_bytes(original)
+
+            result = invoke(root)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(target.read_bytes(), original)
+            self.assertIn(
+                "docs/decisions/README.md",
+                json.loads(result.stdout)["preserved"],
+            )
+
     def test_mixed_target_creates_only_missing_files(self):
         with tempfile.TemporaryDirectory(prefix="buildos-bootstrap-") as raw:
             root = Path(raw)
@@ -93,7 +115,10 @@ class BootstrapProjectTests(unittest.TestCase):
             payload = json.loads(result.stdout)
 
             self.assertEqual(result.returncode, 0)
-            self.assertEqual(payload["created"], ["AGENTS.md", "ARCHITECTURE.md"])
+            self.assertEqual(
+                payload["created"],
+                ["AGENTS.md", "ARCHITECTURE.md", "docs/decisions/README.md"],
+            )
             self.assertEqual(payload["preserved"], ["TASK.md"])
             self.assertEqual((root / "TASK.md").read_bytes(), owner)
 
@@ -113,7 +138,9 @@ class BootstrapProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="buildos-bootstrap-") as raw:
             root = Path(raw)
             for name in CANONICAL:
-                (root / name).write_text(name, encoding="utf-8")
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(name, encoding="utf-8")
 
             result = invoke(root, "--check")
             payload = json.loads(result.stdout)
@@ -132,7 +159,10 @@ class BootstrapProjectTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 1)
             self.assertEqual(payload["result"], "BOOTSTRAP_REQUIRED")
-            self.assertEqual(payload["missing"], ["TASK.md", "ARCHITECTURE.md"])
+            self.assertEqual(
+                payload["missing"],
+                ["TASK.md", "ARCHITECTURE.md", "docs/decisions/README.md"],
+            )
 
     def test_invalid_root_fails_clearly(self):
         with tempfile.TemporaryDirectory(prefix="buildos-bootstrap-") as raw:
@@ -149,6 +179,9 @@ class BootstrapProjectTests(unittest.TestCase):
         agents = (TEMPLATES / "AGENTS.md").read_text(encoding="utf-8")
         task = (TEMPLATES / "TASK.md").read_text(encoding="utf-8")
         architecture = (TEMPLATES / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        decisions = (TEMPLATES / "docs" / "decisions" / "README.md").read_text(
+            encoding="utf-8",
+        )
 
         self.assertIn("cold-start", agents)
         self.assertIn("Git/source owns implementation reality", agents)
@@ -175,6 +208,9 @@ class BootstrapProjectTests(unittest.TestCase):
             "# External Boundaries", "# Deprecated / Legacy Notes",
         ):
             self.assertIn(heading, architecture)
+        self.assertIn("# Active Decision Index", decisions)
+        self.assertIn("material", decisions.lower())
+        self.assertIn("Superseded", decisions)
 
     def test_core_skill_library_contains_event_routed_playbooks(self):
         skills = PACKAGE / "skills" / "core"

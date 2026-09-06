@@ -39,6 +39,17 @@ may carry a Critical User Journey and representative acceptance fixture;
 boundaries when relevant. Empty/inapplicable sections do not create obligations
 for every project.
 
+## Decision continuity
+
+Material accepted rationale/direction that must survive chat or agent turnover is
+stored as lightweight docs-as-code under `docs/decisions/`, following
+`docs/DECISION_CONTINUITY.md`. Bootstrap creates only the active decision index;
+detailed records exist only when the materiality test is met. Accepted records
+are superseded rather than silently rewritten. Decision Records complement, but
+do not replace, current `TASK.md`, `ARCHITECTURE.md`, Git/source, tests or runtime
+evidence. No decision database, context service, vector store or seventh core
+skill is introduced.
+
 ## Thin Guard
 
 Every check derives a disposable `PASS`, `WARN` or `BLOCK` from current Git

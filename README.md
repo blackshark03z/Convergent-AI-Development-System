@@ -48,6 +48,14 @@ mandatory subsystems of their own. A design-system layer is intentionally not
 mandatory; introduce shared design rules only when repeated product evidence
 shows they are needed.
 
+Material decisions that must survive chat/agent turnover use the lightweight
+[Decision Continuity Protocol](docs/DECISION_CONTINUITY.md). Bootstrap creates a
+small `docs/decisions/README.md` active index. Detailed Decision Records are
+created only when losing an accepted decision could materially change a later
+session's scope, approach, acceptance, architecture, authoritative path or
+expensive research. Decision continuity is docs-as-code, not a seventh core
+skill, context database or lifecycle state.
+
 ## Public surface
 
 Read current Git and external-effect truth without writes:

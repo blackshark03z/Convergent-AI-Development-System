@@ -1,89 +1,94 @@
 # Goal
 
-Add a thin conditional UI/UX procedure layer so AI-built user-facing products
-converge on discoverable workflows, deliberate frontend implementation, and
-real rendered usability without turning CADS into a design OS.
+Add lightweight durable decision continuity so material project-direction choices
+survive chat/Tech Lead/Worker turnover without turning CADS into a context or
+lifecycle management system.
 
 # Critical User Journey
 
-A Tech Lead/Worker with a user-facing Goal -> frames the Product Goal -> shapes
-the user journey/navigation around operator intent -> implements the interface
-with complete relevant states/accessibility -> exercises the real rendered flow
--> reviews only high-impact UX findings -> fixes blockers -> proceeds to Product
-Acceptance.
+Owner/Tech Lead makes a material direction decision -> the current CADS procedure
+applies a materiality test -> accepted rationale/direction is persisted in a
+short repository Decision Record -> future Tech Lead/Worker cold-start reads the
+active index and only relevant records -> continues from the settled direction
+instead of rediscovering or silently reopening it.
 
 # Acceptance
 
-- Add exactly three conditional product/UI skills: User-Facing Workflow,
-  Frontend Design, and UI Quality Review.
-- Root/project `AGENTS.md` route user-facing triggers into those skills while the
-  existing six core playbooks remain universal and unchanged in role.
-- Workflow/information architecture precedes visual implementation when both are
-  material; Systematic Debugging remains the path for concrete defects; UI
-  Quality Review precedes user-facing Product Acceptance.
-- Frontend Design embeds relevant interaction states, responsive verification,
-  accessibility basics, reuse-first visual discipline, and actual rendered UI
-  verification.
-- UI Quality Review returns only high-impact `BLOCKER`, `HIGH`, or
-  `DEFERRED_POLISH` findings and does not create an open-ended redesign chain.
-- No mandatory design system, `DESIGN.md`, Figma workflow, accessibility
-  subsystem, visual scoring engine, or persisted UX lifecycle is introduced.
-- Candidate packaging/tests prove all three product/UI skills and router wiring;
-  the full active source-checkout suite passes.
-- One clean local task commit is produced before any promotion decision.
+- Add a lightweight Decision Continuity Protocol defining authority, materiality,
+  record format, supersession and bounded reading rules.
+- Bootstrap creates a small `docs/decisions/README.md` active decision index while
+  preserving all existing project files byte-for-byte.
+- Detailed Decision Records are created only for material accepted decisions;
+  routine reversible edits/checkpoints do not become records.
+- Project Cold-Start reads the active index and relevant accepted Decision
+  Records before planning when present.
+- Product Goal Framing, Goal Execution and Product Acceptance enforce decision
+  continuity at the moments material direction is created, discovered or closed.
+- Root/project `AGENTS.md` state that accepted Decision Records own durable
+  rationale/settled direction while chat memory/agent reports do not.
+- Accepted records are superseded rather than silently rewritten.
+- Existing six core skills, three conditional UI/UX skills, Thin Guard and the
+  canonical Convergent AI Development Standard remain unchanged in role.
+- Candidate/bootstrap/E2E tests prove the new index/protocol wiring and the full
+  active source-checkout suite passes.
+- Promotion finishes with clean synchronized `master` after post-merge tests.
 
 # Acceptance Fixture / Golden Input
 
-Use the CADS project bootstrap/template and candidate-package tests as the
-mechanical fixture, plus current root `AGENTS.md` routing as the procedure
-contract. The skills themselves must remain self-contained advisory procedures.
+Bootstrap a temporary empty project and verify that the canonical context now
+includes `docs/decisions/README.md`; rerun bootstrap to prove byte-preserving
+idempotence. Use CADS itself as the first real Decision Record example by
+persisting this accepted Decision Continuity direction under `docs/decisions/`.
 
 # Non-goals
 
-No Thin Guard redesign, Standard v2, design-system framework, component library,
-CSS/token runtime, screenshot scoring service, browser automation framework,
-legacy rewrite, provider integration, or product-specific UI redesign.
+No memory database, vector store, context server, transcript ingestion, meeting
+minutes archive, ADR approval workflow, task lifecycle, schema registry,
+automatic decision extraction, Standard v2, Thin Guard redesign or legacy
+rewrite.
 
 # Constraints
 
-- Preserve the simplified native-development architecture and existing six core
-  playbooks.
-- Do not modify `buildos/**`, legacy lifecycle sources, or the canonical
-  Convergent AI Development Standard.
-- Product/UI skills are conditional; non-user-facing projects must not pay their
-  process cost.
-- Accessibility uses established semantic/native and WCAG/WAI-ARIA-aligned
-  practice inside the relevant skills rather than a new subsystem.
+- Decision continuity is docs-as-code and cross-cutting, not a seventh core
+  skill or persisted workflow phase.
+- Context must stay bounded: cold-start reads the index and only relevant records,
+  not the entire historical decision archive.
+- Do not modify `buildos/**`, legacy lifecycle sources, or
+  `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`.
+- Preserve pre-existing bootstrap targets exactly; create only missing canonical
+  context paths.
 
 # Material Decisions
 
-- `skills/core/` remains exactly the six universal procedures already promoted.
-- UI/UX procedures live under `skills/product/` because they are conditional on
-  user-facing work.
-- User-Facing Workflow owns task flow/navigation/discoverability reasoning;
-  Frontend Design owns implementation craft and rendered-state verification; UI
-  Quality Review owns bounded usability/accessibility review before acceptance.
-- A design-system skill is deferred until repeated evidence across projects
-  proves a shared-rule problem that cannot be handled locally.
+- A material decision discussed only in chat/memory/report is not durable project
+  truth; accepted material direction must be persisted in the repository.
+- `docs/decisions/README.md` is the active decision index and is bootstrapped by
+  default; detailed records are conditional on the materiality test.
+- Decision Records preserve WHY/settled direction. `TASK.md` preserves current
+  Goal context, `ARCHITECTURE.md` current system design, Git/source implementation
+  reality, and tests/runtime verification/observed reality.
+- Accepted history is superseded rather than silently rewritten.
 - The simplified thin-guard lineage remains rooted in baseline `8970dc8`; this
   Goal does not reopen or reinterpret that architecture decision.
 
 # Progress / Discoveries / Next
 
-- Researched current UX/service/accessibility standards and representative
-  GitHub agent skills before implementation.
-- Chosen minimum sufficient layer: three conditional product/UI skills, not a
-  broad UI/UX framework.
-- Started from clean `master` synchronized with `origin/master` and created
-  branch `task/cads-uiux-product-skills`.
-- Implemented the three conditional product/UI skills plus router/docs/test
-  wiring without modifying `buildos/**`, legacy sources, or the canonical
-  Standard.
-- `git diff --check` passes and the changed-file scope matches the Goal.
-- Focused bootstrap/candidate tests pass 19/19.
-- Full active source-checkout suite passes 68/68 with
+- Started from clean `master` synchronized with `origin/master` (`0/0`) and
+  created branch `task/cads-decision-continuity`.
+- Confirmed the existing bootstrap only created three root context files and had
+  no durable location for cross-session material decisions.
+- Chosen minimum sufficient design: one protocol, one bootstrapped active index,
+  conditional detailed Decision Records, and integration into existing CADS
+  playbooks rather than a new core skill/subsystem.
+- Implemented Decision Continuity protocol/index/self-hosted DR plus bootstrap,
+  playbook, router, docs and packaging/test wiring without modifying
+  `buildos/**`, legacy sources or the canonical Standard.
+- Initial focused suite exposed one test-fixture-only nested-path assumption; the
+  production bootstrap behavior was unchanged and the fixture was corrected.
+- Focused bootstrap/candidate/E2E suite passes 21/21.
+- Full active source-checkout suite passes 69/69 with
   `SIMPLIFIED_ACTIVE_SUITE=PASS`.
 
-Next: verify the final documentation-only checkpoint still satisfies the E2E
-cold-start contract, review/stage the exact Goal scope, then capture one clean
-local commit. No push, merge or deployment is part of this checkpoint.
+Next: final E2E/diff/scope review on exact bytes, then commit, push task branch,
+merge to `master`, rerun the post-merge full suite, push `master`, verify
+local/remote identity, and clean the task branch.
