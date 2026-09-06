@@ -154,8 +154,14 @@ class BootstrapProjectTests(unittest.TestCase):
         self.assertIn("Git/source owns implementation reality", agents)
         self.assertIn("tests/CI as verification evidence", agents)
         self.assertIn("predefined Goal acceptance oracle", agents)
+        for procedure in (
+            "Product Goal Framing", "Goal Execution", "Systematic Debugging",
+            "Product Acceptance", "Workspace Hygiene",
+        ):
+            self.assertIn(procedure, agents)
         for heading in (
-            "# Goal", "# Acceptance", "# Non-goals", "# Constraints",
+            "# Goal", "# Critical User Journey", "# Acceptance",
+            "# Acceptance Fixture / Golden Input", "# Non-goals", "# Constraints",
             "# Material Decisions", "# Progress", "# Discoveries / Blockers",
             "# Next Safe Action",
         ):
@@ -163,11 +169,23 @@ class BootstrapProjectTests(unittest.TestCase):
         self.assertIn("owned by the Tech", task)
         for heading in (
             "# System Purpose", "# Architecture", "# Components",
-            "# Data / Control Flow", "# Stable Invariants",
-            "# Important Tradeoffs / Decisions", "# External Boundaries",
-            "# Deprecated / Legacy Notes",
+            "# Data / Control Flow", "# Authority / State Boundaries",
+            "# Stable Invariants", "# Important Tradeoffs / Decisions",
+            "# External Boundaries", "# Deprecated / Legacy Notes",
         ):
             self.assertIn(heading, architecture)
+
+    def test_core_skill_library_contains_event_routed_playbooks(self):
+        skills = PACKAGE / "skills" / "core"
+        for name in (
+            "project-cold-start.md",
+            "product-goal-framing.md",
+            "goal-execution.md",
+            "systematic-debugging.md",
+            "product-acceptance.md",
+            "workspace-hygiene.md",
+        ):
+            self.assertTrue((skills / name).is_file(), name)
 
     def test_bootstrap_never_creates_buildos_runtime_state(self):
         with tempfile.TemporaryDirectory(prefix="buildos-bootstrap-") as raw:

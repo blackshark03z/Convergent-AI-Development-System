@@ -1,44 +1,85 @@
 # Goal
 
-Rename the product-facing identity from Build OS to **Convergent AI Development
-System (CADS)** without changing architecture, runtime semantics, authority, or
-compatibility contracts.
+Add a thin event-routed core playbook layer so recurring AI-development failure
+modes are handled at the right moment without turning CADS into a lifecycle or
+workflow engine.
+
+# Critical User Journey
+
+Fresh Tech Lead/Worker enters a project -> reconstructs current reality -> frames
+one bounded Goal and acceptance -> implements in small coherent changes -> uses
+systematic debugging on the first blocker -> resumes the same real journey ->
+proves the canonical runtime/output -> requests Owner acceptance when required ->
+performs only bounded workspace closure.
 
 # Acceptance
 
-- Active product-facing docs, CLI descriptions, scripts, skills and project templates use `Convergent AI Development System (CADS)` or `CADS` consistently.
-- Existing compatibility identifiers remain unchanged where they are technical contracts: Python package `buildos`, `.buildos/**`, `buildos/effects`, schema IDs, CLI/script filenames and historical legacy evidence.
-- The canonical Convergent AI Development Standard remains the development standard inside CADS rather than being renamed into a second concept.
-- Historical simplification/legacy evidence is not mechanically rewritten merely for branding.
-- The full active source-checkout suite passes from the exact rename revision; portable verification remains an extracted-candidate-only gate and is not falsely claimed from a source checkout.
+- Root/project `AGENTS.md` route current events to six core advisory playbooks.
+- Four new core skills cover Product Goal Framing, Goal Execution, Systematic
+  Debugging and Product Acceptance while existing Cold-Start and Workspace
+  Hygiene remain authoritative for their concerns.
+- `TASK.md` template carries Critical User Journey and Acceptance Fixture /
+  Golden Input without adding schema/lifecycle state.
+- `ARCHITECTURE.md` template can state code/data/config/runtime/effect authority
+  boundaries when relevant.
+- Testing/runtime/observability/UX are not promoted into mandatory core
+  subsystems; Thin Guard and the canonical Standard remain semantically
+  unchanged.
+- Bootstrap/candidate tests prove procedure wiring and all six skills are
+  packaged; the full active source-checkout suite passes.
 - One clean local task commit is produced; no push, merge or deployment.
+
+# Acceptance Fixture / Golden Input
+
+Bootstrap a temporary empty project from the current package and verify the
+resulting canonical project files plus a simplified candidate package built from
+the exact source revision.
 
 # Non-goals
 
-No architecture redesign, lifecycle reintroduction, package/module rename,
-protocol/schema migration, state-path migration, GitHub repository rename,
-remote push, merge or deployment.
+No Thin Guard redesign, Standard v2, task/lifecycle engine, persisted skill
+state, testing framework, observability platform, UX framework, provider system,
+legacy rewrite, remote push, merge or deployment.
 
 # Constraints
 
-- Rename baseline: `7a6053db2b98ce09601a0a4f57e91d7295e8ed3a` (`origin/master`).
-- Work occurs in isolated worktree `D:\Buil OS\_worktrees\cads-rename` on branch `task-cads-rename`.
-- Compatibility-first: branding may change; technical identity changes require separate justification and migration work.
+- Preserve the simplified native-development architecture.
+- Keep procedure routing advisory and current-reality-driven.
+- Do not modify `buildos/**`, legacy lifecycle sources, or the canonical
+  Convergent AI Development Standard for this Goal.
+- Reuse existing bootstrap/package mechanisms rather than adding a new loader or
+  registry.
 
 # Material Decisions
 
-- This is a product-facing rename only; architecture and runtime behavior remain unchanged.
-- Technical compatibility identifiers such as `buildos`, `.buildos/**`, schema IDs and effect-state paths remain stable.
-- Historical evidence retains the old name where it describes earlier phases rather than current product identity.
-- The simplified thin-guard lineage remains rooted in baseline `8970dc8`; this rename does not reopen that architecture decision.
+- Core remains exactly six playbooks: Project Cold-Start, Product Goal Framing,
+  Goal Execution, Systematic Debugging, Product Acceptance, Workspace Hygiene.
+- `AGENTS.md` is the event router; skills are procedures; project templates hold
+  context; scripts/tests verify mechanical wiring only; Thin Guard retains only
+  consequential-action safety.
+- Stable Goal + small coherent implementation batches is the execution model.
+- A removed blocker returns immediately to the original journey; non-blocking
+  anomalies become deferred debt.
+- The simplified thin-guard lineage remains rooted in baseline `8970dc8`; this
+  Goal does not reopen or reinterpret that architecture decision.
 
 # Progress / Discoveries / Next
 
-- Confirmed the configured Build OS project root contains the real Git repository as a nested checkout; avoided committing against the parent non-repository state.
-- Confirmed current canonical remote baseline at `origin/master` and created an isolated rename worktree from it.
-- Audited active branding references and separated product-facing names from compatibility/protocol identifiers.
-- Full active source-checkout suite passes 66/66. The portable runner correctly rejects the source checkout with `EXTRACTED_CANDIDATE_REQUIRED`; no candidate package is created for this branding-only task.
-- Final diff/scope review is clean: 13 active files changed, `git diff --check` passes, CLI help identifies `CADS`, and compatibility identifiers remain unchanged by design.
-- This task closes when the reviewed rename is captured in one local commit.
+- Final architecture review completed before implementation.
+- Local branch `task/cads-event-routed-core-playbooks` created from clean
+  `origin/master` baseline `199a7768c5f909f62d3fd83c1252a095ae6c10de`.
+- Existing Standard already contains most durable invariants; the missing layer
+  is event-triggered procedure routing, not another Standard revision.
+- Existing bootstrap is intentionally non-destructive and project templates are
+  the correct place for CUJ/golden-input and authority-boundary context.
+- Focused bootstrap/candidate tests pass 18/18.
+- Full suite exposed one compatibility-only failure: root `TASK.md` must retain
+  the historical `# Progress / Discoveries / Next` heading used by the E2E
+  cold-start contract. The root task now preserves that contract without
+  weakening the new project template.
+- The affected E2E cold-start test passes after the compatibility fix.
+- Full active source-checkout suite passes 67/67 with
+  `SIMPLIFIED_ACTIVE_SUITE=PASS`.
 
-Next: after closure, await Owner decision for any repository-slug rename, promotion, push or merge.
+Next: review final diff/scope, rerun verification on the exact final bytes, then
+capture one clean local task commit. No push, merge or deployment.
