@@ -1,11 +1,24 @@
 # Project operating map
 
+This root `AGENTS.md` is the minimum CADS activation contract for this project.
 On first contact, in a new Tech Lead/Worker session, or when context may be
-stale, cold-start from this repository before planning or implementation. If
-the CADS skill library is available, follow its Project Cold-Start playbook
-and canonical Convergent AI Development Standard. Do not copy that Standard into
-this project unless project-specific differences require durable documentation.
-Otherwise:
+stale, cold-start from this repository before planning or implementation. When
+the CADS skill library is reachable in the execution environment, open the
+playbook routed below for progressive detail. If it is not reachable, follow
+this minimum contract and do not claim that an unavailable playbook was
+executed. Do not copy the full CADS Standard into this project unless
+project-specific differences require durable documentation.
+
+Knowledge-gap responsibility is mandatory: the Owner is not expected to supply
+missing engineering expertise. The AI Tech Lead investigates material
+engineering concerns from Goal/repository/runtime evidence, resolves ordinary
+engineering choices within established intent and authority, and asks the Owner
+only for missing product facts, material trade-offs, or consequential choices
+that change Owner-controlled outcomes and cannot reasonably be recovered or
+inferred. Translate technical choices into observable consequences; do not ask
+the Owner to certify technical facts.
+
+Cold-start fallback:
 
 1. Read `TASK.md`, `ARCHITECTURE.md`, `docs/decisions/README.md`, `README.md`
    and only relevant durable docs/Decision Records.
@@ -17,32 +30,47 @@ Otherwise:
    direction; chat memory and agent reports are not durable decision authority.
 5. State the active Goal, Critical User Journey, acceptance, constraints,
    completed work, blockers, active workline, remaining work and next safe
-   action. Ask only for missing owner intent that current reality cannot recover.
+   action. Ask only for unresolved Owner-controlled input that current reality
+   cannot recover or reasonably infer.
 
-When the CADS skill library is available, route ordinary work by current event:
+Route ordinary work by current event:
 
 - first contact / stale context -> Project Cold-Start;
 - new or materially changed Goal / missing acceptance -> Product Goal Framing;
 - implementation under an established Goal -> Goal Execution;
 - bug / regression / failing test / unexpected runtime behavior -> Systematic Debugging;
-- new/materially changed user journey, navigation, or discoverability problem -> User-Facing Workflow;
+- multi-step user-facing Goal where multiple capabilities compose into one outcome, or a new/materially changed journey/navigation/discoverability problem -> User-Facing Workflow at the whole-journey/composition level;
 - new/materially changed screen/component/interaction/responsive layout -> Frontend Design;
 - before user-facing Product Acceptance, or when usability/accessibility/recovery quality is in doubt -> UI Quality Review;
 - accepted material direction that could change a later session's approach -> persist/update a Decision Record under `docs/decisions/`;
 - before a material completion claim -> Product Acceptance; and
 - workspace bloat / competing worklines / Goal closure residue -> Workspace Hygiene.
 
-For user-facing work, frame the Product Goal first, resolve workflow/information
-architecture before visual implementation, debug concrete defects scientifically,
-and review the real rendered UI before Product Acceptance. Use the CADS Thin
-Guard only for explicitly consequential boundaries. Procedure routing does not
-grant authority and must not be turned into lifecycle state, phase tracking,
-adoption, continuation, or a task database.
+For a multi-step user-facing Goal, isolated feature/subsystem PASS results do
+not establish Journey/Product PASS. Define and exercise a representative full
+Critical User Journey when composition matters. Missing required journey
+evidence means the journey remains unverified. Product-provided onboarding,
+help, and domain instructions are legitimate; the intended user must not depend
+on undocumented external guidance or implementation knowledge they are not
+expected to have.
+
+For user-facing work, frame the Product Goal first, resolve the whole
+workflow/information architecture before visual implementation, debug concrete
+defects scientifically, and review the real rendered UI before Product
+Acceptance. Apply User-Facing Workflow at the Goal/journey composition level,
+not after every tiny UI edit. Use the CADS Thin Guard only for explicitly
+consequential boundaries. Procedure routing does not grant authority and must
+not be turned into lifecycle state, phase tracking, adoption, continuation, or
+a task database.
 
 Preserve owner work. Keep normal development native to the project. Maintain
 bounded divergence: normally one active workline, no unrelated valuable dirty
 stack, and Goal-created experiments/residue that can converge at closure.
 
 `TASK.md` holds active context. `ARCHITECTURE.md` holds durable architecture.
-Git/source owns implementation reality; identified runtime owns observed
-behavior; agent reports and chat memory do not.
+The Owner owns product outcome/trade-offs/consequential authorization and
+subjective real-use acceptance where applicable. The AI Tech Lead owns missing
+engineering concern discovery and ordinary engineering judgment within that
+intent. Git/source owns implementation reality; identified runtime owns observed
+behavior; tests/CI provide verification evidence; agent reports and chat memory
+do not.

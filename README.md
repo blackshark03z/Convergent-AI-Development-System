@@ -36,6 +36,15 @@ repository context should carry repository-grounded facts, so a long chat
 handoff is unnecessary; genuinely missing owner intent still requires
 clarification.
 
+The root `AGENTS.md` is also the minimum CADS activation surface for a coding
+agent. A bootstrapped project therefore retains the essential authority,
+knowledge-gap, journey-composition, and routing contract even when the full CADS
+skill library is not mounted in that execution environment. When the skill
+library is reachable, the Worker opens the routed playbook for progressive
+detail; when it is unavailable, the Worker follows the minimum `AGENTS.md`
+contract and must not claim that an unavailable playbook was executed. CADS does
+not copy or synchronize its skill library into every project.
+
 The root `AGENTS.md` acts as a thin event router into six advisory core
 playbooks: Project Cold-Start, Product Goal Framing, Goal Execution, Systematic
 Debugging, Product Acceptance, and Workspace Hygiene. Conditional product/UI

@@ -183,10 +183,14 @@ class BootstrapProjectTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        self.assertIn("cold-start", agents)
+        self.assertIn("minimum CADS activation contract", agents)
+        self.assertIn("Knowledge-gap responsibility", agents)
         self.assertIn("Git/source owns implementation reality", agents)
         self.assertIn("tests/CI as verification evidence", agents)
         self.assertIn("predefined Goal acceptance oracle", agents)
+        self.assertIn("whole-journey/composition level", agents)
+        self.assertIn("isolated feature/subsystem PASS", agents)
+        self.assertIn("remains unverified", agents)
         for procedure in (
             "Product Goal Framing", "Goal Execution", "Systematic Debugging",
             "Product Acceptance", "Workspace Hygiene", "User-Facing Workflow",
@@ -200,7 +204,8 @@ class BootstrapProjectTests(unittest.TestCase):
             "# Next Safe Action",
         ):
             self.assertIn(heading, task)
-        self.assertIn("owned by the Tech", task)
+        self.assertIn("Owner supplies the desired product outcome", task)
+        self.assertIn("AI Tech Lead owns engineering judgment", task)
         for heading in (
             "# System Purpose", "# Architecture", "# Components",
             "# Data / Control Flow", "# Authority / State Boundaries",

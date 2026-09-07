@@ -2,12 +2,17 @@
 
 ## Ownership
 
-The Owner/Tech Lead owns desired outcome and business intent. Identified
-Git/source owns implementation reality. Identified runtime evidence owns
-observed behavior for the source/configuration/environment exercised. Native
-tests and CI provide verification evidence; predefined Goal acceptance
-determines completion. Workers own repository reasoning, implementation and
-normal reversible local decisions. CADS only guards explicit consequential
+The Owner owns desired product outcome, material product trade-offs,
+consequential authorization, and subjective real-use acceptance where human
+experience is the oracle. The AI Tech Lead owns adaptive engineering judgment:
+discovering material engineering concerns, resolving ordinary engineering
+choices within established intent/authority, and framing proportionate
+acceptance/oracles/evidence. Identified Git/source owns implementation reality.
+Identified runtime evidence owns observed behavior for the
+source/configuration/environment exercised.
+Native tests and CI provide verification evidence; predefined Goal acceptance
+determines completion. Workers own bounded repository reasoning, implementation
+and normal reversible local decisions. CADS only guards explicit consequential
 boundaries.
 
 Normal development follows the canonical Convergent AI Development Standard in
@@ -32,6 +37,16 @@ Product Acceptance before completion claims, and Workspace Hygiene for bounded
 closure/bloat. Routing is evaluated from current reality and is not persisted.
 The skills may reference one another to resume the same Goal, but there is no
 workflow engine, phase database or new authority layer.
+
+The target project's root `AGENTS.md` is the minimum CADS activation contract
+for coding agents. It carries enough authority, knowledge-gap, journey
+composition, and routing semantics to prevent silent fallback to an unrelated
+process. When the CADS skill library is reachable, the Worker opens the routed
+playbook for progressive detail. When it is not reachable, the Worker follows
+the minimum `AGENTS.md` contract and must not claim that an unavailable playbook
+was executed. Missing skill access never transfers engineering expertise to the
+Owner. CADS does not add a skill-copy service, sync lifecycle, or second runtime
+for activation.
 
 Project templates expose the minimum context these procedures need. `TASK.md`
 may carry a Critical User Journey and representative acceptance fixture;

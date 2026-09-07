@@ -67,7 +67,11 @@ dirty stacks, and the absence of a clear active Goal.
 
 Apply domain-specific authority:
 
-- Owner/Tech Lead: desired outcome and business intent.
+- Owner: desired product outcome, material product trade-offs, consequential
+  authorization, and subjective real-use acceptance where applicable.
+- AI Tech Lead: engineering judgment, discovery of material engineering concerns,
+  ordinary engineering choices within established intent/authority, and
+  acceptance/oracle framing.
 - Identified Git/source: implementation reality.
 - Identified runtime evidence: observed behavior.
 - Tests/CI: verification evidence.

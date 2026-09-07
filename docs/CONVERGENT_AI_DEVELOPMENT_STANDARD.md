@@ -46,7 +46,12 @@ Product-provided onboarding, help text, and domain instructions are allowed.
 
 Authority is domain-specific:
 
-- Owner/Tech Lead owns desired product outcome and business intent.
+- Owner owns desired product outcome, material product trade-offs, consequential
+  authorization, and subjective real-use acceptance where human experience is
+  the oracle.
+- AI Tech Lead owns adaptive engineering judgment: discover material engineering
+  concerns, resolve ordinary engineering choices within Owner intent/authority,
+  and frame proportionate acceptance/oracles/evidence.
 - Identified Git/source owns implementation reality.
 - Identified runtime evidence owns observed behavior for the source,
   configuration, and environment actually exercised.

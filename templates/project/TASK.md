@@ -1,30 +1,30 @@
 # Goal
 
-<!-- Tech Lead/Owner: state one active, bounded, end-to-end product outcome. -->
+<!-- Owner supplies the desired product outcome. AI Tech Lead frames one active, bounded, end-to-end Goal in user-observable terms. -->
 
 # Critical User Journey
 
-<!-- Tech Lead/Owner: state the shortest real user/product path that proves the Goal, when applicable. -->
+<!-- AI Tech Lead: state the shortest representative real user/product path that proves the Goal, when applicable. For multi-step user-facing work, describe the composed journey rather than only listing features. -->
 
 # Acceptance
 
-<!-- Tech Lead/Owner: define observable completion criteria before implementation. Do not weaken them post hoc merely to make implementation pass. -->
+<!-- AI Tech Lead: define observable completion criteria and relevant oracles before implementation. Owner supplies unresolved product facts/trade-offs and remains the real-use oracle where subjective experience matters. Do not weaken acceptance post hoc merely to make implementation pass. -->
 
 # Acceptance Fixture / Golden Input
 
-<!-- Tech Lead/Owner: identify the representative real input/project/state used to drive the same journey until acceptance, when applicable. -->
+<!-- AI Tech Lead: identify the representative real input/project/state used to drive the same journey until acceptance, when applicable. -->
 
 # Non-goals
 
-<!-- Tech Lead/Owner: state what this task must not expand into. -->
+<!-- AI Tech Lead: state what this Goal must not expand into. -->
 
 # Constraints
 
-<!-- Tech Lead/Owner: state safety, scope, compatibility and delivery limits. -->
+<!-- AI Tech Lead: state material safety, scope, compatibility and delivery limits recovered from current reality and Owner-controlled choices. -->
 
 # Material Decisions
 
-<!-- Tech Lead/Owner: summarize decisions that materially shape the current Goal. If losing the rationale/direction could make a later session choose a materially different approach, persist an accepted Decision Record under docs/decisions/ as well. -->
+<!-- Owner/AI Tech Lead as appropriate: summarize accepted decisions that materially shape the current Goal. If losing the rationale/direction could make a later session choose a materially different approach, persist an accepted Decision Record under docs/decisions/ as well. -->
 
 # Progress
 
@@ -38,7 +38,10 @@
 
 <!-- Worker may maintain the next bounded action supported by current reality. -->
 
-Goal, Critical User Journey, Acceptance, Acceptance Fixture / Golden Input,
-Constraints and Material Decisions are owned by the Tech Lead/Owner. Progress,
-Discoveries / Blockers and Next Safe Action may be maintained by the Worker.
-Repository and Git truth beat stale task prose.
+The Owner owns desired product outcome, material product trade-offs,
+consequential authorization, and subjective real-use acceptance where
+applicable. The AI Tech Lead owns engineering judgment, Goal/CUJ/acceptance
+framing, discovery of material engineering concerns, and ordinary engineering
+choices within established intent/authority. Progress, Discoveries / Blockers
+and Next Safe Action may be maintained by the Worker. Repository and Git truth
+beat stale task prose.
