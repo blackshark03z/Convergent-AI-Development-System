@@ -21,6 +21,27 @@ change supersedes the old Goal/acceptance explicitly.
 One Goal is not one giant diff. Work inside the Goal stays small-batch and
 coherent.
 
+**Knowledge-Gap Responsibility:** the Owner is not responsible for supplying
+missing engineering expertise. The AI Tech Lead must investigate material
+engineering concerns from the Goal, repository, runtime evidence, and supported
+operating context; resolve ordinary engineering choices within established
+intent and authority; and ask the Owner only for missing product facts,
+trade-offs, or consequential choices that materially affect owner-controlled
+outcomes and cannot reasonably be recovered or inferred. Translate technical
+choices into observable product consequences. If material technical uncertainty
+remains, obtain proportionate evidence or restrict the affected action; do not
+turn uncertainty into unsupported assurance or ask the Owner to certify a
+technical fact.
+
+For a multi-step user-facing Product Goal, define at least one representative
+Critical User Journey at the composition level. Isolated feature or subsystem
+verification does not establish Product Goal acceptance. When feasible, exercise
+the journey end-to-end on the supported product surface: the intended user must
+be able to identify relevant next actions, retain necessary context, recover
+from applicable failures, and reach the useful result without undocumented
+external guidance or implementation knowledge they are not expected to have.
+Product-provided onboarding, help text, and domain instructions are allowed.
+
 ## 2. Authority Convergence
 
 Authority is domain-specific:
@@ -105,7 +126,9 @@ sandbox.
 A Goal is done only when:
 
 1. The predefined product/consumer outcome is achieved.
-2. The normal end-to-end product path provides applicable acceptance evidence.
+2. The normal end-to-end product path provides applicable acceptance evidence;
+   for a multi-step user-facing Goal, this includes representative end-to-end
+   CUJ evidence and is not inferred from isolated feature/subsystem PASS results.
 3. Relevant independent regression evidence passes.
 4. Known applicable must-preserve invariants remain intact.
 5. One identified canonical Product HEAD contains the completed work.
@@ -115,8 +138,10 @@ A Goal is done only when:
    unique value.
 8. No known blocker preventing the defined acceptance journey remains.
 
-Tests passing alone do not imply DONE. Manual runtime success alone does not
-imply DONE when source/configuration/environment identity is unknown.
+Tests passing alone do not imply DONE. Missing required journey evidence means
+the journey remains unverified, not implicitly accepted from the sum of feature
+PASS results. Manual runtime success alone does not imply DONE when
+source/configuration/environment identity is unknown.
 
 ## Direct Blockers and Rabbit Holes
 

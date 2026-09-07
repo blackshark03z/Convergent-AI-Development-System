@@ -20,10 +20,24 @@ Use when:
 If project context itself is unknown or stale, run `project-cold-start.md`
 first.
 
+## Knowledge-gap responsibility
+
+The Owner is not expected to supply missing engineering expertise. The AI Tech
+Lead must investigate material engineering concerns using the Goal, repository,
+runtime evidence, and supported operating context, and resolve ordinary
+engineering choices within established intent and authority. Ask the Owner only
+for missing product facts, material trade-offs, or consequential choices that
+change owner-controlled outcomes and cannot reasonably be recovered or inferred.
+Translate technical choices into observable consequences. Where a material
+technical uncertainty remains, obtain proportionate evidence or restrict the
+affected action; do not ask the Owner to certify a technical fact.
+
 ## Frame the Goal
 
 1. State one bounded owner outcome in user-observable terms.
-2. Define the shortest Critical User Journey (CUJ) that proves the outcome.
+2. Define the shortest Critical User Journey (CUJ) that proves the outcome. For
+   a multi-step user-facing Goal, make it a representative full journey across
+   the capabilities that compose the outcome, not merely a feature list.
 3. Select one representative real acceptance fixture / golden input when the
    product has meaningful input or state. Prefer reusing the same fixture
    through the journey instead of proving isolated subsystems on unrelated
@@ -52,7 +66,9 @@ acceptance oracle unless the Goal itself is explicitly test-only.
 
 For user-facing work, the CUJ should normally express what the owner actually
 does from entry to useful result. Hidden, unreachable, or technically present
-capability does not satisfy a user-visible acceptance criterion.
+capability does not satisfy a user-visible acceptance criterion. For multi-step
+Goals, isolated feature/subsystem PASS results do not compose into Journey PASS;
+acceptance must cover the representative flow when composition matters.
 
 Do not invent detailed architecture before current source has been inspected.
 The Goal constrains implementation; it does not prescribe unnecessary new
@@ -81,5 +97,7 @@ Return one concise result:
 
 - `GOAL_READY`: the owner outcome, CUJ, acceptance and boundaries are clear
   enough for bounded implementation; or
-- `OWNER_INPUT_REQUIRED`: a material product decision cannot be recovered from
-  repository/current evidence. Ask only for that missing decision.
+- `OWNER_INPUT_REQUIRED`: a material Owner-controlled product fact, trade-off,
+  or consequential choice cannot be recovered or reasonably inferred from
+  repository/current evidence. Ask only for that missing decision, translated
+  into observable consequences rather than implementation jargon.

@@ -24,9 +24,15 @@ that definition.
    configuration/environment and data authority exercised. Do not infer runtime
    identity from Git state alone.
 4. Run the representative acceptance fixture / golden input through the full
-   Critical User Journey on the real supported surface whenever feasible.
+   Critical User Journey on the real supported surface whenever feasible. When
+   the Goal depends on multiple capabilities composing into one user outcome,
+   isolated feature/subsystem checks cannot substitute for this journey evidence.
 5. Confirm the observable final output or behavior, including discoverability
-   and reachability for user-facing capability.
+   and reachability for user-facing capability. The intended user should be able
+   to identify relevant next actions, retain necessary context, recover from
+   applicable failures, and reach the useful result without undocumented
+   external guidance or implementation knowledge they are not expected to have.
+   Product-provided onboarding/help is legitimate guidance.
 6. Run the relevant focused/integration/regression evidence required by the
    Goal and risk. Tests support the conclusion; they do not replace the real
    acceptance oracle.
@@ -39,6 +45,12 @@ that definition.
    materiality test is met.
 9. If Goal-created workspaces/residue now need closure, hand off to
    `workspace-hygiene.md`; cleanup is not itself proof of product acceptance.
+
+Treat evidence criterion-by-criterion. A command, test, or observation proves an
+acceptance criterion only when it is a relevant oracle for that criterion and is
+tied to the identified candidate and applicable conditions. Missing matching
+evidence means `UNVERIFIED`; do not convert it to PASS, and do not infer Journey
+PASS from the sum of isolated feature PASS results.
 
 ## Authority and verdicts
 
