@@ -189,11 +189,16 @@ class BootstrapProjectTests(unittest.TestCase):
         self.assertIn("tests/CI as verification evidence", agents)
         self.assertIn("predefined Goal acceptance oracle", agents)
         self.assertIn("whole-journey/composition level", agents)
+        self.assertIn("Concern Coverage Review", agents)
+        self.assertIn("relationships/cardinality", agents)
+        self.assertIn("material gap", agents)
+        self.assertIn("what must be true", agents)
+        self.assertIn("happy-path", agents)
         self.assertIn("isolated feature/subsystem PASS", agents)
         self.assertIn("remains unverified", agents)
         for procedure in (
-            "Product Goal Framing", "Goal Execution", "Systematic Debugging",
-            "Product Acceptance", "Workspace Hygiene", "User-Facing Workflow",
+            "Product Goal Framing", "Concern Coverage Review", "Goal Execution",
+            "Systematic Debugging", "Product Acceptance", "Workspace Hygiene", "User-Facing Workflow",
             "Frontend Design", "UI Quality Review",
         ):
             self.assertIn(procedure, agents)
@@ -222,6 +227,7 @@ class BootstrapProjectTests(unittest.TestCase):
         for name in (
             "project-cold-start.md",
             "product-goal-framing.md",
+            "concern-coverage-review.md",
             "goal-execution.md",
             "systematic-debugging.md",
             "product-acceptance.md",

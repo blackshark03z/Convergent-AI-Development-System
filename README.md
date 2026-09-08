@@ -45,9 +45,9 @@ detail; when it is unavailable, the Worker follows the minimum `AGENTS.md`
 contract and must not claim that an unavailable playbook was executed. CADS does
 not copy or synchronize its skill library into every project.
 
-The root `AGENTS.md` acts as a thin event router into six advisory core
-playbooks: Project Cold-Start, Product Goal Framing, Goal Execution, Systematic
-Debugging, Product Acceptance, and Workspace Hygiene. Conditional product/UI
+The root `AGENTS.md` acts as a thin event router into seven advisory core
+playbooks: Project Cold-Start, Product Goal Framing, Concern Coverage Review,
+Goal Execution, Systematic Debugging, Product Acceptance, and Workspace Hygiene. Conditional product/UI
 work adds three advisory playbooks: User-Facing Workflow, Frontend Design, and UI
 Quality Review. They operationalize the Standard at the moment a decision is
 needed; they do not create persisted phases, task state, grants, adoption, or an
@@ -62,7 +62,7 @@ Material decisions that must survive chat/agent turnover use the lightweight
 small `docs/decisions/README.md` active index. Detailed Decision Records are
 created only when losing an accepted decision could materially change a later
 session's scope, approach, acceptance, architecture, authoritative path or
-expensive research. Decision continuity is docs-as-code, not a seventh core
+expensive research. Decision continuity is docs-as-code, not an eighth core
 skill, context database or lifecycle state.
 
 ## Public surface

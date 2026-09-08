@@ -1,31 +1,30 @@
 # Worker operating map
 
-On first contact, in a new Tech Lead/Worker session, or whenever prior context
-is unknown or stale, **MUST** follow
-[`skills/core/project-cold-start.md`](skills/core/project-cold-start.md) before
-planning or implementation. Rerun it from current reality; completion is not
-persisted authority.
+On first contact, new Tech Lead/Worker session, or stale/unknown context, **MUST**
+run [`skills/core/project-cold-start.md`](skills/core/project-cold-start.md)
+before planning or implementation. Reconstruct from current reality; completion
+is not persisted authority.
 
-Mandatory procedure routing:
+Mandatory routing:
 
-- First contact, new session, or stale/unknown context -> `skills/core/project-cold-start.md`.
 - New/materially changed Goal or missing acceptance -> `skills/core/product-goal-framing.md`.
-- Normal implementation under an established Goal -> `skills/core/goal-execution.md`.
-- Bug, regression, failing test, or unexpected runtime/provider behavior -> `skills/core/systematic-debugging.md`.
-- Before a material `FIXED`/`DONE`/product-ready/completion claim -> `skills/core/product-acceptance.md`.
-- Workspace bloat, competing worklines, or Goal closure residue -> `skills/core/workspace-hygiene.md`.
-- Multi-step user-facing Goal where multiple capabilities compose into one outcome, or a new/materially changed user journey, navigation, or discoverability problem -> `skills/product/user-facing-workflow.md` at the whole-journey/composition level before isolated capabilities are treated as a complete product.
-- New/materially changed screen, component, interaction, responsive layout, or visual hierarchy -> `skills/product/frontend-design.md`.
-- Before user-facing Product Acceptance, or when usability/accessibility/recovery quality is in doubt -> `skills/product/ui-quality-review.md`.
-- Accepted material direction that could change a later session's approach -> persist a Decision Record under `docs/decisions/` using `docs/DECISION_CONTINUITY.md`; this is cross-cutting, not a new lifecycle phase.
-- Explicit consequential action -> the existing CADS Thin Guard; procedure routing never expands guard authority.
+- Before materially stabilizing new/changed architecture, domain, source-of-truth, ownership, or authority, or after a material assumption changes -> `skills/core/concern-coverage-review.md`.
+- Established Goal implementation -> `skills/core/goal-execution.md`.
+- Bug/regression/failing test/unexpected runtime/provider behavior -> `skills/core/systematic-debugging.md`.
+- Before material `FIXED`/`DONE`/ready/completion claim -> `skills/core/product-acceptance.md`.
+- Workspace bloat/competing worklines/Goal closure residue -> `skills/core/workspace-hygiene.md`.
+- Multi-step user outcome or changed journey/navigation/discoverability -> `skills/product/user-facing-workflow.md` at whole-journey composition level.
+- Changed screen/component/interaction/responsive layout/visual hierarchy -> `skills/product/frontend-design.md`.
+- Before user-facing Product Acceptance or when usability/accessibility/recovery is doubtful -> `skills/product/ui-quality-review.md`.
+- Accepted material direction that must survive turnover -> Decision Record under `docs/decisions/` using `docs/DECISION_CONTINUITY.md`.
+- Explicit consequential action -> existing CADS Thin Guard; routing never expands guard authority.
 
-If more than one trigger applies, reconstruct trustworthy context first. Frame the
-Product Goal before UI work; resolve the whole user journey/information
-architecture before visual implementation; use Systematic Debugging for actual
-defects; run UI Quality Review before user-facing Product Acceptance. Apply
-User-Facing Workflow at the Goal/journey composition level, not after every tiny
-UI edit. These procedures are advisory playbooks, not persisted lifecycle state.
+When triggers overlap: reconstruct context first; frame Goal and applicable domain
+semantics before material design freeze; run Concern Coverage Review before that
+freeze; resolve whole user workflow before visual implementation; debug actual
+defects scientifically; run UI Quality Review before user-facing Product
+Acceptance. Do not run journey/design review after every tiny edit. All playbooks
+are advisory, not persisted lifecycle state.
 
 Canonical commands:
 
@@ -40,8 +39,8 @@ invoked only at an explicitly declared consequential boundary.
 
 Stable invariants:
 
-- Owner owns desired outcome, material product trade-offs, consequential authorization, and subjective real-use acceptance; the AI Tech Lead owns discovery of missing engineering concerns and ordinary engineering choices within that intent. Identified Git/source owns implementation reality.
-- Identified runtime evidence owns observed behavior; tests/CI provide verification evidence.
+- Owner owns desired outcome, material product trade-offs, consequential authorization and subjective real-use acceptance; AI Tech Lead owns missing engineering-concern discovery and ordinary engineering choices within that intent.
+- Identified Git/source owns implementation reality; identified runtime owns observed behavior; tests/CI provide verification evidence.
 - Goal-defined acceptance determines completion; `TASK.md` is current context, not runtime authority.
 - Accepted Decision Records own durable rationale/settled material direction; chat memory and agent reports do not.
 - `expected_paths` warns; `strict_paths` and `prohibited_paths` block.
@@ -50,7 +49,6 @@ Stable invariants:
 - External intent is durable before dispatch; ambiguity is never blindly retried.
 - No lifecycle state, generations, adoption, continuation, grants or migration.
 
-Follow the canonical development standard in
-[`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md).
-Durable architecture belongs in `ARCHITECTURE.md`. Keep temporary progress in
-`TASK.md`; do not build parsers, schemas or migrations around it.
+Follow [`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md).
+Durable architecture belongs in `ARCHITECTURE.md`; temporary progress in
+`TASK.md`. Do not build parsers, schemas or migrations around task prose.

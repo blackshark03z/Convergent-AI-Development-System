@@ -20,8 +20,10 @@ Normal development follows the canonical Convergent AI Development Standard in
 discipline, not kernel state. Normal development is not a CADS lifecycle.
 An ordinary commit is neither a permission transition nor an adoption event.
 
-The advisory procedure library has two layers: six universal core playbooks and
-conditional product/UI playbooks. User-Facing Workflow shapes task flow and
+The advisory procedure library has two layers: seven universal core playbooks and
+conditional product/UI playbooks. Concern Coverage Review is the bounded
+cross-concern search for material gaps/assumptions before a material design
+freeze; its findings are ephemeral and do not create architecture authority. User-Facing Workflow shapes task flow and
 information architecture; Frontend Design implements the interface and relevant
 states/accessibility; UI Quality Review examines the real rendered journey before
 user-facing Product Acceptance. These procedures create no design authority or
@@ -31,10 +33,11 @@ project-specific rather than part of bootstrap or kernel architecture.
 ## Advisory procedure routing
 
 Root `AGENTS.md` routes current work into a small skill library: cold-start for
-trustworthy context, Product Goal Framing for Goal/CUJ/acceptance, Goal Execution
-for small coherent implementation, Systematic Debugging for current blockers,
-Product Acceptance before completion claims, and Workspace Hygiene for bounded
-closure/bloat. Routing is evaluated from current reality and is not persisted.
+trustworthy context, Product Goal Framing for Goal/CUJ/domain semantics,
+Concern Coverage Review before materially stabilizing architecture/domain/
+authority decisions, Goal Execution for small coherent implementation,
+Systematic Debugging for current blockers, Product Acceptance before completion
+claims, and Workspace Hygiene for bounded closure/bloat. Routing is evaluated from current reality and is not persisted.
 The skills may reference one another to resume the same Goal, but there is no
 workflow engine, phase database or new authority layer.
 
@@ -62,7 +65,7 @@ stored as lightweight docs-as-code under `docs/decisions/`, following
 detailed records exist only when the materiality test is met. Accepted records
 are superseded rather than silently rewritten. Decision Records complement, but
 do not replace, current `TASK.md`, `ARCHITECTURE.md`, Git/source, tests or runtime
-evidence. No decision database, context service, vector store or seventh core
+evidence. No decision database, context service, vector store or eighth core
 skill is introduced.
 
 ## Thin Guard

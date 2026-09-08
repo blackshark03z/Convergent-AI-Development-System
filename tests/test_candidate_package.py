@@ -60,6 +60,7 @@ class SimplifiedCandidateTests(unittest.TestCase):
                 "docs/decisions/0001-durable-decision-continuity.md",
                 "skills/core/project-cold-start.md",
                 "skills/core/product-goal-framing.md",
+                "skills/core/concern-coverage-review.md",
                 "skills/core/goal-execution.md",
                 "skills/core/systematic-debugging.md",
                 "skills/core/product-acceptance.md",

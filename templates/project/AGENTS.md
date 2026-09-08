@@ -37,6 +37,7 @@ Route ordinary work by current event:
 
 - first contact / stale context -> Project Cold-Start;
 - new or materially changed Goal / missing acceptance -> Product Goal Framing;
+- before materially freezing a new/changed architecture, domain model, source-of-truth, ownership, or authority boundary, or when new evidence invalidates a material design assumption -> Concern Coverage Review;
 - implementation under an established Goal -> Goal Execution;
 - bug / regression / failing test / unexpected runtime behavior -> Systematic Debugging;
 - multi-step user-facing Goal where multiple capabilities compose into one outcome, or a new/materially changed journey/navigation/discoverability problem -> User-Facing Workflow at the whole-journey/composition level;
@@ -45,6 +46,20 @@ Route ordinary work by current event:
 - accepted material direction that could change a later session's approach -> persist/update a Decision Record under `docs/decisions/`;
 - before a material completion claim -> Product Acceptance; and
 - workspace bloat / competing worklines / Goal closure residue -> Workspace Hygiene.
+
+Before materially freezing architecture/domain/authority, perform a proportional
+concern-coverage review across product/domain (including actors, objects,
+relationships/cardinality and business rules), user/workflow, data/state,
+architecture/integration, security/privacy/consequential effects,
+runtime/operations, delivery/environment, quality/evidence, and
+economy/maintainability. An applicable unresolved concern that could materially
+change behavior, domain semantics, architecture, authority/source-of-truth,
+failure safety, acceptance, or cost/risk is a material gap: do not freeze the
+affected decision. A clear review is not proof that every unknown unknown was
+found, and the review must not become persisted lifecycle state. Before
+concluding, ask what must be true for the design to work, what breaks if that
+assumption is false, and how the product could still fail despite happy-path and
+isolated tests passing.
 
 For a multi-step user-facing Goal, isolated feature/subsystem PASS results do
 not establish Journey/Product PASS. Define and exercise a representative full

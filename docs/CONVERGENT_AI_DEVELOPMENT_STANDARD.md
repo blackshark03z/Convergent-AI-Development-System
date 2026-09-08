@@ -33,6 +33,15 @@ remains, obtain proportionate evidence or restrict the affected action; do not
 turn uncertainty into unsupported assurance or ask the Owner to certify a
 technical fact.
 
+**Concern Coverage before material freeze:** before materially treating a new or
+changed architecture, domain/ownership model, source-of-truth, or authority
+boundary as stable, the AI Tech Lead must perform a proportionate cross-concern
+review to surface applicable material gaps and assumptions not already exposed
+by Goal framing. Depth scales with consequence and complexity. A clear review is
+not proof of exhaustive completeness and creates no persisted phase/state; new
+evidence that invalidates a material assumption reopens only the affected
+decision.
+
 For a multi-step user-facing Product Goal, define at least one representative
 Critical User Journey at the composition level. Isolated feature or subsystem
 verification does not establish Product Goal acceptance. When feasible, exercise

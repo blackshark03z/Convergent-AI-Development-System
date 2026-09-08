@@ -32,6 +32,26 @@ Translate technical choices into observable consequences. Where a material
 technical uncertainty remains, obtain proportionate evidence or restrict the
 affected action; do not ask the Owner to certify a technical fact.
 
+## Domain semantics when applicable
+
+Before detailed architecture, when the Goal depends on multiple actors, domain
+objects, providers, ownership/cardinality, persistent identity/state, or business
+rules whose meaning can change the design, establish only the domain facts that
+materially constrain the Goal:
+
+- actors/stakeholders and external systems relevant to the outcome;
+- domain objects and their identities;
+- relationships, cardinality and ownership;
+- business rules/invariants versus configurable product policy;
+- material object state transitions/lifecycles;
+- exceptions and off-nominal cases; and
+- unresolved Owner-controlled product questions whose answers change those
+  semantics.
+
+Do not turn this into database schema, classes, services, BPMN, requirement IDs,
+or a complete enterprise model. Domain semantics constrain architecture; they
+are not architecture. The AI Tech Lead owns ordinary technical modeling choices.
+
 ## Frame the Goal
 
 1. State one bounded owner outcome in user-observable terms.
@@ -57,6 +77,10 @@ affected action; do not ask the Owner to certify a technical fact.
 8. Choose rigor proportional to consequence. Personal/local tools still need
    correct acceptance and data safety; they do not automatically need
    enterprise lifecycle machinery.
+9. Before materially freezing a new/changed architecture, domain model,
+   source-of-truth, ownership or authority boundary, route to
+   `concern-coverage-review.md` to search for material concern classes or
+   assumptions not already exposed by Goal framing.
 
 ## Acceptance rules
 

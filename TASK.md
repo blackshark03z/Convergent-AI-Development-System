@@ -1,99 +1,111 @@
 # Goal
 
-Add lightweight durable decision continuity so material project-direction choices
-survive chat/Tech Lead/Worker turnover without turning CADS into a context or
-lifecycle management system.
+Add one bounded universal Concern Coverage Review so CADS can proactively expose
+material business/domain, user, data, architecture, security/effect, runtime,
+delivery, quality, and economy gaps before hard-to-reverse design decisions,
+without turning those concerns into mandatory lifecycle phases.
 
 # Critical User Journey
 
-Owner/Tech Lead makes a material direction decision -> the current CADS procedure
-applies a materiality test -> accepted rationale/direction is persisted in a
-short repository Decision Record -> future Tech Lead/Worker cold-start reads the
-active index and only relevant records -> continues from the settled direction
-instead of rediscovering or silently reopening it.
+Owner intent -> Product Goal Framing establishes the bounded Goal and applicable
+domain semantics -> before materially stabilizing architecture/domain/source-of-
+truth/authority, AI Tech Lead runs Concern Coverage Review -> only material gaps
+are routed to existing procedures or targeted specialist analysis -> affected
+decisions are stabilized only after gaps are resolved or scope is safely
+restricted -> normal Goal Execution continues.
 
 # Acceptance
 
-- Add a lightweight Decision Continuity Protocol defining authority, materiality,
-  record format, supersession and bounded reading rules.
-- Bootstrap creates a small `docs/decisions/README.md` active decision index while
-  preserving all existing project files byte-for-byte.
-- Detailed Decision Records are created only for material accepted decisions;
-  routine reversible edits/checkpoints do not become records.
-- Project Cold-Start reads the active index and relevant accepted Decision
-  Records before planning when present.
-- Product Goal Framing, Goal Execution and Product Acceptance enforce decision
-  continuity at the moments material direction is created, discovered or closed.
-- Root/project `AGENTS.md` state that accepted Decision Records own durable
-  rationale/settled direction while chat memory/agent reports do not.
-- Accepted records are superseded rather than silently rewritten.
-- Existing six core skills, three conditional UI/UX skills, Thin Guard and the
-  canonical Convergent AI Development Standard remain unchanged in role.
-- Candidate/bootstrap/E2E tests prove the new index/protocol wiring and the full
-  active source-checkout suite passes.
-- Promotion finishes with clean synchronized `master` after post-merge tests.
+- Add exactly one universal core playbook: Concern Coverage Review.
+- Product Goal Framing conditionally establishes actors, domain objects,
+  identity, relationships/cardinality, ownership, business rules, material
+  object state transitions, exceptions, and Owner-controlled open questions when
+  those semantics can materially change design.
+- Root/project `AGENTS.md` route a material architecture/domain/source-of-truth/
+  ownership/authority freeze through Concern Coverage Review, including a
+  bounded fallback when the full CADS skill library is unavailable.
+- The review covers broad concern classes proportionally to consequence and
+  complexity, reports only material gaps/assumptions, and does not claim
+  exhaustive completeness.
+- New evidence that invalidates a material assumption triggers re-review of the
+  affected decision rather than a permanent one-time approval.
+- The canonical Standard gains only the smallest invariant needed to make this
+  Knowledge-Gap Responsibility operational.
+- No standalone Business Analysis phase, security phase, compliance engine,
+  specialist skill family, task lifecycle, review database, or persisted concern
+  status is introduced.
+- A Decision Record explains why this repeated meta-failure justifies reopening
+  the CADS Freeze Rule.
+- Bootstrap/candidate/E2E and the full active CADS suite pass.
 
 # Acceptance Fixture / Golden Input
 
-Bootstrap a temporary empty project and verify that the canonical context now
-includes `docs/decisions/README.md`; rerun bootstrap to prove byte-preserving
-idempotence. Use CADS itself as the first real Decision Record example by
-persisting this accepted Decision Continuity direction under `docs/decisions/`.
+Use the two failure classes that exposed the meta-gap:
+
+- Story Audio: isolated feature PASS did not guarantee the composed user journey.
+- Multiple Automation: architecture could miss material domain/cardinality facts
+  such as GoogleAccount -> YouTubeChannel -> Workspace/Proxy/Profile ownership
+  unless someone happened to ask the right question before freeze.
+
+Also check a tiny reversible internal/docs change to prove the review is not
+universally triggered after every edit.
 
 # Non-goals
 
-No memory database, vector store, context server, transcript ingestion, meeting
-minutes archive, ADR approval workflow, task lifecycle, schema registry,
-automatic decision extraction, Standard v2, Thin Guard redesign or legacy
-rewrite.
+No comprehensive enterprise BA framework, BPMN requirement, stakeholder matrix,
+requirements database, traceability engine, universal threat model, architecture
+approval board, persisted `RESOLVED/NOT_APPLICABLE/MATERIAL_GAP` state, or new
+CADS orchestration/runtime.
 
 # Constraints
 
-- Decision continuity is docs-as-code and cross-cutting, not a seventh core
-  skill or persisted workflow phase.
-- Context must stay bounded: cold-start reads the index and only relevant records,
-  not the entire historical decision archive.
-- Do not modify `buildos/**`, legacy lifecycle sources, or
-  `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`.
-- Preserve pre-existing bootstrap targets exactly; create only missing canonical
-  context paths.
+- Scan broadly, work narrowly: broad concern awareness must route only applicable
+  material gaps to deeper work.
+- Depth must scale with consequence, complexity, project size, operating context,
+  and available evidence.
+- A clear concern review is not proof that all unknown unknowns were eliminated.
+- Domain semantics constrain architecture but do not prescribe schema, classes,
+  services, aggregates, or deployment topology.
+- Preserve CADS native Git/test workflow and Thin Guard boundaries.
 
 # Material Decisions
 
-- A material decision discussed only in chat/memory/report is not durable project
-  truth; accepted material direction must be persisted in the repository.
-- `docs/decisions/README.md` is the active decision index and is bootstrapped by
-  default; detailed records are conditional on the materiality test.
-- Decision Records preserve WHY/settled direction. `TASK.md` preserves current
-  Goal context, `ARCHITECTURE.md` current system design, Git/source implementation
-  reality, and tests/runtime verification/observed reality.
-- Accepted history is superseded rather than silently rewritten.
-- The simplified thin-guard lineage remains rooted in baseline `8970dc8`; this
-  Goal does not reopen or reinterpret that architecture decision.
+- The repeated systemic failure is meta-routing blindness: CADS can handle a
+  concern once recognized but lacked a bounded mechanism to search for concern
+  classes that had not yet been recognized.
+- Add one `skills/core/concern-coverage-review.md` rather than separate
+  business-analysis/security/data/operations skills.
+- Embed Domain Semantics in Product Goal Framing instead of creating a mandatory
+  Business Analysis phase.
+- Use scenario/assumption attack plus a broad reference concern model; findings
+  are ephemeral reasoning evidence, not project state.
+- Re-review is trigger-based when scope/risk/contracts/key assumptions change,
+  not after every implementation edit.
+- Research basis includes ISO/IEC/IEEE 29148 requirements engineering,
+  ISO/IEC 25010/25019 quality models, IIBA business analysis, SEI ATAM/QAW,
+  NIST SSDF, NASA SE tailoring, and DDD domain analysis.
 
 # Progress / Discoveries / Next
 
-- Started from clean `master` synchronized with `origin/master` (`0/0`) and
-  created branch `task/cads-decision-continuity`.
-- Confirmed the existing bootstrap only created three root context files and had
-  no durable location for cross-session material decisions.
-- Chosen minimum sufficient design: one protocol, one bootstrapped active index,
-  conditional detailed Decision Records, and integration into existing CADS
-  playbooks rather than a new core skill/subsystem.
-- Implemented Decision Continuity protocol/index/self-hosted DR plus bootstrap,
-  playbook, router, docs and packaging/test wiring without modifying
-  `buildos/**`, legacy sources or the canonical Standard.
-- Initial focused suite exposed one test-fixture-only nested-path assumption; the
-  production bootstrap behavior was unchanged and the fixture was corrected.
-- Focused bootstrap/candidate/E2E suite passes 21/21.
-- Full active source-checkout suite passes 69/69 with
+- Started from clean synchronized `master` at
+  `09ffd4aeea664519e46183408b8cc1a489c825a2`.
+- Deep research confirmed the common industry pattern is broad reference coverage
+  plus scenario/risk analysis, tailored to context, rather than running every
+  specialist process on every project.
+- Review changed the proposed name from `Completeness Scan` to `Concern Coverage
+  Review` to avoid false assurance that a checklist can prove exhaustive
+  completeness.
+- Added the core playbook, Domain Semantics check, Standard/router/template/docs
+  wiring, tests, and DR-0002 without adding runtime/lifecycle authority.
+- First focused run caught root `AGENTS.md` exceeding its 4,000-character thin
+  router budget; wording was compressed without weakening routing semantics.
+- Focused bootstrap/candidate/E2E verification passes 24/24.
+- First full-suite wrapper timed out under concurrent machine load after the child
+  unittest process had already reported 69/69 `OK`; this was not accepted as the
+  final gate.
+- Clean full rerun completed normally: 69/69 PASS with
   `SIMPLIFIED_ACTIVE_SUITE=PASS`.
-- Implementation commit `cca5bcb` was pushed on
-  `task/cads-decision-continuity` and merged cleanly into local `master` as
-  `95b2505ce221d4399c49e9e3dd164d29adf3b9e2`.
-- Post-merge full active suite passes 69/69 with
-  `SIMPLIFIED_ACTIVE_SUITE=PASS` on the merged tree.
 
-Next: if local `master` is not yet identical to `origin/master`, finish remote
-promotion and branch cleanup. Once they match, this Goal is closed and requires
-no further development work; await the next Owner Goal.
+Next: perform final semantic/diff review, commit the bounded CADS correction, push
+`master`, and freeze this concern-coverage design unless new project evidence
+meets the existing Freeze Rule.
