@@ -45,25 +45,24 @@ detail; when it is unavailable, the Worker follows the minimum `AGENTS.md`
 contract and must not claim that an unavailable playbook was executed. CADS does
 not copy or synchronize its skill library into every project.
 
-The root `AGENTS.md` acts as a thin event router into seven advisory core
-playbooks: Project Cold-Start, Product Goal Framing, Concern Coverage Review,
-Goal Execution, Systematic Debugging, Product Acceptance, and Workspace Hygiene. Conditional product/UI
-work adds three advisory playbooks: User-Facing Workflow, Frontend Design, and UI
-Quality Review. They operationalize the Standard at the moment a decision is
-needed; they do not create persisted phases, task state, grants, adoption, or an
-orchestration runtime. Testing, runtime identity, observability, accessibility,
-and UI review stay embedded in the relevant procedure rather than becoming
-mandatory subsystems of their own. A design-system layer is intentionally not
-mandatory; introduce shared design rules only when repeated product evidence
-shows they are needed.
+CADS uses one small conceptual control loop: **Reality -> Intent / Design ->
+Change -> Acceptance -> Consequence**. Project Cold-Start implements Reality;
+Product / Design Framing (`product-goal-framing.md`) combines bounded Goal/CUJ/
+acceptance framing with proportionate material-design-driver discovery; Goal
+Execution implements Change; Product Acceptance implements Acceptance; and the
+Thin Guard handles applicable consequential effects. Systematic Debugging and
+Workspace Hygiene remain conditional methods, as do User-Facing Workflow,
+Frontend Design and UI Quality Review. They are pulled only when current reality
+requires them, not treated as universal phases. No control creates persisted task
+state, grants, adoption, or a second orchestration runtime.
 
 Material decisions that must survive chat/agent turnover use the lightweight
 [Decision Continuity Protocol](docs/DECISION_CONTINUITY.md). Bootstrap creates a
 small `docs/decisions/README.md` active index. Detailed Decision Records are
 created only when losing an accepted decision could materially change a later
 session's scope, approach, acceptance, architecture, authoritative path or
-expensive research. Decision continuity is docs-as-code, not an eighth core
-skill, context database or lifecycle state.
+expensive research. Decision continuity is docs-as-code and cross-cutting, not another development
+control, context database or lifecycle state.
 
 ## Public surface
 

@@ -20,26 +20,26 @@ Normal development follows the canonical Convergent AI Development Standard in
 discipline, not kernel state. Normal development is not a CADS lifecycle.
 An ordinary commit is neither a permission transition nor an adoption event.
 
-The advisory procedure library has two layers: seven universal core playbooks and
-conditional product/UI playbooks. Concern Coverage Review is the bounded
-cross-concern search for material gaps/assumptions before a material design
-freeze; its findings are ephemeral and do not create architecture authority. User-Facing Workflow shapes task flow and
-information architecture; Frontend Design implements the interface and relevant
-states/accessibility; UI Quality Review examines the real rendered journey before
-user-facing Product Acceptance. These procedures create no design authority or
-persisted UX phase. A shared design-system artifact remains optional and
-project-specific rather than part of bootstrap or kernel architecture.
+CADS is organized conceptually around five controls rather than one procedure per
+engineering discipline: **Reality, Intent / Design, Change, Acceptance, and
+Consequence**. Product / Design Framing combines Goal/CUJ/acceptance framing with
+a proportionate search for material design drivers and unsafe assumptions.
+Systematic Debugging, Workspace Hygiene, User-Facing Workflow, Frontend Design
+and UI Quality Review are conditional methods pulled when current reality needs
+them; they are not universal phases. This keeps specialist knowledge on demand
+while preserving explicit questions learned from real failures. No control or
+method creates design authority or persisted process state.
 
 ## Advisory procedure routing
 
-Root `AGENTS.md` routes current work into a small skill library: cold-start for
-trustworthy context, Product Goal Framing for Goal/CUJ/domain semantics,
-Concern Coverage Review before materially stabilizing architecture/domain/
-authority decisions, Goal Execution for small coherent implementation,
-Systematic Debugging for current blockers, Product Acceptance before completion
-claims, and Workspace Hygiene for bounded closure/bloat. Routing is evaluated from current reality and is not persisted.
-The skills may reference one another to resume the same Goal, but there is no
-workflow engine, phase database or new authority layer.
+Root `AGENTS.md` maps current work onto the five controls. Cold-start reconstructs
+Reality. Product / Design Framing establishes Intent and acceptance while
+surfacing only material design drivers before expensive-to-reverse decisions.
+Goal Execution advances Change in small coherent batches. Product Acceptance
+proves the real outcome. Thin Guard applies only at Consequence boundaries.
+Debugging, hygiene and product/UI methods are conditional helpers that return to
+the same Goal. Routing is evaluated from current reality and is not persisted;
+there is no workflow engine, phase database or new authority layer.
 
 The target project's root `AGENTS.md` is the minimum CADS activation contract
 for coding agents. It carries enough authority, knowledge-gap, journey
@@ -65,8 +65,8 @@ stored as lightweight docs-as-code under `docs/decisions/`, following
 detailed records exist only when the materiality test is met. Accepted records
 are superseded rather than silently rewritten. Decision Records complement, but
 do not replace, current `TASK.md`, `ARCHITECTURE.md`, Git/source, tests or runtime
-evidence. No decision database, context service, vector store or eighth core
-skill is introduced.
+evidence. No decision database, context service, vector store or extra process
+control is introduced.
 
 ## Thin Guard
 

@@ -59,7 +59,7 @@ class SimplifiedEndToEndScenarios(unittest.TestCase):
         self.assertIn("tests and CI provide verification evidence", architecture)
         self.assertIn("predefined Goal acceptance", architecture)
         self.assertIn("Next:", task)
-        self.assertIn("Concern Coverage Review", task)
+        self.assertIn("Reality -> Intent / Design -> Change -> Acceptance -> Consequence", task)
         self.assertTrue(branch)
         self.assertIn(f"# branch.head {branch}", status)
         self.assertTrue(log)

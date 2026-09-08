@@ -1,111 +1,101 @@
 # Goal
 
-Add one bounded universal Concern Coverage Review so CADS can proactively expose
-material business/domain, user, data, architecture, security/effect, runtime,
-delivery, quality, and economy gaps before hard-to-reverse design decisions,
-without turning those concerns into mandatory lifecycle phases.
+Refactor CADS from an accumulating procedure list into one smaller universal
+control model while preserving the concrete failure coverage earned from Story
+Audio, Multiple Automation and MAR-like systems.
 
 # Critical User Journey
 
-Owner intent -> Product Goal Framing establishes the bounded Goal and applicable
-domain semantics -> before materially stabilizing architecture/domain/source-of-
-truth/authority, AI Tech Lead runs Concern Coverage Review -> only material gaps
-are routed to existing procedures or targeted specialist analysis -> affected
-decisions are stabilized only after gaps are resolved or scope is safely
-restricted -> normal Goal Execution continues.
+Owner intent -> Worker cold-starts from current reality -> AI Tech Lead frames
+Goal/CUJ/acceptance and only material design drivers -> Worker makes the smallest
+coherent change and resumes the real journey -> Product Acceptance proves the
+outcome -> Thin Guard is used only when the action crosses a consequential
+boundary. Debugging, hygiene and UI/UX methods are pulled only when applicable.
 
 # Acceptance
 
-- Add exactly one universal core playbook: Concern Coverage Review.
-- Product Goal Framing conditionally establishes actors, domain objects,
-  identity, relationships/cardinality, ownership, business rules, material
-  object state transitions, exceptions, and Owner-controlled open questions when
-  those semantics can materially change design.
-- Root/project `AGENTS.md` route a material architecture/domain/source-of-truth/
-  ownership/authority freeze through Concern Coverage Review, including a
-  bounded fallback when the full CADS skill library is unavailable.
-- The review covers broad concern classes proportionally to consequence and
-  complexity, reports only material gaps/assumptions, and does not claim
-  exhaustive completeness.
-- New evidence that invalidates a material assumption triggers re-review of the
-  affected decision rather than a permanent one-time approval.
-- The canonical Standard gains only the smallest invariant needed to make this
-  Knowledge-Gap Responsibility operational.
-- No standalone Business Analysis phase, security phase, compliance engine,
-  specialist skill family, task lifecycle, review database, or persisted concern
-  status is introduced.
-- A Decision Record explains why this repeated meta-failure justifies reopening
-  the CADS Freeze Rule.
-- Bootstrap/candidate/E2E and the full active CADS suite pass.
+- Universal mental model is `Reality -> Intent / Design -> Change -> Acceptance -> Consequence`.
+- Product Goal Framing and standalone Concern Coverage Review are consolidated
+  into one Product / Design Framing procedure without losing explicit domain,
+  state, security/effect, concurrency/fencing, quality or economy questions.
+- Remove `skills/core/concern-coverage-review.md`; add no replacement skill.
+- Systematic Debugging and Workspace Hygiene remain available but are described
+  as conditional methods/helpers, not universal stages.
+- State Lifecycle & Ownership remains a conditional design lens, not a new skill;
+  repeatable workflows gain a matching repeat-cycle acceptance oracle.
+- Tiny local tools can collapse to near-zero ceremony; Story Audio, Multiple
+  Automation and MAR-like systems deepen the same controls only where material.
+- Thin Guard, Owner/Tech Lead/Worker authority, Knowledge-Gap Responsibility,
+  Decision Continuity, tests-as-evidence, feature-PASS != journey-PASS and
+  `REUSE -> WIRE -> FIX -> REPLACE_AND_DELETE -> ADD` remain intact.
+- DR-0003 supersedes DR-0002 without rewriting history.
+- Focused semantic/archetype regression and the full active CADS suite pass.
 
 # Acceptance Fixture / Golden Input
 
-Use the two failure classes that exposed the meta-gap:
+Use four archetypes as semantic regression:
 
-- Story Audio: isolated feature PASS did not guarantee the composed user journey.
-- Multiple Automation: architecture could miss material domain/cardinality facts
-  such as GoogleAccount -> YouTubeChannel -> Workspace/Proxy/Profile ownership
-  unless someone happened to ask the right question before freeze.
-
-Also check a tiny reversible internal/docs change to prove the review is not
-universally triggered after every edit.
+- Tiny local tool: reversible calculator/file-converter style change incurs no
+  irrelevant design ceremony.
+- Story Audio: composed user journey plus `Run A complete -> Run B starts clean`
+  while historical Run A remains bound to its correct snapshot.
+- Multiple Automation: account/channel/workspace/profile/proxy identity,
+  cardinality and ownership must be surfaced before expensive design freeze.
+- MAR-like runtime: concurrency/resource ownership/fencing/recovery and external-
+  effect ambiguity/idempotency remain explicit when applicable.
 
 # Non-goals
 
-No comprehensive enterprise BA framework, BPMN requirement, stakeholder matrix,
-requirements database, traceability engine, universal threat model, architecture
-approval board, persisted `RESOLVED/NOT_APPLICABLE/MATERIAL_GAP` state, or new
-CADS orchestration/runtime.
+No new skill, lifecycle, process database, approval board, universal security/
+performance/state-machine phase, specialist encyclopedia, runtime or authority.
+Do not rename files merely for cosmetic purity when compatibility can be kept.
 
 # Constraints
 
-- Scan broadly, work narrowly: broad concern awareness must route only applicable
-  material gaps to deeper work.
-- Depth must scale with consequence, complexity, project size, operating context,
-  and available evidence.
-- A clear concern review is not proof that all unknown unknowns were eliminated.
-- Domain semantics constrain architecture but do not prescribe schema, classes,
-  services, aggregates, or deployment topology.
-- Preserve CADS native Git/test workflow and Thin Guard boundaries.
+- Simplification is valid only if failure coverage remains explicit.
+- Scan broad concern lenses only when being wrong could materially change design,
+  acceptance, safety or cost; work narrowly on actual drivers.
+- A clear framing never claims exhaustive unknown-unknown coverage.
+- Preserve normal native Git/test workflow and the Thin Guard boundary.
 
 # Material Decisions
 
-- The repeated systemic failure is meta-routing blindness: CADS can handle a
-  concern once recognized but lacked a bounded mechanism to search for concern
-  classes that had not yet been recognized.
-- Add one `skills/core/concern-coverage-review.md` rather than separate
-  business-analysis/security/data/operations skills.
-- Embed Domain Semantics in Product Goal Framing instead of creating a mandatory
-  Business Analysis phase.
-- Use scenario/assumption attack plus a broad reference concern model; findings
-  are ephemeral reasoning evidence, not project state.
-- Re-review is trigger-based when scope/risk/contracts/key assumptions change,
-  not after every implementation edit.
-- Research basis includes ISO/IEC/IEEE 29148 requirements engineering,
-  ISO/IEC 25010/25019 quality models, IIBA business analysis, SEI ATAM/QAW,
-  NIST SSDF, NASA SE tailoring, and DDD domain analysis.
+- Independent reviewer verdict: `REFACTOR_WITH_CORRECTIONS`, classifying current
+  CADS as `EARLY_PROCESS_ACCRETION` rather than over-engineered.
+- Keep five control points as the stable mental model; specialist procedures are
+  conditional methods.
+- Merge Concern Coverage into Product / Design Framing and delete the standalone
+  playbook while retaining concrete trigger questions.
+- Do not create State Lifecycle & Ownership as a skill; use a design lens plus
+  repeat-cycle acceptance evidence.
+- Every future ADD to CADS must include a consolidation check for MERGE/DELETE.
 
 # Progress / Discoveries / Next
 
 - Started from clean synchronized `master` at
-  `09ffd4aeea664519e46183408b8cc1a489c825a2`.
-- Deep research confirmed the common industry pattern is broad reference coverage
-  plus scenario/risk analysis, tailored to context, rather than running every
-  specialist process on every project.
-- Review changed the proposed name from `Completeness Scan` to `Concern Coverage
-  Review` to avoid false assurance that a checklist can prove exhaustive
-  completeness.
-- Added the core playbook, Domain Semantics check, Standard/router/template/docs
-  wiring, tests, and DR-0002 without adding runtime/lifecycle authority.
-- First focused run caught root `AGENTS.md` exceeding its 4,000-character thin
-  router budget; wording was compressed without weakening routing semantics.
-- Focused bootstrap/candidate/E2E verification passes 24/24.
-- First full-suite wrapper timed out under concurrent machine load after the child
-  unittest process had already reported 69/69 `OK`; this was not accepted as the
-  final gate.
-- Clean full rerun completed normally: 69/69 PASS with
-  `SIMPLIFIED_ACTIVE_SUITE=PASS`.
+  `fea7cac5dc74598cf6e83f432538a2ec33418288`.
+- Independent review completed before mutation and explicitly challenged both
+  keeping and simplifying the current structure.
+- Current-reality audit confirmed overlap between Product Goal Framing and
+  Concern Coverage Review, while Debugging/Hygiene are naturally conditional.
+- Consolidated Concern Coverage into Product / Design Framing and removed the
+  standalone `concern-coverage-review.md` skill; no replacement skill/runtime/
+  lifecycle authority was added.
+- Preserved explicit archetype lenses for journey composition, repeat-cycle state
+  isolation, domain/cardinality/ownership, concurrency/fencing/recovery and
+  external-effect ambiguity/idempotency.
+- Added repeat-cycle Product Acceptance evidence for `Run A -> Run B` state
+  isolation while preserving historical Run A snapshots/artifacts.
+- DR-0003 is Accepted and DR-0002 is marked `Superseded by DR-0003`.
+- Initial focused run caught two template/prose line-wrap contract regressions;
+  semantic probes showed the actual failure coverage was intact, so wording was
+  repaired without weakening test or acceptance oracles.
+- Focused bootstrap/candidate/E2E verification passes 25/25, including the new
+  four-archetype semantic regression.
+- Full active suite passes 70/70 with `SIMPLIFIED_ACTIVE_SUITE=PASS` in ~81s.
+- `git diff --check` passes; active docs/templates contain no route to the removed
+  standalone skill.
 
-Next: perform final semantic/diff review, commit the bounded CADS correction, push
-`master`, and freeze this concern-coverage design unless new project evidence
-meets the existing Freeze Rule.
+Next: perform final staged-diff review, commit the bounded consolidation, push
+`master`, verify local/remote convergence, then freeze CADS until a real Class A
+or repeated systemic failure satisfies the existing Freeze Rule.

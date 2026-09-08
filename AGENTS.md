@@ -1,30 +1,43 @@
 # Worker operating map
 
 On first contact, new Tech Lead/Worker session, or stale/unknown context, **MUST**
-run [`skills/core/project-cold-start.md`](skills/core/project-cold-start.md)
-before planning or implementation. Reconstruct from current reality; completion
-is not persisted authority.
+run [`skills/core/project-cold-start.md`](skills/core/project-cold-start.md) to
+reconstruct current reality before planning or implementation.
 
-Mandatory routing:
+Use one small control model; these are reasoning controls, not persisted phases:
 
-- New/materially changed Goal or missing acceptance -> `skills/core/product-goal-framing.md`.
-- Before materially stabilizing new/changed architecture, domain, source-of-truth, ownership, or authority, or after a material assumption changes -> `skills/core/concern-coverage-review.md`.
-- Established Goal implementation -> `skills/core/goal-execution.md`.
-- Bug/regression/failing test/unexpected runtime/provider behavior -> `skills/core/systematic-debugging.md`.
-- Before material `FIXED`/`DONE`/ready/completion claim -> `skills/core/product-acceptance.md`.
-- Workspace bloat/competing worklines/Goal closure residue -> `skills/core/workspace-hygiene.md`.
-- Multi-step user outcome or changed journey/navigation/discoverability -> `skills/product/user-facing-workflow.md` at whole-journey composition level.
-- Changed screen/component/interaction/responsive layout/visual hierarchy -> `skills/product/frontend-design.md`.
-- Before user-facing Product Acceptance or when usability/accessibility/recovery is doubtful -> `skills/product/ui-quality-review.md`.
-- Accepted material direction that must survive turnover -> Decision Record under `docs/decisions/` using `docs/DECISION_CONTINUITY.md`.
-- Explicit consequential action -> existing CADS Thin Guard; routing never expands guard authority.
+1. **Reality** -> Project Cold-Start when context is new/stale; Workspace Hygiene
+   only when bloat, competing worklines, or closure residue is actually present.
+2. **Intent / Design** -> `skills/core/product-goal-framing.md` for a new/changed
+   Goal, missing acceptance, material design assumptions, or before an expensive-
+   to-reverse architecture/domain/source-of-truth/ownership/authority decision.
+3. **Change** -> `skills/core/goal-execution.md` for the smallest coherent change;
+   use `skills/core/systematic-debugging.md` conditionally for an actual defect,
+   then resume the same Goal.
+4. **Acceptance** -> `skills/core/product-acceptance.md` before a material
+   `FIXED`/`DONE`/ready claim. Multi-step outcomes require whole-journey evidence.
+5. **Consequence** -> existing CADS Thin Guard only for applicable destructive,
+   external, privileged/security-sensitive, or explicitly high-cost effects.
 
-When triggers overlap: reconstruct context first; frame Goal and applicable domain
-semantics before material design freeze; run Concern Coverage Review before that
-freeze; resolve whole user workflow before visual implementation; debug actual
-defects scientifically; run UI Quality Review before user-facing Product
-Acceptance. Do not run journey/design review after every tiny edit. All playbooks
-are advisory, not persisted lifecycle state.
+Conditional product/UI methods:
+
+- changed journey/navigation/discoverability -> `skills/product/user-facing-workflow.md`;
+- changed screen/component/interaction/layout -> `skills/product/frontend-design.md`;
+- before user-facing acceptance or when usability/accessibility/recovery is in doubt -> `skills/product/ui-quality-review.md`.
+
+Product / Design Framing must preserve Knowledge-Gap Responsibility: the Owner
+is not expected to provide engineering expertise. The AI Tech Lead identifies
+material design drivers and assumptions proportionally to consequence. When
+applicable this includes domain identity/cardinality/ownership, repeatable-workflow
+state lifetime/reset/re-entry/stale-state isolation, data/source-of-truth,
+security/external-effect ambiguity and idempotency, concurrency/resource
+ownership/fencing/recovery, quality evidence, and economy. Tiny reversible work
+does not pay for irrelevant lenses.
+
+Feature/subsystem PASS does not establish Journey/Product PASS. Tests/CI provide
+verification evidence; identified runtime provides observed behavior; predefined
+Goal acceptance determines completion. Accepted material direction that must
+survive turnover belongs in a Decision Record under `docs/decisions/`.
 
 Canonical commands:
 
@@ -34,21 +47,13 @@ python scripts/self_test.py
 python scripts/ai.py --root . check --base <sha> --boundary R3 --policy <file>
 ```
 
-Normal edits, focused tests and ordinary commits use native tools. CADS is
-invoked only at an explicitly declared consequential boundary.
-
-Stable invariants:
-
-- Owner owns desired outcome, material product trade-offs, consequential authorization and subjective real-use acceptance; AI Tech Lead owns missing engineering-concern discovery and ordinary engineering choices within that intent.
-- Identified Git/source owns implementation reality; identified runtime owns observed behavior; tests/CI provide verification evidence.
-- Goal-defined acceptance determines completion; `TASK.md` is current context, not runtime authority.
-- Accepted Decision Records own durable rationale/settled material direction; chat memory and agent reports do not.
-- `expected_paths` warns; `strict_paths` and `prohibited_paths` block.
-- Tracked `.buildos/**` changes cannot cross a guarded boundary.
-- High-cost local actions re-observe immediately before native spawn.
-- External intent is durable before dispatch; ambiguity is never blindly retried.
-- No lifecycle state, generations, adoption, continuation, grants or migration.
+Normal edits, focused tests and ordinary commits stay native. Owner owns desired
+outcome, material product trade-offs, consequential authorization and subjective
+real-use acceptance; AI Tech Lead owns missing engineering-concern discovery and
+ordinary engineering judgment within that intent. Identified Git/source owns
+implementation reality; `TASK.md` is current context, not runtime authority.
 
 Follow [`docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md).
 Durable architecture belongs in `ARCHITECTURE.md`; temporary progress in
-`TASK.md`. Do not build parsers, schemas or migrations around task prose.
+`TASK.md`. No routing result creates lifecycle state, grants, adoption, or a
+second runtime.

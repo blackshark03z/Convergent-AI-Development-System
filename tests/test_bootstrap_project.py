@@ -186,20 +186,20 @@ class BootstrapProjectTests(unittest.TestCase):
         self.assertIn("minimum CADS activation contract", agents)
         self.assertIn("Knowledge-gap responsibility", agents)
         self.assertIn("Git/source owns implementation reality", agents)
-        self.assertIn("tests/CI as verification evidence", agents)
-        self.assertIn("predefined Goal acceptance oracle", agents)
-        self.assertIn("whole-journey/composition level", agents)
-        self.assertIn("Concern Coverage Review", agents)
+        self.assertIn("tests/CI are verification evidence", agents)
+        self.assertIn("predefined Goal acceptance is the completion oracle", agents)
+        self.assertIn("Journey/Product PASS", agents)
+        self.assertIn("five reasoning controls", agents)
+        self.assertIn("Product / Design Framing", agents)
         self.assertIn("relationships/cardinality", agents)
-        self.assertIn("material gap", agents)
-        self.assertIn("what must be true", agents)
-        self.assertIn("happy-path", agents)
+        self.assertIn("stale-state isolation", agents)
+        self.assertIn("idempotency", agents)
+        self.assertIn("fencing", agents)
         self.assertIn("isolated feature/subsystem PASS", agents)
-        self.assertIn("remains unverified", agents)
         for procedure in (
-            "Product Goal Framing", "Concern Coverage Review", "Goal Execution",
-            "Systematic Debugging", "Product Acceptance", "Workspace Hygiene", "User-Facing Workflow",
-            "Frontend Design", "UI Quality Review",
+            "Goal Execution", "Systematic Debugging", "Product Acceptance",
+            "Workspace Hygiene", "User-Facing Workflow", "Frontend Design",
+            "UI Quality Review",
         ):
             self.assertIn(procedure, agents)
         for heading in (
@@ -227,13 +227,38 @@ class BootstrapProjectTests(unittest.TestCase):
         for name in (
             "project-cold-start.md",
             "product-goal-framing.md",
-            "concern-coverage-review.md",
             "goal-execution.md",
             "systematic-debugging.md",
             "product-acceptance.md",
             "workspace-hygiene.md",
         ):
             self.assertTrue((skills / name).is_file(), name)
+        self.assertFalse((skills / "concern-coverage-review.md").exists())
+
+    def test_product_design_framing_preserves_archetype_failure_coverage(self):
+        framing = (PACKAGE / "skills" / "core" / "product-goal-framing.md").read_text(
+            encoding="utf-8",
+        )
+        acceptance = (PACKAGE / "skills" / "core" / "product-acceptance.md").read_text(
+            encoding="utf-8",
+        )
+        agents = (TEMPLATES / "AGENTS.md").read_text(encoding="utf-8")
+
+        # Tiny local tool: proportionality keeps low-consequence work lightweight.
+        self.assertIn("collapse to very little ceremony", framing)
+        # Story Audio journey + repeat-cycle state isolation.
+        self.assertIn("Feature/subsystem PASS", framing)
+        self.assertIn("stale state", framing)
+        self.assertIn("complete Run A", acceptance)
+        self.assertIn("representative Run B", acceptance)
+        # Multiple Automation: domain identity/cardinality/ownership remains explicit.
+        self.assertIn("relationships/cardinality", framing)
+        self.assertIn("ownership", framing)
+        # MAR-like runtime: concurrency/fencing/recovery and effect retry safety remain explicit.
+        self.assertIn("fencing/authority", framing)
+        self.assertIn("idempotency", framing)
+        self.assertIn("retry safety", framing)
+        self.assertIn("five reasoning controls", agents)
 
     def test_product_ui_skill_library_contains_conditional_playbooks(self):
         skills = PACKAGE / "skills" / "product"

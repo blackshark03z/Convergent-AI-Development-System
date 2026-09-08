@@ -1,6 +1,6 @@
 # DR-0002: Add bounded concern coverage before material design freeze
 
-Status: Accepted
+Status: Superseded by DR-0003
 Date: 2026-09-08
 Scope: Process
 

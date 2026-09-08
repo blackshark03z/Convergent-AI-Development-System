@@ -102,10 +102,10 @@ because evidence changed."
 
 ## Integration with CADS
 
-Decision continuity is cross-cutting, not an eighth core skill:
+Decision continuity is cross-cutting, not another development control:
 
 - Project Cold-Start reads the active index and relevant accepted records.
-- Product Goal Framing persists accepted material product direction.
+- Product / Design Framing persists accepted material product/design direction.
 - Goal Execution persists material implementation/product trade-offs that would
   otherwise exist only in chat.
 - Product Acceptance checks that no material Goal decision remains chat-only.

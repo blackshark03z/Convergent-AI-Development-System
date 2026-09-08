@@ -27,6 +27,11 @@ that definition.
    Critical User Journey on the real supported surface whenever feasible. When
    the Goal depends on multiple capabilities composing into one user outcome,
    isolated feature/subsystem checks cannot substitute for this journey evidence.
+   For a workflow intended to run repeatedly, include the terminal-to-next-cycle
+   transition when state leakage is a material risk: complete Run A, start the
+   representative Run B, verify B receives the intended active context rather
+   than stale state from A, and verify A's historical configuration/artifacts
+   remain bound to the correct snapshot/state.
 5. Confirm the observable final output or behavior, including discoverability
    and reachability for user-facing capability. The intended user should be able
    to identify relevant next actions, retain necessary context, recover from
