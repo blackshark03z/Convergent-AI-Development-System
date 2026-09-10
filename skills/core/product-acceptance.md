@@ -27,6 +27,8 @@ that definition.
    Critical User Journey on the real supported surface whenever feasible. When
    the Goal depends on multiple capabilities composing into one user outcome,
    isolated feature/subsystem checks cannot substitute for this journey evidence.
+   For affected stateful handoffs, use the focused checks below as part of this
+   journey evidence.
    For a workflow intended to run repeatedly, include the terminal-to-next-cycle
    transition when state leakage is a material risk: complete Run A, start the
    representative Run B, verify B receives the intended active context rather
@@ -56,6 +58,31 @@ acceptance criterion only when it is a relevant oracle for that criterion and is
 tied to the identified candidate and applicable conditions. Missing matching
 evidence means `UNVERIFIED`; do not convert it to PASS, and do not infer Journey
 PASS from the sum of isolated feature PASS results.
+
+## Focused handoff evidence
+
+When a change materially affects the next journey step, verify the existing
+acceptance against the authoritative domain postcondition, including any
+relevant valid field combination identified during Goal Execution.
+
+When the paths can behave differently, exercise both:
+
+- completing the action through the supported surface and observing the next
+  step in the same session; and
+- reopening/reloading into the completed state and observing the next step.
+
+Check the expected next action and the context/data that must remain unchanged.
+Where an adjacent incomplete state could accidentally become unblocked, include
+that focused negative case. Reuse existing evidence when it covers these paths;
+do not expand this into all possible state/branch combinations.
+
+A fixture initialized in a completed state proves that state's rendering, not
+the action-to-next-step transition. Report those observations separately; an
+unexercised required path remains `UNVERIFIED`. Mocked responses do not prove
+backend persistence or historical-data preservation. Use an appropriate oracle
+for those claims. Offline fixtures may establish bounded regression evidence
+without authorizing production mutations or provider calls, and do not replace
+required real-journey or Owner acceptance.
 
 ## Authority and verdicts
 

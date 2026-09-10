@@ -17,7 +17,9 @@ then resume this same Goal.
 ## Execution loop
 
 1. Reconfirm the one active Goal, CUJ, acceptance and current Product HEAD.
-2. Inspect the existing implementation before designing additions.
+2. Inspect the existing implementation before designing additions. For a change
+   that materially affects handoff between journey steps, clarify the existing
+   acceptance using the step-handoff guidance below before editing.
 3. Choose the smallest coherent change that advances the CUJ or removes its
    first real blocker.
 4. Prefer, in order:
@@ -33,6 +35,33 @@ then resume this same Goal.
 
 Internal checkpoints are evidence and continuity aids, not new Goals, phases,
 promotion states or product-completion claims.
+
+## Handoff between journey steps
+
+For an affected stateful handoff, establish from the existing domain contract:
+
+- which authoritative state/postcondition means the step is complete;
+- what the next step must receive and visibly allow, and what context or
+  historical data must remain unchanged; and
+- which relevant valid combination of status, counts or other fields could be
+  misinterpreted as pending work or permission to proceed.
+
+Record only the necessary Given/When/Then example in the existing acceptance,
+or reference an equivalent existing scenario. Reuse the authoritative domain
+meaning; do not invent a second completion rule from a convenient UI counter.
+If expected behavior is missing or contradictory, resolve that affected part
+before implementation using established engineering/Owner responsibilities.
+
+Example from Story Audio: `APPROVED_CURRENT`, `unresolved_count=1`,
+`remaining_review_count=0`, `blocks_progress=false` is a valid approved state.
+The unresolved-target count does not mean one human review remains. The next
+voice-configuration step must be available while book/range and approved data
+remain intact. This illustrates field semantics, not a universal status schema.
+
+Use focused verification for the affected handoff, following
+`product-acceptance.md`. Reuse coverage where adequate; do not specify every
+button, enumerate unrelated branches, or introduce another contract document,
+registry or process phase. Then resume the same journey.
 
 ## Scope and complexity control
 
