@@ -28,8 +28,10 @@ Goal.
    hypothesis wrong as well as what would support it.
 5. **Run the cheapest discriminating check.** Prefer targeted observations over
    broad audits.
-6. **Apply the smallest coherent root-cause fix** supported by evidence. Do not
-   redesign adjacent subsystems merely because they could be cleaner.
+6. **Apply the smallest coherent root-cause fix** supported by evidence. Before
+   editing, use [Goal Execution's scope and complexity control](goal-execution.md#scope-and-complexity-control)
+   to identify affected dependencies and preservation checks. Do not redesign
+   adjacent subsystems merely because they could be cleaner.
 7. **Add or run focused regression evidence** that would have caught the defect
    when practical.
 8. **Resume the original CUJ / acceptance fixture immediately.** The purpose of

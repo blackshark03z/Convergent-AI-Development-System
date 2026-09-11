@@ -1,91 +1,82 @@
 # Goal
 
-Clarify verification of material handoffs between journey steps inside the
-existing CADS Goal Execution and Product Acceptance playbooks.
+Clarify change-impact analysis inside existing CADS Goal Execution and route
+root-cause fixes through that same scope check, without another contract layer.
 
 # Critical User Journey
 
-Worker identifies the domain completion condition for an affected handoff ->
-clarifies the existing acceptance -> makes the bounded change -> verifies the
-action-to-next-step transition and reopening when they can behave differently ->
-reports only the supported evidence and resumes the same product journey.
+Worker identifies intended behavior/assumption delta -> traces evidenced affected
+dependencies -> chooses changes and preservation checks -> implements and verifies
+that bounded scope -> resumes the original product journey.
 
 # Acceptance
 
-- Goal Execution identifies authoritative completion state, downstream behavior,
-  preserved context/data and relevant valid field combinations before editing.
-- Examples belong in existing acceptance or reference existing scenarios; no
-  new Journey Contract document, schema, registry, skill or universal control.
-- Product Acceptance distinguishes same-session transition evidence from a
-  fixture loaded in the completed state, with an adjacent blocked case only
-  where relevant. Missing required evidence remains UNVERIFIED.
-- Fixture evidence does not establish backend persistence, history preservation,
-  real-product acceptance or authorization for production/provider effects.
-- Keep `Reality -> Intent / Design -> Change -> Acceptance -> Consequence`,
-  the Standard, Thin Guard and Owner authority intact.
-- Review the bounded documentation diff and run the existing active CADS suite.
-  These checks do not establish actual agent-behavior improvement.
+- Goal Execution checks direct/indirect dependencies before choosing edits and
+  selects regression from affected behavior, not just changed files.
+- Related components may remain unchanged with a reason/evidence; dependency
+  tracing stops where the relevant contract remains intact. Material uncertainty
+  is resolved or reported, not disguised as exhaustive coverage.
+- Keep existing reuse/authoritative-path/duplicate-implementation questions,
+  stateful-handoff examples, Product Acceptance and effect/Owner boundaries.
+- Systematic Debugging references the same scope check before applying a fix.
+- Keep Reality -> Intent / Design -> Change -> Acceptance -> Consequence.
+- Review proportionality against the three scenarios below and run the existing
+  CADS suite. These checks do not prove agent behavior or standards certification.
 
 # Acceptance Fixture / Evidence Basis
 
-Story Audio worktree `D:\Youtube\_worktrees\story-audio-product-reconciliation`,
-fix commit `4ee75e153911985f743c51625dbe22c07f1ea943`, parent
-`91b329743945bfe0fabbe63326128cd5a41a08c7`:
+Desk-review scenarios, not newly executed product tests:
 
-- `story_audio/speaker_state.py` separates unresolved targets from remaining
-  human review and supports APPROVED_CURRENT with unresolved_count=1,
-  remaining_review_count=0 and blocks_progress=false.
-- `ui/app.js` previously used unresolved_count to determine remaining review;
-  the fix uses speakerReviewRemainingCount.
-- `tests/test_assignment_completed_review_browser.py` loads the approved state
-  and checks rendering; it does not perform the final review-save transition.
-- This is an existing-requirement implementation/coverage failure, not evidence
-  that a new CADS lifecycle or universal specification layer is needed.
+1. Display-label correction: inspect affected presentation and verify it; no
+   automatic persistence, renderer or migration audit without a dependency.
+2. Shared-state interpretation bug: inspect consumers of the relevant meaning;
+   retain valid uses of raw counts. Keep the existing Story Audio approved-review
+   handoff example and transition-versus-reopening evidence distinction.
+3. Configuration-scope change (hypothetical): consider evidenced storage/readers,
+   snapshot boundaries and existing-data compatibility; verify new behavior and
+   preservation of historical jobs rather than editing every related component.
+
+Engineering reference: NASA SWE-080, Track and Evaluate Changes, describes
+impact evaluation and proportional treatment for small projects:
+https://swehb.nasa.gov/spaces/SWEHBVD/pages/102695459/SWE-080%2B-%2BTrack%2Band%2BEvaluate%2BChanges
+This is a reference for the approach, not a claim of NASA/ISO compliance.
 
 # Non-goals
 
-No Story Audio source/runtime/DB changes, provider calls, production replay,
-agent benchmark, unrelated CADS cleanup, Standard amendment or automatic rollout
-to other projects. No new tests that merely match prose.
+No new skill, phase, impact schema/document, test that merely matches new prose,
+Standard amendment, general cleanup, Story Audio mutation or provider call.
+No agent-behavior benchmark or downstream rollout in this task.
 
 # Constraints
 
-Preserve owner work and existing cold-start context headings. Refine only the
-affected handoff checks; ordinary changes do not incur a new mandatory phase.
+Preserve owner work, existing cold-start headings and concrete handoff coverage.
+The affected playbooks own analysis and routing respectively; acceptance owns
+verification semantics. Avoid copying the same checklist across procedures.
 
 # Material Decisions
 
-Owner authorized the bounded playbook clarification on 2026-09-11. This applies
-DR-0003's rule to refine an existing control after a concrete failure; it does
-not introduce a new architecture or supersede that Decision Record.
+Owner authorized this bounded refinement after reviewing lighter alternatives.
+Apply DR-0003's existing-control refinement rule: extend existing scope questions
+and add one debugging reference; preserve the existing five questions and handoff
+section rather than rewrite the architecture or introduce another contract.
 
 # Progress / Discoveries / Next
 
-- Baseline: clean CADS master at a3e24a1d28cea2a4ad0ee956dfa13ca2a2d211f5.
-- Previous five-control consolidation is already committed at that HEAD; the old
-  TASK instruction to commit it was stale. A fresh fetch on 2026-09-11 confirmed
-  origin/master also at that baseline before publishing this clarification.
-- Updated only Goal Execution, Product Acceptance and this current task context.
-- 2026-09-11: `python scripts/self_test.py` ran 70 tests in 82.419s: 69 passed;
-  the cold-start test failed because this task rewrite omitted its expected
-  context headings. Restored those headings and the five-control reminder;
-  no test or acceptance rule was weakened.
-- After that task-only correction, `python -m unittest discover -s tests -p
-  test_end_to_end.py -v` passed 4/4 in 3.885s, including the failed cold-start
-  check. The other 66 checks passed in the full run; the full suite was not
-  repeated after the context correction.
-- Bounded playbook diff reviewed; `git diff --check` passes. Only these three
-  documentation files are modified. Actual agent behavior and Story Audio's
-  full journey remain unverified by this task.
-- Owner authorized commit/push/merge on 2026-09-11. Baseline local/remote master
-  matched, so no merge was needed at that check. Publication verification will
-  run the full suite at the committed candidate and compare the remote commit
-  and tree after a normal push; consult live Git for the publication outcome.
+- Baseline: clean master at 0dcab3002cb78269141b1c12691531f8da4251bb.
+- Existing playbooks inspected: scope questions already address excessive and
+  duplicate changes; the refinement adds evidenced dependency coverage and
+  preservation-based regression selection at the implementation decision point.
+- Modified Goal Execution, Systematic Debugging and this current task context.
+- Desk review against all three scenarios found proportional scope: a label
+  does not imply data migration; a shared-state fix inspects semantic consumers
+  without replacing valid raw-count uses; a scope change includes implicated
+  compatibility and historical preservation. This is reasoning review only.
+- `python scripts/self_test.py`: 70/70 PASS in 89.015s,
+  `SIMPLIFIED_ACTIVE_SUITE=PASS`. No tests were added or weakened.
+- Bounded diff reviewed; `git diff --check` PASS. Actual agent effectiveness,
+  downstream product behavior and formal standards compliance remain unverified.
 
-# Next Safe Action
-
-Next: reconcile publication from live Git rather than repeating a stale release
-instruction: if the clarification is absent from origin/master, finish the
-authorized publication after candidate checks; if present, this CADS task is
-complete. Resume product work only within that project's established scope.
-This documentation update does not establish downstream product acceptance.
+Next: Owner has authorized commit/push. Verify the committed candidate and normal
+publication from live Git; if origin/master contains this clarification, the CADS
+task is complete. Apply the guidance within the next product task's authorized
+scope and evaluate whether it catches omissions without unnecessary expansion.

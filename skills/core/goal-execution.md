@@ -17,9 +17,10 @@ then resume this same Goal.
 ## Execution loop
 
 1. Reconfirm the one active Goal, CUJ, acceptance and current Product HEAD.
-2. Inspect the existing implementation before designing additions. For a change
-   that materially affects handoff between journey steps, clarify the existing
-   acceptance using the step-handoff guidance below before editing.
+2. Inspect the existing implementation before designing additions. Identify the
+   behavior or assumption being changed and its affected dependencies using
+   Scope and complexity control below. For an affected stateful handoff, clarify
+   existing acceptance using the step-handoff guidance before editing.
 3. Choose the smallest coherent change that advances the CUJ or removes its
    first real blocker.
 4. Prefer, in order:
@@ -28,7 +29,9 @@ then resume this same Goal.
    - `FIX` the current authoritative path;
    - `REPLACE_AND_DELETE` when replacement is genuinely required; then
    - `ADD` only when no adequate authoritative capability exists.
-5. Run focused verification appropriate to the changed layer.
+5. Run focused verification for the changed behavior and affected behavior that
+   must remain intact, using the impact findings to select relevant regression
+   checks. Revisit those findings if implementation exposes another dependency.
 6. Resume the same real journey / acceptance fixture and find the next blocker.
 7. Use broader regression at meaningful convergence points; do not pay full
    suite cost after every small edit unless consequence/risk justifies it.
@@ -67,11 +70,25 @@ registry or process phase. Then resume the same journey.
 
 For every material change be able to answer:
 
+- What behavior or assumption changes, and which producers, stored data or
+  consumers depend on it directly or indirectly, as supported by source/runtime
+  evidence rather than merely matching names or files?
+- Which affected parts need changes, which remain valid, and what evidence
+  verifies the new behavior and the behavior/data that must be preserved?
 - What existing code was reused?
 - What path is authoritative after this change?
 - What became superseded?
 - What can be deleted after acceptance?
 - Did this create a second implementation of the same responsibility?
+
+Follow dependencies only while the changed assumption can affect their behavior;
+stop at a boundary whose relevant contract remains intact with supporting
+evidence. Consider configuration, interfaces, tests, documentation and existing
+data compatibility when implicated; being related does not mean needing edits.
+Resolve or explicitly report uncertainty affecting acceptance or important
+invariants; do not claim exhaustive coverage from a list of inspected files.
+Keep the necessary findings with existing task/acceptance or change-review
+notes, not a new impact document, registry or mandatory full-system audit.
 
 Do not create a parallel implementation merely to avoid understanding the
 current one. Prefer product composition and wiring when the required capability
