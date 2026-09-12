@@ -9,6 +9,7 @@ from typing import Any
 
 from . import git_adapter
 from .effect_safety import EffectSafetyError
+from .evidence_envelope import EvidenceEnvelopeError, evaluate_file as evaluate_evidence_file
 from .effect_store import EffectStoreError
 from .external_effect import (
     effect_retry_safety,
@@ -56,6 +57,12 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command", required=True)
 
     commands.add_parser("inspect", help="read current Git/effect truth without writes")
+
+    verify_envelope = commands.add_parser(
+        "verify-envelope",
+        help="derive VERIFIED/NOT_VERIFIED/UNKNOWN from one repo-local evidence envelope",
+    )
+    verify_envelope.add_argument("--input", type=Path, required=True, help="repo-local JSON evidence envelope")
 
     check = commands.add_parser("check", help="derive PASS/WARN/BLOCK from live Git and scope")
     check.add_argument("--base", required=True, help="relevant base commit or ref")
@@ -131,6 +138,10 @@ def execute(args: argparse.Namespace) -> int:
         if args.command == "inspect":
             _json(_inspect(args.root.resolve()))
             return 0
+        if args.command == "verify-envelope":
+            value = evaluate_evidence_file(args.root.resolve(), args.input)
+            _json(value)
+            return 0 if value["verdict"] == "VERIFIED" else 2
         if args.command == "check":
             value = check_boundary(
                 args.root,
@@ -187,6 +198,7 @@ def execute(args: argparse.Namespace) -> int:
         raise GuardInputError(f"unsupported command: {args.command}")
     except (
         GuardInputError,
+        EvidenceEnvelopeError,
         EffectSafetyError,
         EffectStoreError,
         OSError,
