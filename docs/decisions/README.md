@@ -7,6 +7,7 @@ tests or runtime evidence.
 
 ## Active
 
+- [DR-0007 — Bound external specialist skills as pinned advisory inputs](0007-external-specialist-skill-boundary.md)
 - [DR-0006 — Require acceptance-surface provenance for product evidence](0006-acceptance-surface-provenance.md)
 - [DR-0005 — Adopt a lean project architecture description profile](0005-lean-project-architecture-description.md)
 - [DR-0004 — Adopt trusted-evidence and canonical-integration boundaries](0004-trusted-evidence-and-integration-authority.md)

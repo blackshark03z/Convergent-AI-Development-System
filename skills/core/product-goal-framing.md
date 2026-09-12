@@ -29,11 +29,15 @@ context is unknown or stale, run `project-cold-start.md` first.
 The Owner is not expected to supply missing engineering expertise. The AI Tech
 Lead investigates material engineering concerns using the Goal, repository,
 runtime evidence, supported operating context, and targeted research when
-needed. Resolve ordinary engineering choices within established intent and
-authority. Ask the Owner only for missing product facts, material trade-offs, or
-consequential choices that change Owner-controlled outcomes and cannot
-reasonably be recovered or inferred. Translate technical choices into observable
-consequences; do not ask the Owner to certify a technical fact.
+needed. Ordinary targeted research is the default. If that investigation finds
+a reusable external specialist Agent Skill materially preferable to ordinary
+research, use `external-skill-acquisition.md` before persistent use; stack or
+framework detection alone is not sufficient relevance evidence. Resolve ordinary
+engineering choices within established intent and authority. Ask the Owner only
+for missing product facts, material trade-offs, or consequential choices that
+change Owner-controlled outcomes and cannot reasonably be recovered or inferred.
+Translate technical choices into observable consequences; do not ask the Owner
+to certify a technical fact.
 
 ## Frame the Goal
 

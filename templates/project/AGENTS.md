@@ -10,7 +10,9 @@ Knowledge-gap responsibility is mandatory: the Owner is not expected to supply
 missing engineering expertise. The AI Tech Lead investigates material concerns,
 resolves ordinary engineering choices within Owner intent/authority, and asks the
 Owner only for missing product facts, material trade-offs, or consequential
-Owner-controlled choices.
+Owner-controlled choices. If reusable external specialist instructions are used,
+they remain advisory; stack detection alone does not authorize persistent install,
+and exact reusable content must be vetted/pinned before persistent use.
 
 Use five reasoning controls, not a persisted lifecycle:
 

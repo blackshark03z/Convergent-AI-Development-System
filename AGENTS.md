@@ -34,7 +34,10 @@ applicable this includes domain identity/cardinality/ownership, repeatable-workf
 state lifetime/reset/re-entry/stale-state isolation, data/source-of-truth,
 security/external-effect ambiguity and idempotency, concurrency/resource
 ownership/fencing/recovery, quality evidence, and economy. Tiny reversible work
-does not pay for irrelevant lenses.
+does not pay for irrelevant lenses. If targeted investigation identifies a
+materially useful reusable external Agent Skill, route persistent use through
+`skills/core/external-skill-acquisition.md`; stack detection alone is not
+installation authority.
 
 Feature/subsystem PASS does not establish Journey/Product PASS. Tests/CI provide
 verification evidence; identified runtime provides observed behavior; predefined

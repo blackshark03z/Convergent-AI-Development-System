@@ -64,6 +64,30 @@ session's scope, approach, acceptance, architecture, authoritative path or
 expensive research. Decision continuity is docs-as-code and cross-cutting, not another development
 control, context database or lifecycle state.
 
+## Portable and external skills
+
+CADS-owned skills have one canonical semantic source under `skills/core/` and
+`skills/product/`. Generate Agent Skills-compatible projections for a supported
+harness without creating manually duplicated copies:
+
+```powershell
+python scripts/project_agent_skills.py --output-dir D:\path\to\generated-cads-skills
+python scripts/project_agent_skills.py --output-dir D:\path\to\generated-cads-skills --check
+```
+
+Projection metadata lives in `skills/agent-skills.json`; generated `SKILL.md`
+files remain build/output artifacts. Trigger descriptions are behavior-bearing
+metadata and are therefore explicit and tested.
+
+Ordinary targeted research remains the default response to a technical knowledge
+gap. When a reusable external specialist Agent Skill is materially preferable,
+follow `skills/core/external-skill-acquisition.md`. Current persistent support is
+limited to vetted docs/reference-only skill content. If exact external skill bytes
+are kept for reuse, record immutable source/content/license review provenance in
+a project-local `external-skills.lock.json` conforming to
+`skills/external-skills-lock.schema.json`. CADS does not auto-install/update
+skills from stack detection and does not grant external skills authority.
+
 ## Public surface
 
 Read current Git and external-effect truth without writes:
@@ -162,6 +186,9 @@ identifiers. The product-facing name is Convergent AI Development System (CADS).
 - [TASK.md](TASK.md): current goal and progress only.
 - [docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md](docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md): canonical AI development invariants, DoD, rabbit-hole rule and freeze rule.
 - [docs/EFFECT_SAFETY.md](docs/EFFECT_SAFETY.md): effect contract and recovery semantics.
+- [skills/core/external-skill-acquisition.md](skills/core/external-skill-acquisition.md): conditional vetting/pinning boundary for reusable external specialist Agent Skills.
+- [skills/agent-skills.json](skills/agent-skills.json): explicit routing metadata for deterministic Agent Skills projections of CADS-owned skills.
+- [skills/external-skills-lock.schema.json](skills/external-skills-lock.schema.json): optional project-local provenance-lock schema for persisted docs-only external skills.
 - [skills/product/user-facing-workflow.md](skills/product/user-facing-workflow.md): task-flow, navigation and discoverability procedure for user-facing Goals.
 - [skills/product/frontend-design.md](skills/product/frontend-design.md): deliberate frontend implementation, states, accessibility and rendered verification.
 - [skills/product/ui-quality-review.md](skills/product/ui-quality-review.md): high-impact usability/accessibility review before user-facing acceptance.

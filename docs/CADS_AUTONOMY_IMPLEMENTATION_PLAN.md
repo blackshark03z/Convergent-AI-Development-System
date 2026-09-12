@@ -224,10 +224,18 @@ silently raise authority online.
 
 ## Portable skill packaging
 
-Keep one canonical CADS knowledge source. Agent Skills / `SKILL.md` compatible
-projections may be added when they improve portability across supported
-harnesses. Do not add a skill-sync daemon, knowledge database or duplicated
-vendor-specific standards without evidence of need.
+Keep one canonical CADS knowledge source. Agent Skills / `SKILL.md` is a
+portability target for CADS-owned skills, produced deterministically from the
+canonical `skills/core/*.md` and `skills/product/*.md` bodies plus explicit
+routing metadata in `skills/agent-skills.json`. Generated projections are output
+artifacts, not manually maintained competing standards. Use
+`scripts/project_agent_skills.py` to generate or check projections.
+
+External specialist skills remain project-local untrusted advisory inputs and
+follow `skills/core/external-skill-acquisition.md` when persistent reuse is
+material. Do not add a skill-sync daemon, registry/marketplace, knowledge
+database, automatic updater or duplicated vendor-specific standards without
+future evidence of need.
 
 ## Explicit non-goals
 

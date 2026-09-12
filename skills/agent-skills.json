@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {"source":"skills/core/project-cold-start.md","name":"cads-project-cold-start","description":"Use on first contact, a new or stale AI session, or unknown project context to reconstruct repository/runtime truth before planning; do not use as a persisted phase."},
+    {"source":"skills/core/product-goal-framing.md","name":"cads-product-goal-framing","description":"Use for a new or changed Product Goal, missing acceptance, or material design assumptions to frame Goal/CUJ/acceptance and surface only material concerns."},
+    {"source":"skills/core/architecture-description.md","name":"cads-architecture-description","description":"Use when durable system shape, technology, state, runtime, deployment, or trust boundaries are material or changing; omit for tiny reversible implementation choices."},
+    {"source":"skills/core/external-skill-acquisition.md","name":"cads-external-skill-acquisition","description":"Use only after targeted investigation identifies a materially useful reusable external specialist Agent Skill; vet and pin exact docs-only content before persistent use, not for ordinary web research."},
+    {"source":"skills/core/goal-execution.md","name":"cads-goal-execution","description":"Use after Goal and acceptance are clear to implement the smallest coherent change and collect relevant verification evidence."},
+    {"source":"skills/core/systematic-debugging.md","name":"cads-systematic-debugging","description":"Use for an actual reproducible defect or failed acceptance path to observe, isolate root cause, repair minimally, and reverify; do not use as a generic planning phase."},
+    {"source":"skills/core/product-acceptance.md","name":"cads-product-acceptance","description":"Use before material FIXED, DONE, READY, release-ready, or product-complete claims to prove predefined Goal acceptance on the actual supported surface with matching evidence."},
+    {"source":"skills/core/workspace-hygiene.md","name":"cads-workspace-hygiene","description":"Use only when workspace bloat, competing worklines, or closure residue materially obstructs current work; do not clean unrelated Owner work."},
+    {"source":"skills/product/user-facing-workflow.md","name":"cads-user-facing-workflow","description":"Use when a user-facing Goal changes journey, navigation, discoverability, handoffs, or next-action clarity."},
+    {"source":"skills/product/frontend-design.md","name":"cads-frontend-design","description":"Use when implementing or materially changing a user-facing screen, component, interaction, or layout and rendered frontend quality matters."},
+    {"source":"skills/product/ui-quality-review.md","name":"cads-ui-quality-review","description":"Use before user-facing acceptance or when usability, accessibility, responsiveness, state clarity, or recovery quality is in doubt."}
+  ]
+}
