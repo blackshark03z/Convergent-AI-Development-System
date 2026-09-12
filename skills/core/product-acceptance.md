@@ -17,7 +17,11 @@ that definition.
 ## Acceptance proof
 
 1. Re-read the original Goal, CUJ and acceptance. Do not weaken acceptance to
-   match the implementation that happened to be built.
+   match the implementation that happened to be built. If a material acceptance
+   criterion or oracle changed after implementation began, establish that the
+   change is an explicit legitimate clarification/change of intent rather than a
+   weakening made merely to obtain PASS. A changed implementation-coupled test
+   does not independently prove the criterion simply because it now passes.
 2. Identify the canonical Product HEAD / source state containing the intended
    work and confirm valuable Goal work is not stranded in another workline.
 3. When runtime behavior matters, identify the actual runtime source/build,
@@ -81,8 +85,8 @@ the action-to-next-step transition. Report those observations separately; an
 unexercised required path remains `UNVERIFIED`. Mocked responses do not prove
 backend persistence or historical-data preservation. Use an appropriate oracle
 for those claims. Offline fixtures may establish bounded regression evidence
-without authorizing production mutations or provider calls, and do not replace
-required real-journey or Owner acceptance.
+without authorizing production mutations or provider calls, and do not replace a
+required real-journey or subjective Owner oracle.
 
 ## Authority and verdicts
 
@@ -90,18 +94,28 @@ Workers and Tech Leads may establish engineering evidence and report:
 
 - `CHECKPOINT_OK`: a bounded blocker/change is verified but product acceptance
   is not yet established;
-- `BLOCKED`: the predefined journey cannot proceed, with concrete evidence; or
-- `PRODUCT_READY_FOR_OWNER_ACCEPTANCE`: the predefined real journey and evidence
-  are complete enough for owner real-use where owner experience is the final
-  oracle.
+- `BLOCKED`: the predefined journey cannot proceed, with concrete evidence;
+- `PRODUCT_READY_FOR_OWNER_ACCEPTANCE`: all objectively dischargeable evidence
+  is complete but one or more predefined acceptance criteria require subjective
+  Owner product/real-use judgement; or
+- `PRODUCT_ACCEPTED`: every predefined acceptance criterion is satisfied and no
+  remaining criterion requires unresolved Owner judgement/authority.
 
-For a user-facing product, only the Owner's real-use decision can establish
-`PRODUCT_ACCEPTED`. Do not translate engineering PASS, clean Git, build/package
-hashes, CI success, browser fixtures or an agent report into owner acceptance.
+Owner owns product intent, material product trade-offs, consequential
+authorization and subjective real-use acceptance where human experience is the
+oracle. Engineering PASS, clean Git, build/package hashes, CI success, browser
+fixtures or an agent report must not be substituted for such a subjective Owner
+criterion.
 
-For non-user-facing Goals whose predefined acceptance is fully machine-observable,
-the Tech Lead may close the Goal from that oracle; do not invent owner ceremony
-where no owner-use criterion exists.
+When the predefined acceptance is fully machine-observable, including for a
+user-facing Goal whose required journey and outcome are objectively decidable,
+the Tech Lead may establish `PRODUCT_ACCEPTED` from the independent oracle. Do
+not invent Owner ceremony solely because the product has a UI.
+
+For a mixed Goal, discharge objective criteria autonomously and request Owner
+attention only for the remaining subjective/material Owner-controlled criteria.
+Do not broaden one subjective criterion into manual acceptance of otherwise
+objective criteria.
 
 ## Failure handling
 
