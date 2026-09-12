@@ -62,6 +62,15 @@ Use prose, tables or diagrams as convenient. Typical concern-driven views are:
 
 No complete set is mandatory. If a view answers no material concern, omit it.
 
+When Product Acceptance depends on an observed product surface and provenance
+would otherwise be hard to reconstruct, record only the mechanisms material to
+that proof: for example the relevant entrypoint/route, artifact or client-asset
+provenance, configuration/data authority, activation/reload mechanism when one
+actually exists, request-reachable replica/version behavior, and stale
+process/cache replacement. These are examples, not a mandatory deployment
+schema. The purpose is to make acceptance-surface provenance reconstructable,
+not to create an activation phase or process manager.
+
 ### 5. State stable invariants and decision continuity
 
 Record the architecture properties future changes must preserve. Put accepted rationale/direction that could materially change a later session's approach into `docs/decisions/`; keep `ARCHITECTURE.md` focused on current durable truth.

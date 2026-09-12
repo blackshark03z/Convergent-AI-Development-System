@@ -32,7 +32,7 @@
 
 # Deployment / Runtime Topology
 
-<!-- Processes, machines/containers/cloud services, queues/workers, storage and runtime relationships only when they materially affect development/operations. -->
+<!-- Processes, machines/containers/cloud services, queues/workers, storage and runtime relationships only when they materially affect development/operations. When Product Acceptance depends on an observed product surface, record only the provenance mechanisms needed to reconstruct which candidate materially serves that surface (for example entrypoint/route, artifact or client assets, config/data authority, activation/reload if applicable, request-reachable replicas/versions, stale process/cache handling). These are examples, not a required deployment schema or lifecycle. -->
 
 # External Boundaries / Trust Boundaries
 

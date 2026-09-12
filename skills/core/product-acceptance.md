@@ -63,6 +63,42 @@ tied to the identified candidate and applicable conditions. Missing matching
 evidence means `UNVERIFIED`; do not convert it to PASS, and do not infer Journey
 PASS from the sum of isolated feature PASS results.
 
+## Acceptance Surface Provenance Invariant
+
+When Product or Owner Acceptance relies on an observed product surface, evidence
+from that surface is admissible only when the material runtime, artifact/assets,
+configuration and data authorities that can affect the claimed behavior are
+traceably associated with the intended candidate. The association is a
+provenance relationship, not a requirement that source, artifact, process,
+assets and configuration share one literal hash or identity.
+
+If that association is stale, materially ambiguous, conflicting, or cannot be
+established, the affected evidence remains `UNVERIFIED` and must not support
+`PRODUCT_ACCEPTED` or `PRODUCT_READY_FOR_OWNER_ACCEPTANCE`. Ambiguity matters
+only when it can change the behavior claimed by the acceptance evidence; an
+unrelated old process or artifact is not automatically blocking.
+
+Use the smallest evidence appropriate to the product shape. A CLI may execute
+source directly; a desktop product may bind an executable/package; a SPA may
+need client-visible asset/cache provenance; a rolling or multi-replica service
+may need proof that request-reachable versions cannot expose materially stale
+behavior. A self-reported version string is supporting evidence only when it is
+causally tied to the material actually serving the surface; it cannot self-prove
+identity when it may be stale or hard-coded.
+
+An isolated preview/worktree/runtime may be a valid acceptance surface for its
+identified candidate. Evidence for candidate C does not automatically prove a
+later integrated state H when H materially differs; establish equivalence or
+obtain matching evidence for the state being claimed. Likewise, evidence from
+an earlier observation does not support a later Owner review if the material
+surface changed in between unless matching provenance/equivalence is
+re-established.
+
+This invariant introduces no deployment/promotion phase, persistent state,
+mandatory restart, canonical-HEAD-before-preview rule, or universal provenance
+schema. When no persistent/observed surface is material to the criterion, normal
+Product Acceptance applies without extra runtime ceremony.
+
 ## Focused handoff evidence
 
 When a change materially affects the next journey step, verify the existing

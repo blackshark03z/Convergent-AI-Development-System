@@ -7,6 +7,7 @@ tests or runtime evidence.
 
 ## Active
 
+- [DR-0006 — Require acceptance-surface provenance for product evidence](0006-acceptance-surface-provenance.md)
 - [DR-0005 — Adopt a lean project architecture description profile](0005-lean-project-architecture-description.md)
 - [DR-0004 — Adopt trusted-evidence and canonical-integration boundaries](0004-trusted-evidence-and-integration-authority.md)
 - [DR-0003 — Consolidate CADS around five engineering controls](0003-five-control-model.md)
