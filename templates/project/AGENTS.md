@@ -28,11 +28,12 @@ Use five reasoning controls, not a persisted lifecycle:
    external, privileged/security-sensitive, or explicitly high-cost effects.
 
 When full CADS skills are available, route Intent / Design to Product / Design Framing
-(`skills/core/product-goal-framing.md`), Change to Goal Execution, actual
-defects to Systematic Debugging, material completion to Product Acceptance, and
-actual workspace convergence problems to Workspace Hygiene. User-Facing Workflow,
-Frontend Design and UI Quality Review remain conditional product/UI
-methods, not universal phases.
+(`skills/core/product-goal-framing.md`) and use `skills/core/architecture-description.md`
+conditionally for material durable system shape/technology/runtime/state/deployment
+architecture; route Change to Goal Execution, actual defects to Systematic Debugging,
+material completion to Product Acceptance, and actual workspace convergence problems
+to Workspace Hygiene. User-Facing Workflow, Frontend Design and UI Quality Review
+remain conditional product/UI methods, not universal phases.
 
 For material design framing, ask what must be true and what becomes expensive or
 unsafe if it is false. Apply only relevant lenses: product/domain/state,

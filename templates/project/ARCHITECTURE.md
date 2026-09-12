@@ -1,38 +1,57 @@
-# System Purpose
+# System Purpose & Scope
 
-<!-- What durable problem does this system solve? -->
+<!-- What durable problem does this system solve, for whom, and what is inside/outside the system boundary? -->
 
-# Architecture
+# Stakeholders / Architecture Concerns
 
-<!-- The smallest useful description of the current design. -->
+<!-- Populate only material concerns that shape architecture. Do not create a stakeholder matrix for trivial projects. -->
 
-# Components
+# Architecture Drivers
 
-<!-- Important components and ownership boundaries, when relevant. -->
+<!-- The small set of quality attributes, constraints, scale/security/operability/cost needs or other forces that materially shape the design. Prefer observable scenarios/targets when useful. -->
+
+# Solution Strategy / Technology Stack
+
+<!-- Record architecturally significant choices only. For each material role (for example frontend, backend/API, worker, data store, runtime/provider), state the actual choice, why it fits current drivers, and when it should be revisited. CADS does not prescribe one universal stack. -->
+
+# System Context
+
+<!-- Important users, external systems/providers and system boundary. A diagram is optional; text is sufficient when clearer. -->
+
+# Components / Building Blocks / Ownership
+
+<!-- Major components/modules/services and their responsibilities/ownership boundaries. Use the smallest decomposition needed to understand the current system. -->
 
 # Data / Control Flow
 
-<!-- Durable flows that a new contributor must understand, when relevant. -->
+<!-- Critical end-to-end interactions, asynchronous flows, startup/recovery paths or failure scenarios that a contributor must understand. Include data/control movement only when it matters. -->
 
 # Authority / State Boundaries
 
-<!-- Populate only when relevant: code/source authority, data authority, configuration authority, runtime identity and consequential external-effect authority. -->
+<!-- Sources of truth, state ownership/lifetime, mutable vs frozen/snapshotted data, persistence/reset behavior, configuration/runtime identity and mutation authority when relevant. -->
 
-# Stable Invariants
+# Deployment / Runtime Topology
 
-<!-- Properties that changes must preserve. -->
+<!-- Processes, machines/containers/cloud services, queues/workers, storage and runtime relationships only when they materially affect development/operations. -->
+
+# External Boundaries / Trust Boundaries
+
+<!-- Providers, APIs, authentication/authorization, secrets/untrusted input, consequential effects and other trust boundaries when relevant. -->
+
+# Stable Invariants / Architecture Invariants
+
+<!-- Properties that changes must preserve. Prefer statements that can be checked or tied to scenarios/evidence. -->
 
 # Important Tradeoffs / Decisions
 
-<!-- Durable decisions and why they were made. -->
+<!-- Current material choices and trade-offs. Link accepted Decision Records for durable rationale instead of duplicating history here. -->
 
-# External Boundaries
+# Known Risks / Technical Debt / Revisit Triggers
 
-<!-- Providers, systems, effects and trust boundaries, when relevant. -->
+<!-- Material architecture risks/debt and concrete evidence/conditions that should reopen a decision. -->
 
 # Deprecated / Legacy Notes
 
 <!-- Legacy behavior that could otherwise be mistaken for current design. -->
 
-Populate only sections that are useful for this project. Keep transient task
-progress in `TASK.md`.
+Populate only sections that help reconstruct the current architecture. Choose views from current concerns; no diagram notation or complete view set is mandatory. Describe actual current Git/runtime reality rather than aspirational design. Keep transient task progress in `TASK.md`.

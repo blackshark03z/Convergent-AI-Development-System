@@ -10,7 +10,9 @@ Use one small control model; these are reasoning controls, not persisted phases:
    only when bloat, competing worklines, or closure residue is actually present.
 2. **Intent / Design** -> `skills/core/product-goal-framing.md` for a new/changed
    Goal, missing acceptance, material design assumptions, or before an expensive-
-   to-reverse architecture/domain/source-of-truth/ownership/authority decision.
+   to-reverse architecture/domain/source-of-truth/ownership/authority decision;
+   use `skills/core/architecture-description.md` conditionally when durable
+   system shape/technology/runtime/data/deployment/trust architecture is material.
 3. **Change** -> `skills/core/goal-execution.md` for the smallest coherent change;
    use `skills/core/systematic-debugging.md` conditionally for an actual defect,
    then resume the same Goal.

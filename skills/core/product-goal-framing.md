@@ -67,6 +67,12 @@ Ask one question first:
 Use the following lenses only as a compact reference surface. Do not produce
 paperwork for obviously inapplicable items.
 
+When a material concern can shape durable system structure, identify the small
+set of architecture drivers (quality attributes/constraints) that actually drive
+the choice. Route to `architecture-description.md` only when system boundary,
+building blocks, technology/framework, runtime/data/state/deployment/trust
+boundaries or architecture fitness need durable description/evaluation.
+
 ### Product / domain / state
 
 When applicable, establish the actors/external systems, domain objects and
@@ -86,6 +92,16 @@ or deployment topology.
 Check the primary job/CUJ, discoverability and next-action clarity, context
 retention, failure/recovery, and accessibility/assisted-use needs when material.
 Feature/subsystem PASS does not establish Journey/Product PASS.
+
+### Architecture / structure
+
+When architecture is material, check system boundary, major building-block
+ownership, critical runtime flows, deployment/runtime topology and the few
+quality attributes/constraints that drive the design. Treat frontend/backend,
+framework, database, provider or service choices as architecturally significant
+only when they materially affect boundaries, quality, interfaces, deployment or
+maintainability. Use scenario/evidence reasoning rather than a mandatory diagram
+or architecture framework.
 
 ### Data / authority
 
@@ -148,8 +164,10 @@ justify speculative subsystems.
 
 When authorized, keep only the minimum current Goal context in `TASK.md`: Goal,
 CUJ, acceptance, representative fixture when applicable, non-goals, constraints,
-and material accepted decisions. Durable rationale/direction that must survive
-Goal/chat turnover belongs in an accepted Decision Record.
+and material accepted decisions. Update `ARCHITECTURE.md` only when durable
+current system truth changes; use `architecture-description.md` for the bounded
+profile/fitness reasoning when material. Durable rationale/direction that must
+survive Goal/chat turnover belongs in an accepted Decision Record.
 
 Do not add task IDs, lifecycle stages, schemas, persisted concern status, or a
 planning database around this procedure.
