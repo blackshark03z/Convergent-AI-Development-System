@@ -1,58 +1,61 @@
 # Goal
 
-Add a narrow, safe path for reusable external specialist Agent Skills without creating a capability-management subsystem: ordinary targeted research remains the default, while a materially useful reusable skill may be vetted, pinned and used as non-authoritative advisory context. Make CADS-owned skills portable through deterministic Agent Skills projections from one canonical source.
+Add a thin, conditional Release Qualification method that prevents Product Acceptance evidence from silently drifting onto a later release candidate, while preserving existing Execution Reproducibility, Product Acceptance, Systematic Debugging and Acceptance Surface Provenance semantics. Distinguish product acceptance, release qualification and runtime activation as evidence-backed claims without creating a release lifecycle or state machine.
 
 # Critical User Journey
 
-AI Tech Lead encounters a material knowledge gap -> performs ordinary targeted investigation -> only when a reusable external specialist skill is materially preferable to ordinary research, evaluates its relevance against the current Goal and active project/version reality -> vets immutable source identity, exact docs-only content, license and instruction conflicts -> persists the exact accepted bytes plus optional provenance lock only when reuse is justified -> activates the pinned skill as advisory context -> continues normal CADS Change / Acceptance / Consequence. Separately, a supported harness can receive deterministic Agent Skills-compatible projections of CADS-owned skills without creating a second canonical knowledge source.
+AI Tech Lead reaches a release-bound product candidate -> Product Acceptance evidence is bound to identified candidate A -> release stabilization changes produce candidate B -> the A->B delta is inspected criterion-by-criterion -> acceptance evidence is carried forward only where claimed behavior, relevant inputs/state/data, oracle and surface provenance are shown preserved -> affected/unknown criteria are re-established -> the exact qualification subject (source/artifact/config/toolchain/environment) receives proportionate release verification -> `RELEASE_QUALIFIED` is claimed only for that identified subject -> existing Acceptance Surface Provenance verifies any later active runtime against the qualified release reality.
 
 # Acceptance
 
-- Add one conditional `skills/core/external-skill-acquisition.md` method called from existing Knowledge-Gap Responsibility; it must not become a sixth control or generic capability subsystem.
-- Ordinary targeted research remains the default. Stack/framework detection is advisory evidence only and cannot by itself authorize persistent skill installation.
-- External skills have no independent CADS authority: they cannot redefine Goal/Acceptance, override repository/runtime truth or Decision Records, suppress tests, authorize consequential effects, or claim DONE.
-- Initial persistent external-skill support is fail-closed to Markdown/reference-only content. Skills containing executable scripts, opaque/binary assets, or live network-fetching behavior are research-only/deferred until future evidence justifies a stronger boundary.
-- When an external skill is persisted for reuse, use an optional project-local provenance lock conforming to `skills/external-skills-lock.schema.json`; no empty lockfile is created for projects that use no external skills.
-- Provenance records immutable source revision/path, exact bundle hash, license, content class, selection reason, review time and review method. Hash identity alone is never trust or correctness proof.
-- New external skills and changed skill bytes are never automatically persisted/updated from stack detection. A previously vetted pinned skill may be activated automatically when materially relevant.
-- Project-local skill adoption does not make a skill CADS-recommended. CADS-wide recommendation requires representative evidence and remains scoped to the evaluated model/harness/version unless cross-harness evidence exists.
-- Adopt Agent Skills / `SKILL.md` as a portability target for CADS-owned internal skills via one deterministic projector and explicit routing metadata. Canonical semantic content remains under `skills/core/*.md` and `skills/product/*.md`; generated projections are build/output artifacts, not manually maintained sources.
-- The projector must preserve canonical skill body bytes, emit stable `name`/`description` frontmatter, fail clearly on invalid/missing metadata, and support a read-only `--check` mode.
-- Preserve the frozen Standard, Five Controls, Thin Guard and existing authority model. Do not add AutoSkills as a dependency, registry/marketplace, resolver, updater, daemon, trust score, skill database or second runtime.
-- Add focused tests and keep the full CADS regression suite passing without weakening existing tests.
+- Add one conditional `skills/core/release-qualification.md` composition method for Goals with a material release boundary; it must not create a sixth control, release lifecycle, CI engine, deployment manager or persisted release state.
+- Product Acceptance, Release Qualification and Runtime Activation are distinct evidence-backed claims; none implies the next.
+- Clarify `skills/core/product-acceptance.md` so `PRODUCT_ACCEPTED` proves product outcome, not release qualification, when a material release boundary exists.
+- Evidence established for candidate A may support candidate B only criterion-by-criterion when the identified delta is shown not to materially affect the claimed behavior, relevant inputs/state/data, acceptance oracle, or surface provenance. Unknown impact is not preservation.
+- Post-acceptance changes are evaluated by material effect, not by file/category labels such as CI/test/config. Oracle-changing deltas cannot self-prove preserved acceptance.
+- Release Qualification identifies the exact subject being qualified: source/artifact plus material configuration, dependencies/toolchain and supported release environment as applicable.
+- Prefer cheapest discriminating release evidence first and broader/expensive confirmation at meaningful convergence points; do not mandate one universal test sequence.
+- When qualification failures converge on a shared environment/harness/provider boundary or leaf patches stop producing measurable progress, route to existing Systematic Debugging/Goal Execution stop-loss semantics rather than patching tests independently.
+- Prefer releasing the already-qualified identified artifact where the product has artifacts. A rebuild or materially different output is a delta and requires matching qualification evidence/equivalence; literal single-binary identity is not universal.
+- Add focused eval/test coverage for evidence drift, behavior-neutral and behavior-impacting post-acceptance deltas, oracle changes, undeclared environment dependencies, old-HEAD verification and qualification/activation mismatch.
+- Keep the frozen Standard unchanged; preserve `Reality -> Intent / Design -> Change -> Acceptance -> Consequence`.
+- Keep full CADS regression passing without weakening existing tests.
 
 # Acceptance Fixture / Evidence Basis
 
-1. A React dependency exists in a monorepo but the current Goal is backend-only: detection alone does not persist or activate a React skill.
-2. A current FastAPI Goal needs reusable framework-specific guidance: a docs-only skill pinned to an immutable source revision and exact bytes may be persisted after relevance/license/instruction review.
-3. A candidate skill contains a shell script or fetches mutable remote instructions: current CADS does not persistently activate it; the AI may inspect its content as ordinary research only.
-4. Two safe skills conflict on architecture or testing guidance: project/CADS authority and current Goal decide; popularity or skill order cannot launder one into authority.
-5. Skill guidance targets framework version X while the project uses materially different version Y: the skill is not accepted without compatible evidence.
-6. A pinned external skill changes upstream: current project keeps exact accepted bytes until an explicit re-vet; no background update occurs.
-7. CADS-owned internal skill projection generates deterministic Agent Skills-compatible `SKILL.md` files whose bodies match canonical sources and whose routing descriptions are explicit.
-8. A skill improves one model/harness in representative evals: that evidence does not automatically establish CADS-wide value on another harness/version.
+1. Owner accepts candidate A; candidate B changes only demonstrably non-material CI mechanics and leaves behavior/oracle/provenance intact: matching evidence may be carried criterion-by-criterion without ceremonial full re-UAT.
+2. Candidate B changes backend semantics affecting an accepted journey: affected criteria become `UNVERIFIED` until matching acceptance evidence is re-established.
+3. Candidate B changes a test/oracle to make CI pass: the changed test cannot self-prove preserved acceptance.
+4. A clean supported runner exposes undeclared `ffmpeg`, browser, provider isolation, filesystem/path or configuration assumptions: Product Acceptance may remain valid while Release Qualification is blocked.
+5. Multiple qualification failures point to one environment/harness boundary: stop leaf patching and debug the shared boundary using existing Systematic Debugging semantics.
+6. A broad regression PASS belongs to old HEAD A while current candidate is B: it cannot qualify B without demonstrated equivalence or matching evidence.
+7. Qualified source produces artifact X; deployment rebuild produces materially different artifact Y: X's qualification does not automatically qualify Y.
+8. Exploratory Owner/UI review may happen before release qualification; only release-bound readiness claims require qualification when a material release boundary exists.
 
 # Non-goals
 
-No sixth CADS control, AutoSkills dependency, skill marketplace/registry service, package resolver, sync daemon, background updater, skill database, online trust score, external-skill execution authority, automatic skill installation from stack detection, vendor-specific duplicated CADS standards, executable external-skill support in this slice, model router, or Standard amendment.
+No sixth CADS control, `DEV -> UAT -> RC -> QUALIFIED -> PROMOTED -> ACTIVE` state machine, release database/registry, CI orchestration engine, deployment/release service, process manager, hard-coded commit/file/line thresholds, hard-coded retry counts, mandatory clean-room CI for tiny tools, mandatory Owner re-UAT after every SHA change, mandatory container/cloud release, universal immutable-binary requirement, or Standard amendment.
 
 # Constraints
 
-Preserve `Reality -> Intent / Design -> Change -> Acceptance -> Consequence`, Knowledge-Gap Responsibility, DR-0003 anti-accretion, DR-0004 trusted-evidence boundaries, DR-0006 acceptance-surface provenance and the frozen Standard. Prefer ordinary research unless persistent reusable specialist instructions materially improve the current Goal. One canonical CADS skill source must remain authoritative; portability outputs are deterministic projections only.
+Preserve DR-0003 anti-accretion, DR-0004 trusted-evidence boundaries, DR-0006 acceptance-surface provenance, oracle integrity, Execution Reproducibility and the frozen Standard. Compose existing Product Acceptance, Goal Execution and Systematic Debugging rather than duplicating their mechanics. Release qualification is conditional on a material release boundary and remains native to project Git/CI/build/deployment tooling.
 
 # Material Decisions
 
-- Accept the independent review refinement: the real gap is safe reusable **external specialist instruction acquisition/vetting**, not missing knowledge-gap detection.
-- Borrow AutoSkills patterns (weak-signal detection, dry-run thinking, immutable source revision, content hashes, curated/mirrored sources) but do not adopt AutoSkills itself or treat any external registry label as CADS trust proof.
-- Adopt Agent Skills / `SKILL.md` as a portability target for CADS-owned skills while keeping canonical semantics in existing CADS Markdown sources.
-- External skills are untrusted advisory engineering inputs with zero independent authority in CADS domains.
-- v1 persistent external-skill support is docs/reference-only; executable/network-fetching bundles are deferred.
-- Persistent project-local external skills use exact provenance; project-local use and CADS-wide recommendation are different claims.
+- Accept the independent-review verdict `ACCEPT_WITH_CHANGES`: the real gap is release-evidence continuity at an operational boundary, not missing foundational evidence semantics.
+- Keep Product Acceptance, Release Qualification and Runtime Activation as distinct evidence claims, never persisted process states.
+- Adopt criterion-scoped carry-forward: evidence from A supports B only where the A->B delta is proven acceptance-preserving for the relevant claim/oracle/provenance; unresolved impact fails closed.
+- Use effect-based delta reasoning rather than trusting filenames such as `ci`, `test`, `config` or `packaging` as neutral.
+- Make preflight proportional and release-bound; exploratory product review remains allowed earlier.
+- Prefer qualified artifact reuse where applicable, while expressing the invariant as traceable qualified identity/equivalence rather than literal hash equality.
 
 # Progress / Discoveries / Next
 
+- Story Audio PR #8 exposed a real sequence where accepted product behavior became separated from later branch HEAD while release-environment assumptions were discovered through repeated CI runs.
 - Independent reviewer verdict: `ACCEPT_WITH_CHANGES`.
-- Review confirmed a narrow external-skill trust/provenance/portability gap while rejecting a capability-management subsystem.
-- Minimum safe scope selected: one conditional acquisition/vetting method, optional provenance schema, one Decision Record, deterministic Agent Skills projection, and focused tests; frozen Standard remains unchanged.
+- Implemented one thin conditional Release Qualification composition method, clarified Product Acceptance vs release readiness, added DR-0008 and AE-021, and kept the frozen Standard unchanged.
+- Evidence continuity is criterion-scoped: SHA change alone does not force full re-UAT, while unresolved material impact on behavior/oracle/provenance fails closed as `UNVERIFIED`.
+- Focused release/autonomy/portability/cold-start regression: 39/39 PASS; `git diff --check` PASS; frozen Standard diff empty.
+- Full CADS regression: 110/110 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
 
-Next: implement the bounded slice, run focused projection/security tests, then full CADS regression before commit/push.
+Next: review the final bounded diff for anti-accretion, commit/push only the intended release-qualification paths, then use Story Audio as the first production case to evaluate whether the method reduces release evidence drift and CI whack-a-mole.

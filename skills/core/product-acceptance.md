@@ -9,10 +9,12 @@ semantics in `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md`.
 
 ## When to use
 
-Use before making a material completion claim such as `FIXED`, `DONE`, `READY`,
-release-ready, product-complete, or equivalent. Run it after implementation has
+Use before making a material product-completion claim such as `FIXED`, `DONE`,
+`READY`, product-complete, or equivalent. Run it after implementation has
 already reached the predefined acceptance boundary, not as a substitute for
-that definition.
+that definition. When a material release boundary exists, Product Acceptance is
+necessary evidence about product outcome but does not by itself establish
+`RELEASE_QUALIFIED`; use `release-qualification.md` before a release-ready claim.
 
 ## Acceptance proof
 
@@ -61,7 +63,10 @@ Treat evidence criterion-by-criterion. A command, test, or observation proves an
 acceptance criterion only when it is a relevant oracle for that criterion and is
 tied to the identified candidate and applicable conditions. Missing matching
 evidence means `UNVERIFIED`; do not convert it to PASS, and do not infer Journey
-PASS from the sum of isolated feature PASS results.
+PASS from the sum of isolated feature PASS results. Evidence carried to a later
+candidate must satisfy the same rule: changed SHA alone does not invalidate
+unaffected criteria, but unresolved material impact on behavior, inputs/state/data,
+the oracle or surface provenance leaves the affected criterion `UNVERIFIED`.
 
 ## Acceptance Surface Provenance Invariant
 

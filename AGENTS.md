@@ -17,7 +17,9 @@ Use one small control model; these are reasoning controls, not persisted phases:
    use `skills/core/systematic-debugging.md` conditionally for an actual defect,
    then resume the same Goal.
 4. **Acceptance** -> `skills/core/product-acceptance.md` before a material
-   `FIXED`/`DONE`/ready claim. Multi-step outcomes require whole-journey evidence.
+   `FIXED`/`DONE`/product-ready claim. Multi-step outcomes require whole-journey
+   evidence; use `skills/core/release-qualification.md` conditionally when a
+   material release boundary makes release-ready a separate claim.
 5. **Consequence** -> existing CADS Thin Guard only for applicable destructive,
    external, privileged/security-sensitive, or explicitly high-cost effects.
 
