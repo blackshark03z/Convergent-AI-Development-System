@@ -47,6 +47,19 @@ class ArchitectureDescriptionProfileTests(unittest.TestCase):
         self.assertIn("### Architecture / structure", framing)
         self.assertIn("scenario/evidence reasoning", framing)
 
+    def test_material_research_is_trajectory_aware_without_new_ceremony(self):
+        framing = (ROOT / "skills/core/product-goal-framing.md").read_text(encoding="utf-8")
+        architecture = (ROOT / "skills/core/architecture-description.md").read_text(encoding="utf-8")
+        continuity = (ROOT / "docs/DECISION_CONTINUITY.md").read_text(encoding="utf-8")
+        self.assertIn("Research durability for material knowledge gaps", framing)
+        self.assertIn("industry and technology trajectory", framing)
+        self.assertIn("replacement/portability cost", framing)
+        self.assertIn("cheap, local", framing)
+        self.assertIn("credible industry/technology trajectory", architecture)
+        self.assertIn("unnecessary model/provider/framework lock-in", architecture)
+        self.assertIn("Research durability in material decisions", continuity)
+        self.assertIn("Do not record forecasts as facts", continuity)
+
     def test_core_standard_remains_five_control_compatible(self):
         task = (ROOT / "TASK.md").read_text(encoding="utf-8")
         self.assertIn("Reality -> Intent / Design -> Change -> Acceptance -> Consequence", task)

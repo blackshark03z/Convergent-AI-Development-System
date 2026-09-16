@@ -45,6 +45,26 @@ freeze a mandatory option count or question count into this method. Translate
 technical choices into observable consequences; do not ask the Owner to act as
 architect or certify a technical fact.
 
+### Research durability for material knowledge gaps
+
+When targeted research can materially shape a durable product/system direction,
+do more than snapshot today's tool landscape. At depth proportional to consequence
+and replacement cost:
+
+- establish current reality and the evidence date/context;
+- examine credible industry and technology trajectory over the decision-relevant
+  horizon rather than assuming today's implementation landscape is stable;
+- separate durable capabilities/invariants from volatile models, providers,
+  frameworks, APIs or products;
+- assess replacement/portability cost and avoid unnecessary lock-in; and
+- state concrete evidence/context changes that should trigger reconsideration.
+
+Prefer durable decisions phrased in terms of required capability, property or
+invariant, with current technology treated as a replaceable realization unless
+that dependency itself is intentionally material. Treat forecasts as uncertain
+evidence, not future truth. Do not add trajectory analysis to cheap, local,
+reversible questions whose late correction remains bounded.
+
 ## Frame the Goal
 
 1. State one bounded Owner outcome in user-observable terms.

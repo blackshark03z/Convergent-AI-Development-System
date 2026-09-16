@@ -39,6 +39,23 @@ Do not create records for routine edits, variable names, temporary debugging
 findings, test commands, ordinary reversible implementation details or the next
 small action.
 
+## Research durability in material decisions
+
+When material research supports a direction expected to survive beyond the
+current task, preserve the reasoning so normal technology churn does not make the
+research disposable. Distinguish:
+
+- dated/current evidence from durable product or engineering invariants;
+- the capability/property required from the particular model, provider,
+  framework, API or product currently used to realize it;
+- known volatile assumptions and meaningful portability/replacement cost; and
+- concrete revisit triggers tied to evidence or context change.
+
+Do not record forecasts as facts or freeze a predicted vendor/tool roadmap into
+project truth. The durable decision should remain understandable if the named
+technology changes; reopen it when its stated assumptions or revisit triggers are
+materially crossed, not merely because time passed or a newer tool exists.
+
 ## Project layout
 
 `docs/decisions/README.md` is the active decision index. Keep it short. Detailed
