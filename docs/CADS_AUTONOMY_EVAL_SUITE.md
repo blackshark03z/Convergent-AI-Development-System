@@ -11,9 +11,9 @@ The suite is a **dataset and scoring rubric**, not a scheduler, task database, m
 
 ## Dataset
 
-`evals/autonomy/cases.json` contains 20 representative Goals derived from failure classes observed across CADS-related product work and architecture reviews. Cases are intentionally phrased as reusable engineering scenarios rather than product-specific scripts.
+`evals/autonomy/cases.json` contains 25 representative Goals derived from failure classes observed across CADS-related product work and architecture reviews. Cases are intentionally phrased as reusable engineering scenarios rather than product-specific scripts.
 
-The initial suite covers repeated-workflow state leakage, end-to-end journey composition failure, runtime/source identity mismatch, ambiguous external effects, weak/missing acceptance oracles, oracle self-proof, decision/context drift, non-converging repair, persistence compatibility, UI discoverability, subjective acceptance boundaries, isolated parallel candidates, semantic conflict, stale physical writers, provider fallback, artifact immutability and conditional fresh review.
+The suite covers repeated-workflow state leakage, end-to-end journey composition failure, runtime/source identity mismatch, ambiguous external effects, weak/missing acceptance oracles, oracle self-proof, decision/context drift, non-converging repair, persistence compatibility, UI discoverability, subjective acceptance boundaries, isolated parallel candidates, semantic conflict, stale physical writers, provider fallback, artifact immutability, conditional fresh review, vague intent with hidden load-bearing decisions, machine-workflow behavioral clarity, intent-change impact propagation, and the simple-task ceremony floor.
 
 ## What a run records
 

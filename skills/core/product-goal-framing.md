@@ -26,18 +26,24 @@ context is unknown or stale, run `project-cold-start.md` first.
 
 ## Knowledge-gap responsibility
 
-The Owner is not expected to supply missing engineering expertise. The AI Tech
-Lead investigates material engineering concerns using the Goal, repository,
-runtime evidence, supported operating context, and targeted research when
-needed. Ordinary targeted research is the default. If that investigation finds
-a reusable external specialist Agent Skill materially preferable to ordinary
-research, use `external-skill-acquisition.md` before persistent use; stack or
-framework detection alone is not sufficient relevance evidence. Resolve ordinary
-engineering choices within established intent and authority. Ask the Owner only
-for missing product facts, material trade-offs, or consequential choices that
-change Owner-controlled outcomes and cannot reasonably be recovered or inferred.
-Translate technical choices into observable consequences; do not ask the Owner
-to certify a technical fact.
+The Owner is not expected to supply missing engineering or product-system
+expertise. The AI Tech Lead first inspects current reality and performs targeted
+research when needed, then resolves low-consequence reversible choices within
+established intent and authority. Ordinary targeted research is the default. If
+that investigation finds a reusable external specialist Agent Skill materially
+preferable to ordinary research, use `external-skill-acquisition.md` before
+persistent use; stack or framework detection alone is not sufficient relevance
+evidence.
+
+Ask the Owner only for missing product facts, genuinely subjective preference,
+material product/business trade-offs, or non-delegable/consequential authority.
+When Owner input is genuinely required, construct the smallest useful decision
+surface instead of dumping an open technical question on the Owner: proportionally
+show concrete options or a recommended default, the observable product consequence
+of each material option, and the consequence of deferring when relevant. Do not
+freeze a mandatory option count or question count into this method. Translate
+technical choices into observable consequences; do not ask the Owner to act as
+architect or certify a technical fact.
 
 ## Frame the Goal
 
@@ -57,8 +63,28 @@ to certify a technical fact.
    must survive chat/agent turnover.
 8. Choose rigor proportional to consequence, irreversibility, complexity and
    cost of being wrong. A small local tool should collapse to very little ceremony;
-   a coupled or high-consequence system should receive deeper design
-   evidence.
+   a coupled or high-consequence system should receive deeper design evidence.
+
+## Design sufficiency
+
+Design completeness is not required. Before implementation materially commits
+the product/system to a hard-to-reverse direction, identify unresolved decisions
+whose plausible alternatives could materially change user-visible behavior,
+persistent state/data ownership, authority/external effects, hard-to-reverse
+architecture boundaries, or the acceptance oracle.
+
+For each such unresolved decision, choose the cheapest valid treatment:
+
+1. resolve it from current reality and available domain knowledge;
+2. reduce uncertainty with a focused probe/prototype when the uncertainty is
+   empirical or preference-forming; or
+3. deliberately defer it only when reversal is cheap and downstream impact is
+   bounded.
+
+Do not delay implementation for unknowns whose late discovery remains cheap and
+local. `GOAL_READY` means unresolved load-bearing decisions are resolved,
+empirically reduced, or explicitly and cheaply deferred with bounded impact; it
+does not mean every design detail is complete.
 
 ## Material design drivers
 
@@ -95,7 +121,27 @@ or deployment topology.
 
 Check the primary job/CUJ, discoverability and next-action clarity, context
 retention, failure/recovery, and accessibility/assisted-use needs when material.
-Feature/subsystem PASS does not establish Journey/Product PASS.
+Feature/subsystem PASS does not establish Journey/Product PASS. When intended-user
+characteristics, workflow or context materially affect acceptance and the Owner
+is not a representative user, require proportionate user/context evidence. Do
+not turn that condition into mandatory UX research for personal tools or cases
+where the Owner is representative.
+
+### Behavioral / system flow when CUJ is insufficient
+
+Do not create this view universally. Use it when any one observable trigger is
+present: the primary flow has no meaningful human actor; two or more actors or
+external systems participate; a step is asynchronous, retryable or scheduled;
+or an entity has an explicit state lifecycle whose handoffs affect the Goal.
+
+At the depth needed for the Goal, make required/existing behavior clear through
+inputs and source of truth, ordered transformations, handoff postconditions,
+terminal states, and failure/recovery behavior. Keep the boundaries explicit:
+CUJ describes what the user/operator does; Behavioral/System Flow describes what
+the system must do; Architecture describes where/how responsibilities are
+realized. The behavioral view describes required and existing behavior, not
+proposed components. On brownfield work, reconcile it against current source and
+runtime reality before it constrains additions.
 
 ### Architecture / structure
 
@@ -168,10 +214,17 @@ justify speculative subsystems.
 
 When authorized, keep only the minimum current Goal context in `TASK.md`: Goal,
 CUJ, acceptance, representative fixture when applicable, non-goals, constraints,
-and material accepted decisions. Update `ARCHITECTURE.md` only when durable
-current system truth changes; use `architecture-description.md` for the bounded
-profile/fitness reasoning when material. Durable rationale/direction that must
-survive Goal/chat turnover belongs in an accepted Decision Record.
+and material accepted decisions. If unresolved load-bearing design decisions
+remain, keep only the minimum working set in the existing `TASK.md`, for example:
+Question, Why load-bearing, Current working assumption, Cost if wrong, and
+Status. These are suggested fields, not a new schema or registry. Remove resolved
+items, or promote them to existing Decision Continuity only when rationale must
+survive Goal/chat turnover.
+
+Update `ARCHITECTURE.md` only when durable current system truth changes; use
+`architecture-description.md` for the bounded profile/fitness reasoning when
+material. Durable rationale/direction that must survive Goal/chat turnover
+belongs in an accepted Decision Record.
 
 Do not add task IDs, lifecycle stages, schemas, persisted concern status, or a
 planning database around this procedure.
@@ -181,8 +234,9 @@ planning database around this procedure.
 Return one concise result:
 
 - `GOAL_READY`: Goal/acceptance and applicable material design drivers are clear
-  enough for bounded implementation or for the affected design decision to be
-  treated as stable under current evidence;
+  enough for bounded implementation, with unresolved load-bearing decisions
+  resolved, empirically reduced, or explicitly/cheaply deferred with bounded
+  downstream impact;
 - `MATERIAL_GAPS_FOUND`: list only the highest-impact material gaps/assumptions,
   their consequence, and the targeted evidence or specialist reasoning needed;
   or
