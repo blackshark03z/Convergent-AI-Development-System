@@ -80,7 +80,12 @@ files remain build/output artifacts. Trigger descriptions are behavior-bearing
 metadata and are therefore explicit and tested.
 
 Ordinary targeted research remains the default response to a technical knowledge
-gap. When a reusable external specialist Agent Skill is materially preferable,
+gap. When that research can materially shape durable product/system direction,
+apply the trajectory-aware research durability guidance in
+`skills/core/product-goal-framing.md`: separate durable capability/invariants from
+volatile technology, consider credible industry/technology direction and
+replacement cost, and define concrete revisit triggers. Keep tiny reversible
+questions on the fast path. When a reusable external specialist Agent Skill is materially preferable,
 follow `skills/core/external-skill-acquisition.md`. Current persistent support is
 limited to vetted docs/reference-only skill content. If exact external skill bytes
 are kept for reuse, record immutable source/content/license review provenance in

@@ -47,6 +47,13 @@ For each architecturally significant technology/framework role, record:
 - important trade-off;
 - evidence or condition that should trigger reconsideration.
 
+When the choice has a material expected lifetime or replacement cost, also make
+clear which capability/invariant must survive, which parts are technology-specific
+and volatile, the credible industry/technology trajectory relevant to the choice,
+and the portability/replacement path and cost. Prefer boundaries around required
+capabilities over unnecessary model/provider/framework lock-in. A forecast is a
+reason to preserve optionality or set a revisit trigger, not proof of future fact.
+
 Escalate to the Owner only when the choice changes an Owner-controlled product outcome, material business trade-off or consequential authority boundary.
 
 ### 4. Select only views that answer current concerns
