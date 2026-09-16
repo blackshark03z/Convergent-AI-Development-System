@@ -56,11 +56,16 @@ Use prose, tables or diagrams as convenient. Typical concern-driven views are:
 - **System context** — users/external systems and boundary;
 - **Building blocks / ownership** — frontend, backend/API, workers, stores, modules/services and responsibilities when those concepts exist;
 - **Runtime** — critical request/job/event/recovery flows;
+- **Behavior / system flow** ? only when needed to answer a material concern, describe required/existing behavior, ordered transformations and handoff semantics rather than proposed software components;
 - **Data / state / authority** — source of truth, ownership, lifetime, snapshots, reset/persist and mutation authority;
 - **Deployment / topology** — processes/hosts/cloud/queues/storage relationships;
 - **Trust / external boundaries** — auth, secrets, untrusted input, providers and consequential effects.
 
 No complete set is mandatory. If a view answers no material concern, omit it.
+A behavior/system-flow view remains conditional and notation-neutral. For
+brownfield work, reconcile that view against current source/runtime truth before
+it constrains architecture; use it to clarify required/existing behavior and
+handoff semantics, not to smuggle in component proposals.
 
 When Product Acceptance depends on an observed product surface and provenance
 would otherwise be hard to reconstruct, record only the mechanisms material to

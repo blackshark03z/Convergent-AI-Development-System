@@ -14,6 +14,24 @@ clear. If they are not clear, use `product-goal-framing.md` first. For a bug or
 regression that blocks the Goal, temporarily use `systematic-debugging.md` and
 then resume this same Goal.
 
+## Intent Change Impact
+
+Before local patching, when Owner intent or an accepted design decision is
+clarified, extended or revised during execution:
+
+1. identify which previously established behavior or assumptions are affected;
+2. inspect impact on the affected CUJ, behavioral/system flow, state/data/
+   authority, architecture contract, and acceptance criteria/oracles;
+3. reopen only the affected portions;
+4. do not patch the nearest code first;
+5. mark affected or uncertain acceptance evidence as needing re-establishment
+   where appropriate; and
+6. preserve unaffected behavior/evidence when current evidence supports reuse.
+
+Do not rerun or rewrite the whole project or every design artifact after each
+intent change. The purpose is bounded propagation before implementation, not a
+new phase or impact registry.
+
 ## Execution loop
 
 1. Reconfirm the one active Goal, CUJ, acceptance and current Product HEAD.

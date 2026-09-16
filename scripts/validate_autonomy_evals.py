@@ -12,7 +12,7 @@ ORACLE = {"OBJECTIVE", "MIXED", "SUBJECTIVE", "WEAK"}
 HUMAN = {"NONE", "SUBJECTIVE_JUDGEMENT", "AUTHORITY_ONLY"}
 REQUIRED_FIELDS = {"id","title","failure_class","risk_class","goal","oracle_strength","expected_behavior","expected_human_attention","required_evidence","failure_signals","anti_shortcuts"}
 FORBIDDEN_FIELDS = {"phase","workflow_state","task_lifecycle","retry_history","planner_state","chain_of_thought","subagent_graph","model_routing","session_history","trusted_model","model_tier","vendor_tier"}
-REQUIRED_FAILURE_CLASSES = {"state-leakage","journey-composition","runtime-identity","external-effect-ambiguity","weak-oracle","oracle-integrity","decision-drift","nonconverging-repair","persistence-compatibility","ui-discoverability","parallel-candidate-integration","semantic-conflict","acceptance-authority","consequential-authority","stale-writer","context-continuity","conditional-review"}
+REQUIRED_FAILURE_CLASSES = {"state-leakage","journey-composition","runtime-identity","external-effect-ambiguity","weak-oracle","oracle-integrity","decision-drift","nonconverging-repair","persistence-compatibility","ui-discoverability","parallel-candidate-integration","semantic-conflict","acceptance-authority","consequential-authority","stale-writer","context-continuity","conditional-review","intent-ambiguity","machine-workflow-behavior","intent-change-impact","design-ceremony-floor"}
 
 def _text(value, name):
     if not isinstance(value, str) or not value.strip(): raise ValueError(f"{name} must be a non-empty string")
