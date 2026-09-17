@@ -68,6 +68,37 @@ candidate must satisfy the same rule: changed SHA alone does not invalidate
 unaffected criteria, but unresolved material impact on behavior, inputs/state/data,
 the oracle or surface provenance leaves the affected criterion `UNVERIFIED`.
 
+## Accepted Product Contract Preservation
+
+For behavior already accepted or frozen, distinguish two authorities:
+
+- **Implementation Reality**: source/runtime/tests establish what the system does
+  now; and
+- **Accepted Product Contract**: durable Goal/Intent/Design/CUJ/acceptance establish
+  what materially relevant behavior the product must continue to provide until a
+  legitimate accepted change supersedes it.
+
+If those diverge without such a change, treat the divergence as a regression even
+when current source and current tests agree with each other. Tests rewritten or
+added around the reduced implementation do not independently prove preservation.
+For each materially affected accepted behavior, acceptance evidence must show it
+is preserved in the composed product journey, explicitly superseded by accepted
+intent/design, or remain `UNVERIFIED`.
+
+A local component may intentionally stop at a bounded handoff condition while the
+product-level journey is required to continue. In that case verify the consumer
+or orchestrator that handles the condition and the resulting composed behavior;
+do not convert component-level terminal PASS into product-level Journey PASS.
+When accepted configuration semantics include identity, policy, state or other
+fields, prove that the production path still consumes/reconciles the materially
+required semantics rather than only a surviving subset.
+
+Apply this check only to accepted behavior implicated by the current change. It
+introduces no permanent traceability registry, mandatory full end-to-end run per
+commit, new phase or lifecycle. Focused deterministic composition evidence is
+valid during execution when it is a relevant oracle; the supported real journey
+remains the acceptance oracle where the criterion requires it.
+
 ## Acceptance Surface Provenance Invariant
 
 When Product or Owner Acceptance relies on an observed product surface, evidence

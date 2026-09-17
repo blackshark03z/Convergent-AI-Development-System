@@ -32,6 +32,41 @@ Do not rerun or rewrite the whole project or every design artifact after each
 intent change. The purpose is bounded propagation before implementation, not a
 new phase or impact registry.
 
+## Accepted Product Contract Continuity
+
+When current work touches behavior that was already accepted, frozen or otherwise
+established as part of the Product Goal, treat that behavior as `MUST-PRESERVE`
+unless a legitimate Intent/Design change explicitly supersedes it. Current source,
+runtime behavior and tests are authoritative evidence of what the implementation
+currently does; they do not silently redefine what the accepted product is
+supposed to continue doing.
+
+Before a material change, identify only the accepted behavior obligations that
+can actually be affected and give each one a bounded disposition:
+
+- `PRESERVED`: current evidence shows the accepted behavior still composes into
+  the required product journey;
+- `INTENTIONALLY_CHANGED`: an explicit accepted Intent/Design change supersedes
+  the earlier behavior and affected acceptance has been updated accordingly; or
+- `UNVERIFIED`: preservation is not yet established, so the affected checkpoint
+  or completion claim must remain open.
+
+Use composition-level reasoning when a local component contract is narrower than
+the accepted product contract. A subsystem may correctly return a local state
+such as authentication-required, creation-required, retry-required or another
+handoff condition; if the accepted journey requires the product to consume that
+state and continue automatically, component PASS is insufficient until the
+responsible orchestrator/consumer and the resulting journey behavior are
+verified. Likewise, accepted configuration semantics are not preserved merely
+because a reduced subset of fields still parses or has passing tests.
+
+This is semantic-drift detection, not a second requirements system. Keep only the
+necessary obligation/disposition with existing task/change notes; do not create a
+mandatory contract registry, full-project traceability matrix, new lifecycle or
+per-commit end-to-end ceremony. Use the cheapest relevant composition/regression
+oracle during execution and the real supported journey at meaningful acceptance
+convergence points.
+
 ## Execution loop
 
 1. Reconfirm the one active Goal, CUJ, acceptance and current Product HEAD.

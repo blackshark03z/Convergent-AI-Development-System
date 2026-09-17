@@ -1,6 +1,6 @@
 # Goal
 
-Make material CADS research durable against normal technology churn: when research can shape a long-lived or costly-to-reverse direction, require reasoning that accounts for current reality, credible industry/technology trajectory, durable capabilities/invariants, volatile implementation choices, replacement/portability cost and explicit revisit triggers, without creating a new control, phase, lifecycle, skill or mandatory artifact.
+Close the CADS semantic-drift gap exposed when an implementation and its local tests can become internally consistent while silently losing previously accepted/frozen product behavior. Add Accepted Product Contract Continuity as a lightweight execution/acceptance invariant: affected accepted behavior is `MUST-PRESERVE` unless an explicit legitimate Intent/Design change supersedes it.
 
 Preserve the canonical five-control model:
 
@@ -8,45 +8,47 @@ Preserve the canonical five-control model:
 
 # Critical User Journey
 
-AI Tech Lead encounters a material knowledge gap -> inspects current reality and performs targeted research -> separates what the product/system must durably preserve from today's replaceable technology choices -> considers credible industry/technology direction and replacement cost -> chooses the smallest current solution that preserves appropriate optionality -> persists material rationale/revisit triggers through existing Decision Continuity when needed -> implementation proceeds without adding research ceremony to cheap reversible questions.
+Tech Lead/Worker begins a material change -> reconstructs current implementation reality and the materially affected accepted product behavior -> identifies only affected must-preserve obligations -> implements/refactors the smallest coherent path -> verifies local component behavior plus required product-level composition -> blocks semantic drift when current code/tests no longer satisfy the accepted journey -> continues without reopening unrelated accepted behavior or adding a new process layer.
 
 # Acceptance
 
-- `skills/core/product-goal-framing.md` makes material targeted research trajectory-aware while explicitly preserving a fast path for cheap/local/reversible questions.
-- Material research distinguishes dated current evidence from durable capabilities/invariants and volatile models/providers/frameworks/APIs/products.
-- Material choices consider credible industry/technology trajectory as uncertain evidence, not prediction-as-fact.
-- Material choices consider replacement/portability cost and prefer capability/property/invariant-level commitments over unnecessary vendor/model/tool lock-in.
-- Material research produces concrete evidence/context revisit triggers when the decision should survive task/chat turnover.
-- `skills/core/architecture-description.md` applies the same durability semantics to architecturally significant technology choices only when expected lifetime or replacement cost is material.
-- `docs/DECISION_CONTINUITY.md` preserves durable reasoning without freezing forecasts or requiring decisions to be reopened merely because time passed.
-- `README.md` makes the rule discoverable from the existing knowledge-gap path.
-- No sixth CADS control, new phase, lifecycle, skill, artifact family, research database, forecast registry or mandatory research document.
+- `skills/core/goal-execution.md` states that accepted/frozen behavior implicated by a change is `MUST-PRESERVE` absent an explicit accepted Intent/Design change.
+- Goal Execution distinguishes current implementation reality from accepted product obligation and uses bounded `PRESERVED` / `INTENTIONALLY_CHANGED` / `UNVERIFIED` dispositions.
+- Component-level terminal/handoff behavior cannot silently replace a product-level accepted automation/composition contract; the responsible consumer/orchestrator must be identified and verified when the journey requires continuation.
+- Accepted configuration semantics cannot silently disappear merely because a surviving subset has green tests.
+- `skills/core/product-acceptance.md` treats divergence between internally consistent current code/tests and durable accepted product behavior as regression unless legitimately superseded.
+- Product Acceptance requires composition-level evidence for materially affected accepted behavior and does not infer Journey PASS from component PASS.
+- No sixth CADS control, phase, lifecycle, state machine, contract registry, traceability matrix, mandatory full E2E run per commit, generic new skill or artifact family.
+- `evals/autonomy/cases.json` adds one representative accepted-contract-drift case derived from the real failure archetype while remaining product-agnostic.
+- Eval validator/tests require that failure class and continue to fail closed on forbidden lifecycle/runtime state.
 - `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md` remains unchanged.
 - Focused regression and full `python scripts/self_test.py` pass with `SIMPLIFIED_ACTIVE_SUITE=PASS`; `git diff --check` passes.
 
 # Non-goals
 
-No universal 1-3 year forecast for every question; no mandatory trend report; no fixed research horizon; no required vendor comparison count; no speculative future architecture; no technology prediction presented as fact; no new research skill/process/runtime; no unrelated cleanup.
+Do not patch Multiple Automation in this task; do not redesign CADS architecture; do not create a product-contract database; do not require all prior acceptance to be re-proven after every change; do not require real external-provider E2E on every commit; do not add new controls/phases/states; do not change the frozen canonical Standard; no unrelated cleanup.
 
 # Constraints
 
-Research depth scales with consequence, irreversibility and replacement cost. Current reality remains the starting point. Industry/technology trajectory informs optionality and revisit conditions but does not override observed source/runtime evidence or justify speculative architecture.
+Current source/runtime/tests remain authoritative for what the implementation does now, not for silently redefining what the accepted product should do. Durable accepted Goal/Intent/Design/CUJ/acceptance remain normative for materially affected behavior until legitimately superseded. Verification depth scales with impact: focused deterministic composition checks during execution, real supported journey at meaningful acceptance convergence points where required.
 
 # Material Decisions
 
-- Treat research durability as a quality property of existing knowledge-gap, architecture and Decision Continuity methods, not a sixth control or research phase.
-- Express durable decisions primarily as capabilities/properties/invariants; named technologies remain replaceable realizations unless intentionally part of the material constraint.
-- Preserve forecasts as uncertain evidence and concrete revisit triggers, never as durable future facts.
-- Keep small/reversible research questions cheap.
+- Fix the gap inside existing Goal Execution + Product Acceptance rather than adding another control or lifecycle.
+- Treat semantic preservation as an impact-bounded obligation, not a project-wide traceability exercise.
+- A narrower component contract may remain correct; missing product-level composition is fixed at the responsible orchestration layer rather than by bloating the component.
+- Do not let implementation-coupled tests self-authorize a reduced product contract.
+- Preserve unaffected accepted behavior/evidence when impact analysis supports reuse.
 
 # Progress / Discoveries / Next
 
-- Start HEAD: `75c2f69b0616ad075e33729e1aa8de28fbbd2b40`.
-- Isolated branch/worktree: `codex/research-durability`.
-- Focused research/architecture/bootstrap regression: 21/21 PASS.
-- Full CADS regression: 111/111 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
-- `git diff --check`: PASS.
-- Frozen Standard diff: empty.
-- No new file, skill, control, phase, lifecycle or artifact family introduced.
+- Start HEAD: `62cf2aa4909d1953a94c1c519e497e3c369e80c5`.
+- Branch: `codex/product-contract-continuity`.
+- Triggering failure archetype: frozen product automation remained durable in SoT while later implementation + local tests converged on manual handoff states and dropped part of accepted configuration semantics.
+- Patch scope intentionally limited to existing execution/acceptance guidance plus one representative autonomy eval and regression coverage.
+- Autonomy validator: 26 cases PASS; accepted-contract-drift is required coverage.
+- Focused autonomy regression: 7/7 PASS.
+- Full CADS regression: 112/112 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
+- `git diff --check`: PASS; frozen Standard diff: empty; exactly 7 existing files changed and no new file/artifact family introduced.
 
-Next: apply this durability rule to future material research; revisit the method only if evidence shows it adds ceremony without preserving useful reasoning or fails to prevent technology lock-in/stale decisions.
+Next: use this invariant when reconciling affected product implementations; reopen the CADS mechanism only if evidence shows it misses semantic drift or adds disproportionate ceremony.

@@ -13,11 +13,11 @@ VALIDATOR=ROOT/'scripts'/'validate_autonomy_evals.py'
 class AutonomyEvalSuiteTests(unittest.TestCase):
     def data(self): return json.loads(DATA.read_text(encoding='utf-8'))
     def test_dataset_has_representative_size_and_unique_ids(self):
-        cases=self.data()['cases']; self.assertGreaterEqual(len(cases),15); self.assertLessEqual(len(cases),25)
+        cases=self.data()['cases']; self.assertGreaterEqual(len(cases),15); self.assertLessEqual(len(cases),26)
         ids=[c['id'] for c in cases]; self.assertEqual(len(ids),len(set(ids)))
     def test_dataset_covers_core_failure_classes(self):
         classes={c['failure_class'] for c in self.data()['cases']}
-        required={"state-leakage","journey-composition","runtime-identity","external-effect-ambiguity","weak-oracle","oracle-integrity","decision-drift","nonconverging-repair","persistence-compatibility","ui-discoverability","parallel-candidate-integration","semantic-conflict","acceptance-authority","consequential-authority","stale-writer","context-continuity","conditional-review","release-evidence-continuity","intent-ambiguity","machine-workflow-behavior","intent-change-impact","design-ceremony-floor"}
+        required={"state-leakage","journey-composition","runtime-identity","external-effect-ambiguity","weak-oracle","oracle-integrity","decision-drift","nonconverging-repair","persistence-compatibility","ui-discoverability","parallel-candidate-integration","semantic-conflict","acceptance-authority","consequential-authority","stale-writer","context-continuity","conditional-review","release-evidence-continuity","intent-ambiguity","machine-workflow-behavior","intent-change-impact","accepted-contract-drift","design-ceremony-floor"}
         self.assertTrue(required <= classes)
     def test_dataset_contains_no_runtime_or_model_trust_state(self):
         forbidden={"phase","workflow_state","task_lifecycle","retry_history","planner_state","chain_of_thought","subagent_graph","model_routing","session_history","trusted_model","model_tier","vendor_tier"}
@@ -27,7 +27,17 @@ class AutonomyEvalSuiteTests(unittest.TestCase):
         self.assertGreater(none, subjective+authority); self.assertGreaterEqual(subjective,1); self.assertGreaterEqual(authority,1)
     def test_validator_passes_canonical_dataset(self):
         proc=subprocess.run([sys.executable,str(VALIDATOR)],cwd=ROOT,text=True,encoding='utf-8',capture_output=True,timeout=30)
-        self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr); payload=json.loads(proc.stdout); self.assertEqual(payload['result'],'PASS'); self.assertEqual(payload['case_count'],25)
+        self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr); payload=json.loads(proc.stdout); self.assertEqual(payload['result'],'PASS'); self.assertEqual(payload['case_count'],26)
+    def test_product_contract_continuity_is_explicit_without_new_lifecycle(self):
+        execution=(ROOT/'skills'/'core'/'goal-execution.md').read_text(encoding='utf-8')
+        acceptance=(ROOT/'skills'/'core'/'product-acceptance.md').read_text(encoding='utf-8')
+        self.assertIn('Accepted Product Contract Continuity',execution)
+        self.assertIn('`MUST-PRESERVE`',execution)
+        self.assertIn('PRESERVED',execution); self.assertIn('INTENTIONALLY_CHANGED',execution); self.assertIn('UNVERIFIED',execution)
+        self.assertIn('Accepted Product Contract Preservation',acceptance)
+        self.assertIn('Implementation Reality',acceptance); self.assertIn('Accepted Product Contract',acceptance)
+        self.assertNotIn('PRODUCT_CONTRACT_READY',execution+acceptance)
+
     def test_validator_fails_closed_on_execution_state_field(self):
         value=self.data(); value['cases'][0]['phase']='RUNNING'
         with tempfile.TemporaryDirectory(prefix='cads-evals-') as raw:
