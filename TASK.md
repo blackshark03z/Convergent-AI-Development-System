@@ -51,5 +51,7 @@ Capability is demonstrated by task-relevant evidence, not model branding, vendor
 - This slice uses corrected `python-portable`: changed `tests/**/test_*.py` from candidate diff plus compileall, with evidence bound to the effective verification plan.
 - Planned delta is limited to the existing autonomy dataset, validator/test coverage, architecture clarification, eval-suite documentation and this TASK.md.
 - Verification target: focused autonomy validator/tests plus authoritative MAR `python-portable`; canonical Standard remains unchanged.
+- AE-027..AE-035 are now integrated in canonical local CADS reality at `1a6c4caedda329c9700fcda27e410a0f750bb487`; do not resubmit them because a later chat lacks direct MAR tool exposure.
+- DR-0009 records the transport-independent execution-authority rule. A 2026-09-19 ChatCode -> thin adapter -> MAR MCP probe returned the same canonical CADS project context through MAR's six canonical tools; the adapter is transport only, not a new authority.
 
-Next: complete AE-027..AE-035, verify and integrate, then use the expanded suite to challenge future CADS/MAR autonomy changes without freezing current AI limitations into architecture.
+Next: publish the canonical local master chain to `origin/master`, confirm remote convergence, then close this Goal. Continue using the expanded autonomy suite to challenge future CADS/MAR changes without freezing current AI limitations into architecture.

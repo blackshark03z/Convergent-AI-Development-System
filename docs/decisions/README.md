@@ -7,6 +7,7 @@ tests or runtime evidence.
 
 ## Active
 
+- [DR-0009 — Preserve execution authority across transport availability changes](0009-transport-independent-execution-authority.md)
 - [DR-0008 — Separate release qualification from product acceptance and activation](0008-release-qualification-evidence-continuity.md)
 - [DR-0007 — Bound external specialist skills as pinned advisory inputs](0007-external-specialist-skill-boundary.md)
 - [DR-0006 — Require acceptance-surface provenance for product evidence](0006-acceptance-surface-provenance.md)

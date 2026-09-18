@@ -36,6 +36,8 @@ CADS preserves **durable semantic invariants -> adaptive assurance -> removable 
 
 Autonomy is a **reversible evidence-calibrated autonomy envelope**, not a one-way ratchet. As reliable capability improves, unnecessary scaffolding and routine Owner burden should shrink. If capability, environment or evidence quality regresses, assurance may contract autonomy until sufficient evidence returns. This principle defines semantics, not persisted process state, and does not prescribe one harness, protocol, model family or execution topology.
 
+Transport availability does not redefine execution authority. If the current cognition client cannot expose the selected execution authority directly, an alternate bounded transport may be used only when it reaches the same durable authority and preserves the same Goal/task/evidence semantics. Missing direct tool exposure never implies that durable work is absent, completed work should be resubmitted, or direct repository mutation may substitute for the required integration authority. If equivalence cannot be established, fail closed at the transport boundary. See DR-0009.
+
 ## Advisory procedure routing
 
 Root `AGENTS.md` maps current work onto the five controls. Cold-start reconstructs
