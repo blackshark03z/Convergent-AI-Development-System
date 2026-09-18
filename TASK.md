@@ -50,5 +50,6 @@ Current source/runtime/tests remain authoritative for what the implementation do
 - Focused autonomy regression: 7/7 PASS.
 - Full CADS regression: 112/112 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
 - `git diff --check`: PASS; frozen Standard diff: empty; exactly 7 existing files changed and no new file/artifact family introduced.
+- MAR runtime qualification: release `local-3b2dfda71164` detected registered project `cads` as artifact capability and admitted it through recommended `research-artifacts` verification.
 
 Next: use this invariant when reconciling affected product implementations; reopen the CADS mechanism only if evidence shows it misses semantic drift or adds disproportionate ceremony.
