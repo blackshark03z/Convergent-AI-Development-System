@@ -1,55 +1,55 @@
 # Goal
 
-Close the CADS semantic-drift gap exposed when an implementation and its local tests can become internally consistent while silently losing previously accepted/frozen product behavior. Add Accepted Product Contract Continuity as a lightweight execution/acceptance invariant: affected accepted behavior is `MUST-PRESERVE` unless an explicit legitimate Intent/Design change supersedes it.
+Evolve CADS so current and future AI capability improvements can translate into more verified autonomy without turning today's compensating mechanisms into permanent constraints.
 
 Preserve the canonical five-control model:
 
 `Reality -> Intent / Design -> Change -> Acceptance -> Consequence`
 
+The target layering is:
+
+`durable semantic invariants -> adaptive assurance -> removable capability scaffolding`
+
+Owner burden should shrink as demonstrated AI/tool capability and evidence quality improve. Autonomy may contract again when capability or evidence regresses; it is a reversible evidence-calibrated envelope, not a one-way ratchet.
+
 # Critical User Journey
 
-Tech Lead/Worker begins a material change -> reconstructs current implementation reality and the materially affected accepted product behavior -> identifies only affected must-preserve obligations -> implements/refactors the smallest coherent path -> verifies local component behavior plus required product-level composition -> blocks semantic drift when current code/tests no longer satisfy the accepted journey -> continues without reopening unrelated accepted behavior or adding a new process layer.
+Tech Lead/Worker receives a Goal -> reconstructs current reality and durable semantic obligations -> selects the lightest assurance justified by risk and available evidence -> uses or removes capability scaffolding according to its current trigger -> executes through any compatible harness/protocol/topology -> verifies the same intent/authority/acceptance/consequence semantics -> asks the Owner only for genuinely subjective product judgement or consequential authority.
 
 # Acceptance
 
-- `skills/core/goal-execution.md` states that accepted/frozen behavior implicated by a change is `MUST-PRESERVE` absent an explicit accepted Intent/Design change.
-- Goal Execution distinguishes current implementation reality from accepted product obligation and uses bounded `PRESERVED` / `INTENTIONALLY_CHANGED` / `UNVERIFIED` dispositions.
-- Component-level terminal/handoff behavior cannot silently replace a product-level accepted automation/composition contract; the responsible consumer/orchestrator must be identified and verified when the journey requires continuation.
-- Accepted configuration semantics cannot silently disappear merely because a surviving subset has green tests.
-- `skills/core/product-acceptance.md` treats divergence between internally consistent current code/tests and durable accepted product behavior as regression unless legitimately superseded.
-- Product Acceptance requires composition-level evidence for materially affected accepted behavior and does not infer Journey PASS from component PASS.
-- No sixth CADS control, phase, lifecycle, state machine, contract registry, traceability matrix, mandatory full E2E run per commit, generic new skill or artifact family.
-- `evals/autonomy/cases.json` adds one representative accepted-contract-drift case derived from the real failure archetype while remaining product-agnostic.
-- Eval validator/tests require that failure class and continue to fail closed on forbidden lifecycle/runtime state.
+- `evals/autonomy/cases.json` contains AE-027..AE-035, bringing the representative suite to exactly 35 cases.
+- The nine cases cover capability obstruction, harness semantic lock-in, Owner-burden stagnation, protocol lock-in, execution-topology lock-in, stale capability scaffolding, autonomy contraction/re-expansion after capability regression, correlated generator/verifier blind spots, and runtime/CADS semantic-contract mismatch.
+- `scripts/validate_autonomy_evals.py` admits up to 35 cases and requires all new failure classes while retaining existing fail-closed schema, risk, oracle and human-attention checks.
+- Existing autonomy regression tests are updated to the 35-case contract and continue to reject forbidden runtime/model trust state.
+- `ARCHITECTURE.md` states the durable-semantic-invariants / adaptive-assurance / removable-capability-scaffolding model and the reversible evidence-calibrated autonomy envelope.
+- Existing `docs/CADS_AUTONOMY_EVAL_SUITE.md` reflects the 35-case suite without creating a new artifact family.
 - `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md` remains unchanged.
-- Focused regression and full `python scripts/self_test.py` pass with `SIMPLIFIED_ACTIVE_SUITE=PASS`; `git diff --check` passes.
+- Focused autonomy validation passes and MAR `python-portable` verification passes.
 
 # Non-goals
 
-Do not patch Multiple Automation in this task; do not redesign CADS architecture; do not create a product-contract database; do not require all prior acceptance to be re-proven after every change; do not require real external-provider E2E on every commit; do not add new controls/phases/states; do not change the frozen canonical Standard; no unrelated cleanup.
+No sixth CADS control is introduced. Do not create a new CADS control, lifecycle, workflow state, task database, model router, context governor, policy engine, protocol, execution topology or persistent autonomy controller. Do not add a new skill or artifact family. Do not implement a new agent runtime, benchmark runner, embeddings/vector DB, multi-agent orchestrator or remote cache. Do not change the frozen canonical Standard.
 
 # Constraints
 
-Current source/runtime/tests remain authoritative for what the implementation does now, not for silently redefining what the accepted product should do. Durable accepted Goal/Intent/Design/CUJ/acceptance remain normative for materially affected behavior until legitimately superseded. Verification depth scales with impact: focused deterministic composition checks during execution, real supported journey at meaningful acceptance convergence points where required.
+Capability is demonstrated by task-relevant evidence, not model branding, vendor tier or a permanently trusted harness. Semantic invariants outlive current implementation mechanisms. Assurance may strengthen or weaken with evidence; scaffolding must have a material trigger and remain removable. Product judgement and consequential authority remain Owner boundaries even as routine engineering attention shrinks.
 
 # Material Decisions
 
-- Fix the gap inside existing Goal Execution + Product Acceptance rather than adding another control or lifecycle.
-- Treat semantic preservation as an impact-bounded obligation, not a project-wide traceability exercise.
-- A narrower component contract may remain correct; missing product-level composition is fixed at the responsible orchestration layer rather than by bloating the component.
-- Do not let implementation-coupled tests self-authorize a reduced product contract.
-- Preserve unaffected accepted behavior/evidence when impact analysis supports reuse.
+- Preserve semantics, not today's harness mechanics.
+- Treat capability scaffolding as conditional and removable, never as an automatic permanent layer.
+- Use a reversible evidence-calibrated autonomy envelope: expand when evidence supports it; contract when capability/evidence regresses; re-expand when evidence recovers.
+- Do not require independent reviewers or extra models universally; seek materially diverse evidence when correlation risk can invalidate the oracle.
+- Runtime/MAR may execute CADS semantics but must not redefine CADS intent, authority, acceptance or consequence boundaries.
+- Keep the canonical five-control model unchanged.
 
 # Progress / Discoveries / Next
 
-- Start HEAD: `62cf2aa4909d1953a94c1c519e497e3c369e80c5`.
-- Branch: `codex/product-contract-continuity`.
-- Triggering failure archetype: frozen product automation remained durable in SoT while later implementation + local tests converged on manual handoff states and dropped part of accepted configuration semantics.
-- Patch scope intentionally limited to existing execution/acceptance guidance plus one representative autonomy eval and regression coverage.
-- Autonomy validator: 26 cases PASS; accepted-contract-drift is required coverage.
-- Focused autonomy regression: 7/7 PASS.
-- Full CADS regression: 112/112 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
-- `git diff --check`: PASS; frozen Standard diff: empty; exactly 7 existing files changed and no new file/artifact family introduced.
-- MAR runtime qualification: release `local-3b2dfda71164` detected registered project `cads` as artifact capability and admitted it through recommended `research-artifacts` verification.
+- Start HEAD: `a30b1311a9caf642a72c4de8ae42c5382cf72152`.
+- MAR runtime `local-6b28ea160b9e` recognizes CADS as mixed `artifact + python` and recommends `python-portable`.
+- This slice uses corrected `python-portable`: changed `tests/**/test_*.py` from candidate diff plus compileall, with evidence bound to the effective verification plan.
+- Planned delta is limited to the existing autonomy dataset, validator/test coverage, architecture clarification, eval-suite documentation and this TASK.md.
+- Verification target: focused autonomy validator/tests plus authoritative MAR `python-portable`; canonical Standard remains unchanged.
 
-Next: use this invariant when reconciling affected product implementations; reopen the CADS mechanism only if evidence shows it misses semantic drift or adds disproportionate ceremony.
+Next: complete AE-027..AE-035, verify and integrate, then use the expanded suite to challenge future CADS/MAR autonomy changes without freezing current AI limitations into architecture.

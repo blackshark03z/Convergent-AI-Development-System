@@ -30,6 +30,12 @@ them; they are not universal phases. This keeps specialist knowledge on demand
 while preserving explicit questions learned from real failures. No control or
 method creates design authority or persisted process state.
 
+## Capability-adaptive autonomy
+
+CADS preserves **durable semantic invariants -> adaptive assurance -> removable capability scaffolding**. Intent, authority, acceptance and consequence boundaries remain stable while assurance depth adapts to current evidence, task risk and demonstrated agent/tool capability. Compensating mechanisms introduced for a temporary capability gap must remain removable rather than becoming permanent architecture.
+
+Autonomy is a **reversible evidence-calibrated autonomy envelope**, not a one-way ratchet. As reliable capability improves, unnecessary scaffolding and routine Owner burden should shrink. If capability, environment or evidence quality regresses, assurance may contract autonomy until sufficient evidence returns. This principle defines semantics, not persisted process state, and does not prescribe one harness, protocol, model family or execution topology.
+
 ## Advisory procedure routing
 
 Root `AGENTS.md` maps current work onto the five controls. Cold-start reconstructs

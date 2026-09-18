@@ -12,7 +12,7 @@ ORACLE = {"OBJECTIVE", "MIXED", "SUBJECTIVE", "WEAK"}
 HUMAN = {"NONE", "SUBJECTIVE_JUDGEMENT", "AUTHORITY_ONLY"}
 REQUIRED_FIELDS = {"id","title","failure_class","risk_class","goal","oracle_strength","expected_behavior","expected_human_attention","required_evidence","failure_signals","anti_shortcuts"}
 FORBIDDEN_FIELDS = {"phase","workflow_state","task_lifecycle","retry_history","planner_state","chain_of_thought","subagent_graph","model_routing","session_history","trusted_model","model_tier","vendor_tier"}
-REQUIRED_FAILURE_CLASSES = {"state-leakage","journey-composition","runtime-identity","external-effect-ambiguity","weak-oracle","oracle-integrity","decision-drift","nonconverging-repair","persistence-compatibility","ui-discoverability","parallel-candidate-integration","semantic-conflict","acceptance-authority","consequential-authority","stale-writer","context-continuity","conditional-review","intent-ambiguity","machine-workflow-behavior","intent-change-impact","accepted-contract-drift","design-ceremony-floor"}
+REQUIRED_FAILURE_CLASSES = {"state-leakage","journey-composition","runtime-identity","external-effect-ambiguity","weak-oracle","oracle-integrity","decision-drift","nonconverging-repair","persistence-compatibility","ui-discoverability","parallel-candidate-integration","semantic-conflict","acceptance-authority","consequential-authority","stale-writer","context-continuity","conditional-review","intent-ambiguity","machine-workflow-behavior","intent-change-impact","accepted-contract-drift","design-ceremony-floor","capability-obstruction","harness-semantic-lock-in","owner-burden-stagnation","protocol-lock-in","execution-topology-lock-in","stale-capability-scaffolding","autonomy-capability-regression","correlated-verifier-blind-spot","runtime-semantic-contract-mismatch"}
 
 def _text(value, name):
     if not isinstance(value, str) or not value.strip(): raise ValueError(f"{name} must be a non-empty string")
@@ -27,7 +27,7 @@ def validate(path=DEFAULT):
     if value.get("schema_version") != 1: raise ValueError("schema_version must be 1")
     _text(value.get("suite_id"), "suite_id"); _text(value.get("purpose"), "purpose")
     cases = value.get("cases")
-    if not isinstance(cases, list) or not (15 <= len(cases) <= 26): raise ValueError("cases must contain 15..26 representative Goals")
+    if not isinstance(cases, list) or not (15 <= len(cases) <= 35): raise ValueError("cases must contain 15..35 representative Goals")
     ids=set(); classes=set(); risk={k:0 for k in RISK}; oracle={k:0 for k in ORACLE}; human={k:0 for k in HUMAN}
     for i, case in enumerate(cases):
         if not isinstance(case, dict): raise ValueError(f"cases[{i}] must be an object")

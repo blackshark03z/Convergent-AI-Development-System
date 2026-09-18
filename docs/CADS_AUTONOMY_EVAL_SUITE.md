@@ -1,7 +1,7 @@
 # CADS Autonomy Eval Suite
 
-Status: Initial representative dataset
-Date: 2026-09-12
+Status: Expanded representative dataset
+Date: 2026-09-18
 
 ## Purpose
 
@@ -11,9 +11,11 @@ The suite is a **dataset and scoring rubric**, not a scheduler, task database, m
 
 ## Dataset
 
-`evals/autonomy/cases.json` contains 26 representative Goals derived from failure classes observed across CADS-related product work and architecture reviews. Cases are intentionally phrased as reusable engineering scenarios rather than product-specific scripts.
+`evals/autonomy/cases.json` contains 35 representative Goals derived from failure classes observed across CADS-related product work and architecture reviews. Cases are intentionally phrased as reusable engineering scenarios rather than product-specific scripts.
 
 The suite covers repeated-workflow state leakage, end-to-end journey composition failure, runtime/source identity mismatch, ambiguous external effects, weak/missing acceptance oracles, oracle self-proof, decision/context drift, non-converging repair, persistence compatibility, UI discoverability, subjective acceptance boundaries, isolated parallel candidates, semantic conflict, stale physical writers, provider fallback, artifact immutability, conditional fresh review, vague intent with hidden load-bearing decisions, machine-workflow behavioral clarity, intent-change impact propagation, accepted-product-contract drift despite internally consistent code/tests, and the simple-task ceremony floor.
+
+AE-027..AE-035 extend that coverage for future-capability pressure: capability obstruction, harness semantic lock-in, Owner-burden stagnation, protocol and execution-topology lock-in, stale capability scaffolding, safe autonomy contraction/re-expansion after capability regression, correlated generator/verifier blind spots, and runtime/CADS semantic-contract mismatch. These cases evaluate whether CADS can preserve semantic guarantees while allowing obsolete scaffolding to disappear as AI/harness capability improves.
 
 ## What a run records
 
@@ -45,7 +47,9 @@ Stratify results by risk and failure class. A system must not appear more autono
 
 ## Comparison rule
 
-At minimum compare a current thin-CADS baseline with the B-prime candidate mechanisms actually under test, such as Evidence Envelope / Oracle Integrity. Keep Goal text, acceptance meaning and environmental preconditions equivalent between compared runs. Do not rewrite acceptance after observing a candidate merely to make one configuration pass.
+At minimum compare a current thin-CADS baseline with the candidate mechanisms actually under test. Keep Goal text, acceptance meaning and environmental preconditions equivalent between compared runs. Do not rewrite acceptance after observing a candidate merely to make one configuration pass.
+
+The comparison should also detect whether stronger model/harness capability actually reduces routine scaffolding and Owner attention. A capability improvement that leaves unnecessary manual relay or ceremony unchanged is not an autonomy improvement.
 
 ## Case interpretation
 
@@ -55,7 +59,7 @@ Each case declares `oracle_strength`, `expected_behavior`, `expected_human_atten
 
 Do not promote a new CADS/MAR mechanism because it sounds more agentic or because it performs well on one case. Promotion requires representative evidence that it improves the north star or closes a serious safety/authority gap without unacceptable regression in guard metrics.
 
-A mechanism should be shrunk or removed when it adds ceremony/latency without reducing false-DONE, escaped defects or Owner attention/re-explanation load.
+A mechanism should be shrunk or removed when it adds ceremony/latency without reducing false-DONE, escaped defects or Owner attention/re-explanation load. Conversely, a temporary capability/evidence regression may justify stronger assurance until evidence supports expanding autonomy again.
 
 ## Integrity
 
