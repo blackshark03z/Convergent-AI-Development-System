@@ -40,7 +40,7 @@
 
 # Stable Invariants / Architecture Invariants
 
-<!-- Properties that changes must preserve. Prefer statements that can be checked or tied to scenarios/evidence. -->
+<!-- Properties that changes must preserve. Prefer statements that can be checked or tied to scenarios/evidence. When state ownership/source-of-truth, dependency direction, persistent schema, external-effect semantics or concurrency/fencing changes materially, identify the affected system-fitness invariant and the smallest integration evidence that protects it. -->
 
 # Important Tradeoffs / Decisions
 

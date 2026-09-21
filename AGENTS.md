@@ -8,18 +8,11 @@ Use one small control model; these are reasoning controls, not persisted phases:
 
 1. **Reality** -> Project Cold-Start when context is new/stale; Workspace Hygiene
    only when bloat, competing worklines, or closure residue is actually present.
-2. **Intent / Design** -> `skills/core/product-goal-framing.md` for a new/changed
-   Goal, missing acceptance, material design assumptions, or before an expensive-
-   to-reverse architecture/domain/source-of-truth/ownership/authority decision;
-   use `skills/core/architecture-description.md` conditionally when durable
-   system shape/technology/runtime/data/deployment/trust architecture is material.
+2. **Intent / Design** -> `skills/core/product-goal-framing.md` as the adaptive Intent Boundary for a new/changed Goal, missing acceptance, material uncertainty, or expensive-to-recover design; scale depth by its Risk Envelope and use `skills/core/architecture-description.md` only when durable system shape is material.
 3. **Change** -> `skills/core/goal-execution.md` for the smallest coherent change;
    use `skills/core/systematic-debugging.md` conditionally for an actual defect,
    then resume the same Goal.
-4. **Acceptance** -> `skills/core/product-acceptance.md` before a material
-   `FIXED`/`DONE`/product-ready claim. Multi-step outcomes require whole-journey
-   evidence; use `skills/core/release-qualification.md` conditionally when a
-   material release boundary makes release-ready a separate claim.
+4. **Acceptance** -> `skills/core/product-acceptance.md` before a material `FIXED`/`DONE`/product-ready claim. Bind evidence to its oracle/candidate and add affected system-fitness evidence before canonical promotion when cross-cutting invariants change; use `skills/core/release-qualification.md` only for a separate material release boundary.
 5. **Consequence** -> existing CADS Thin Guard only for applicable destructive,
    external, privileged/security-sensitive, or explicitly high-cost effects.
 

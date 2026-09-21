@@ -10,6 +10,10 @@
 
 <!-- AI Tech Lead: define observable completion criteria and relevant oracles before implementation. Owner supplies unresolved product facts/trade-offs and remains the real-use oracle where subjective experience matters. Do not weaken acceptance post hoc merely to make implementation pass. -->
 
+# Acceptance Baseline / Oracle Identity
+
+<!-- Optional unless acceptance may change across candidates/sessions or evidence must be carried forward. Identify the acceptance/oracle baseline used for completion evidence (for example Git-bound TASK revision, digest or accepted decision). Do not create a numeric registry for trivial work. -->
+
 # Acceptance Fixture / Golden Input
 
 <!-- AI Tech Lead: identify the representative real input/project/state used to drive the same journey until acceptance, when applicable. -->
@@ -21,6 +25,10 @@
 # Constraints
 
 <!-- AI Tech Lead: state material safety, scope, compatibility and delivery limits recovered from current reality and Owner-controlled choices. -->
+
+# Deferred Assurance Triggers
+
+<!-- Optional. Record only material guarantees deliberately deferred because current correction/recovery cost is bounded. Prefer a concrete trigger that makes the guarantee required; do not turn ordinary TODOs into a CADS backlog. -->
 
 # Material Decisions
 

@@ -65,6 +65,35 @@ that dependency itself is intentionally material. Treat forecasts as uncertain
 evidence, not future truth. Do not add trajectory analysis to cheap, local,
 reversible questions whose late correction remains bounded.
 
+## Adaptive Intent Boundary and Risk Envelope
+
+Treat Product / Design Framing as an **Intent Boundary**, not a permanent
+specification compiler. If the Owner request, current Product Contract and
+repository reality already make the material outcome/authority clear and late
+correction is cheap, use a pass-through framing and proceed. Spend reasoning
+before execution only on uncertainty that could materially change accepted
+outcome, authority/external target, persistent-state semantics, or a
+hard-to-recover consequence.
+
+For a material Goal, assess a qualitative **Risk Envelope** using only the
+dimensions that matter:
+
+- **uncertainty** — how plausible is a materially different interpretation?
+- **consequence** — what is the cost if the interpretation/action is wrong?
+- **reversibility / recoverability** — how cheaply and reliably can reality be restored?
+- **observability** — will failure be detected quickly and causally?
+- **blast radius** — how much state, how many users/actors, or which external systems can be affected?
+
+Do not calculate a universal numeric risk score. A credential/security boundary,
+destructive persistent-state mutation, materially hard-to-recover external
+effect, silent corruption risk or wide blast radius is a pre-execution assurance
+trigger even if no prior real failure has occurred.
+
+The boundary is complete when remaining ambiguity cannot materially alter the
+accepted outcome, execution authority, external target, persistent-state
+semantics or hard-to-recover consequence for the current Goal. It does not imply
+complete implementation design.
+
 ## Frame the Goal
 
 1. State one bounded Owner outcome in user-observable terms.

@@ -36,6 +36,12 @@ CADS preserves **durable semantic invariants -> adaptive assurance -> removable 
 
 Autonomy is a **reversible evidence-calibrated autonomy envelope**, not a one-way ratchet. As reliable capability improves, unnecessary scaffolding and routine Owner burden should shrink. If capability, environment or evidence quality regresses, assurance may contract autonomy until sufficient evidence returns. This principle defines semantics, not persisted process state, and does not prescribe one harness, protocol, model family or execution topology.
 
+### Adaptive delivery boundaries
+
+DR-0011 composes the existing Five Controls into five lightweight delivery boundaries: **Intent Boundary, Risk Envelope, Execution Authority, Versioned Acceptance, and Canonical Promotion**. These are not new lifecycle stages or a sixth control. The Intent boundary should collapse to pass-through for clear reversible work; assurance expands only when uncertainty, consequence, recoverability, observability or blast radius makes late correction materially expensive.
+
+Local CUJ success does not by itself prove global system health. When a change materially alters state ownership/source-of-truth, dependency direction, persistent schema, external-effect semantics, concurrency/fencing, or another cross-cutting invariant, canonical promotion includes the affected system-fitness evidence. Parallel execution may create many candidates, but one authority serializes canonical product truth. The canonical obligation is one identifiable product lineage, not preservation of the first implementation architecture.
+
 Transport availability does not redefine execution authority. If the current cognition client cannot expose the selected execution authority directly, an alternate bounded transport may be used only when it reaches the same durable authority and preserves the same Goal/task/evidence semantics. Missing direct tool exposure never implies that durable work is absent, completed work should be resubmitted, or direct repository mutation may substitute for the required integration authority. If equivalence cannot be established, fail closed at the transport boundary. See DR-0009.
 
 ## Advisory procedure routing

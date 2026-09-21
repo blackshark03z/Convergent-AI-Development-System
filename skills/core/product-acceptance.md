@@ -68,6 +68,44 @@ candidate must satisfy the same rule: changed SHA alone does not invalidate
 unaffected criteria, but unresolved material impact on behavior, inputs/state/data,
 the oracle or surface provenance leaves the affected criterion `UNVERIFIED`.
 
+## Versioned acceptance and affected system fitness
+
+Treat predefined acceptance as a **versioned acceptance** baseline. The
+acceptance/oracle used for a completion claim must have an identifiable
+**oracle identity** tied to the candidate it evaluates. A Git-bound `TASK.md`
+revision, content digest, accepted Decision Record or equivalent traceable
+baseline is sufficient; CADS does not require a numeric oracle registry.
+
+If implementation reveals that acceptance itself must materially change, treat
+that as a separate explicit intent/oracle change. The implementation Worker may
+propose the change, but may not silently weaken/redefine the oracle and then use
+the replacement to approve the same work.
+
+### System-fitness trigger
+
+Local CUJ success is insufficient when the change materially affects a
+cross-cutting system invariant. Before **canonical promotion**, add
+proportionate evidence for affected invariants when the change alters or
+introduces state ownership/source-of-truth, dependency direction or durable
+architecture boundary, persistent schema/state evolution, external-effect
+identity/uniqueness/retry/target semantics, concurrency/fencing, or another
+system property whose failure can remain hidden behind a passing local journey.
+Prefer executable architecture/contract checks when the invariant is stable
+enough to encode. Do not expand this into a universal full-system review for
+small local changes.
+
+Revalidate the affected product oracle and system-fitness evidence against the
+candidate that is actually being promoted. Evidence from a stale isolated
+candidate does not prove a materially different canonical integration result.
+
+Acceptance for present use is an accepted outcome, not automatically a permanent
+**continuity commitment** for every observable detail of the first usable
+implementation. Preserve material behavior required by the accepted Product
+Contract; implementation architecture may be replaced when behavior is
+preserved or explicitly superseded, material state is deliberately transitioned
+when needed, the replacement passes current acceptance/system invariants, and
+the obsolete competing path is retired.
+
 ## Accepted Product Contract Preservation
 
 For behavior already accepted or frozen, distinguish two authorities:
