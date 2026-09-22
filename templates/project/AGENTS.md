@@ -19,9 +19,7 @@ Use five reasoning controls, not a persisted lifecycle:
 1. **Reality** — cold-start from `TASK.md`, `ARCHITECTURE.md`, active Decision
    Records, Git/source, tests/CI evidence and identified runtime. Use Workspace
    Hygiene only for actual bloat, competing worklines, or closure residue.
-2. **Intent / Design** — frame one bounded Goal/CUJ/acceptance and identify only
-   material, expensive-to-get-wrong design drivers before stabilizing an
-   architecture/domain/source-of-truth/ownership/authority decision.
+2. **Intent / Design** — frame one bounded Goal/CUJ/acceptance. When material ambiguity would otherwise be rediscovered during coding, compile a worker-ready Design Baseline or equivalent goal-specific spec; clear reversible work passes through. Stabilize only expensive-to-get-wrong architecture/domain/source-of-truth/ownership/authority decisions.
 3. **Change** — make the smallest coherent change under the Goal; debug
    scientifically only when an actual defect exists, then resume the same Goal.
 4. **Acceptance** — prove the real supported path; isolated feature/subsystem PASS

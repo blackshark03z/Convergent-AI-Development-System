@@ -8,7 +8,7 @@ Use one small control model; these are reasoning controls, not persisted phases:
 
 1. **Reality** -> Project Cold-Start when context is new/stale; Workspace Hygiene
    only when bloat, competing worklines, or closure residue is actually present.
-2. **Intent / Design** -> `skills/core/product-goal-framing.md` as the adaptive Intent Boundary for a new/changed Goal, missing acceptance, material uncertainty, or expensive-to-recover design; scale depth by its Risk Envelope and use `skills/core/architecture-description.md` only when durable system shape is material.
+2. **Intent / Design** -> `skills/core/product-goal-framing.md` as the adaptive Intent Boundary; when material ambiguity would otherwise be rediscovered during coding, compile a worker-ready Design Baseline or equivalent goal-specific spec. Clear reversible work passes through. Use `skills/core/architecture-description.md` only when durable system shape is material.
 3. **Change** -> `skills/core/goal-execution.md` for the smallest coherent change;
    use `skills/core/systematic-debugging.md` conditionally for an actual defect,
    then resume the same Goal.

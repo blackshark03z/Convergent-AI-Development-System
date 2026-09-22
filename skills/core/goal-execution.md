@@ -67,6 +67,25 @@ per-commit end-to-end ceremony. Use the cheapest relevant composition/regression
 oracle during execution and the real supported journey at meaningful acceptance
 convergence points.
 
+## Worker-ready design and DESIGN_GAP
+
+When an accepted Design Baseline or equivalent goal-specific spec exists, treat it
+as compiled product/design input rather than asking the Worker to reconstruct the
+whole CADS knowledge base. Reconcile it against current Git/source reality before
+editing, then preserve its material obligations while choosing implementation
+details locally.
+
+Do not escalate normal code choices. Use `DESIGN_GAP` only when source reality
+contradicts an accepted material design obligation or a missing decision could
+materially change user-visible behavior, state/data ownership, authority/effects,
+load-bearing architecture or the acceptance oracle. Pause only the affected slice,
+return the concrete contradiction/missing decision to Design Authority, amend or
+supersede the affected baseline, then resume. Do not silently invent material
+product semantics and do not reopen unrelated accepted design.
+
+Design depth does not justify giant-bang execution. Continue to build and verify
+small coherent slices.
+
 ## Execution loop
 
 1. Reconfirm the one active Goal, CUJ, acceptance and current Product HEAD.

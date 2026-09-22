@@ -94,6 +94,37 @@ accepted outcome, execution authority, external target, persistent-state
 semantics or hard-to-recover consequence for the current Goal. It does not imply
 complete implementation design.
 
+## Design Compilation when material
+
+The Intent Boundary is not a permanent compiler subsystem, but material Goals
+should not force the execution Worker to rediscover accepted product semantics
+while coding. When unresolved ambiguity, coupling, state/authority semantics or
+cost of rework is material, compile current reality and accepted direction into a
+**worker-ready Design Baseline** before execution.
+
+Use `templates/project/DESIGN_BASELINE.md`, a goal-specific OpenSpec/Spec Kit
+representation, or an equivalent structured form. The representation is
+replaceable; CADS depends on its semantics rather than one tool. One logical
+baseline may span several physical files when progressive disclosure helps.
+
+At proportionate depth make explicit only what materially constrains execution:
+user-observable outcome/non-goals, material journeys/actions, domain/state
+semantics, required behavior/failure recovery, source-of-truth/authority/effect
+boundaries, architecture invariants, acceptance/oracles and implementation
+ordering where dependency requires it. Do not pre-design classes, functions or
+other cheap implementation detail.
+
+Before handoff, attack the baseline for dangling obligations: an unreachable
+journey/action, state with unclear persist/reset/re-entry semantics, action with no
+result/failure behavior, persistent entity with unclear identity/owner/source of
+truth, consequential effect with unclear target/identity, requirement without an
+oracle, or accepted output the intended user cannot actually obtain. Apply only
+the checks material to the Goal.
+
+If the request is already precise and correction is cheap/local, skip this
+artifact entirely. Optimize total time/cost to accepted product, not planning
+tokens in isolation.
+
 ## Frame the Goal
 
 1. State one bounded Owner outcome in user-observable terms.
