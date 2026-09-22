@@ -108,5 +108,56 @@ semantic dependency.
   heuristic retrieval supplemental, and harness quota/model/session mechanics
   outside CADS Core. Do not add a new CADS runtime/retrieval layer from this
   evidence.
-- Next: close Pilot 2 cleanly, then benchmark the same direct-handoff contract on
-  a design-heavier cross-project Goal before considering any further CADS mechanism.
+
+- Cross-project Pilot 3 used clean Story Audio HEAD
+  `04e602958d615c0581723ee46a89b505fbbdfe7f` for the design-heavy
+  `SAVE_VOICE_CONFIGURATION_BATCH` contract. The DIRECT handoff contained four
+  explicit inputs; the pilot design input was bound to SHA-256
+  `2ca78763695d8ac27f2b40278784aede7a6d675f7c43cc9206e0bfd1e06f6b69`.
+  Packet compilation took about 0.74 s and granted no authority, persisted no
+  state and started no harness.
+- The design contract covered eight coupled obligations: local draft vs one batch
+  commit, pre-write validation, shared transaction/no PARTIAL, at-most-one draft
+  Casting Plan per chapter, inheritance normalization, stale-default recovery,
+  no provider/PREPARE/render/QA side effects, and disposable-test-only evidence.
+- Source audit found the accepted design already implemented: the production
+  command validates submitted rows before durable success, wraps scoped plan,
+  Book Voice Profile and Character writes in one `Database.transaction()`, passes
+  that shared connection into the scoped batch writer, and returns only APPLIED
+  for this command. `Database.transaction()` rolls back on exceptions.
+- Eight focused oracles PASS: four domain tests prove one-plan-per-chapter,
+  invalid-item zero-plan write, default-to-inheritance normalization and
+  unavailable-voice no-partial-write; four API/UI tests prove the shared scoped
+  mutation transaction, one final batch-save workflow, effective-voice
+  reconciliation and one visible atomic recovery action with no PREPARE/render.
+  The first combined test command used the system Python and partly failed on
+  missing FastAPI / an incorrect guessed class name; rerunning those tests with
+  the repository `.venv` and exact class names passed 4/4. This was test-runner
+  discovery noise, not product failure.
+- Pilot 3 found no product DESIGN_GAP and made no Story Audio source/test commit.
+  One small evidence gap remains: there is no single explicit failure-injection
+  test that starts a mixed scoped+Book/Character batch, mutates an early item and
+  then proves rollback after a later write-time exception. Current source
+  structure plus transaction semantics support the guarantee, while existing
+  domain tests cover the highest-risk component failures. Record this as an
+  optional future oracle, not a reason to manufacture product work.
+- ChatCode predictive retrieval again ranked unrelated acceptance/Gemini/legacy
+  files ahead of the actual API/domain implementation even though the explicit
+  packet was precise. Manual targeted discovery found the authoritative files
+  immediately. This is further evidence that handoff semantics and harness code
+  retrieval are separate concerns; do not build a CADS retrieval/runtime layer
+  from this harness behavior.
+- Pilot 3 metrics: first-pass design contract valid; DESIGN_GAP count 0; Owner
+  interruptions 0; product mutations 0; handoff repair rounds 0; manual code
+  discovery was required after noisy supplemental retrieval.
+- Cross-project Pilot 3 closed cleanly; temporary packet/design files were removed
+  and Story Audio returned to clean `main...origin/main`.
+- Handoff Goal conclusion after three pilots: the harness-neutral seam is
+  operational across CADS itself, a small UI-state Goal and a design-heavy
+  transactional Goal. Observed failures were a Windows serialization defect
+  (fixed) and harness-specific quota/retrieval/environment friction. None justify
+  adding a CADS-owned agent runtime, model/session router or retrieval subsystem.
+- Next: use the handoff seam in normal project work and collect representative
+  failure evidence. Add or change CADS machinery only when repeated cross-project
+  evidence shows a semantic guarantee missing from the existing five controls,
+  Design Baseline, handoff, Acceptance or Consequence boundaries.
