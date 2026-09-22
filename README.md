@@ -108,6 +108,15 @@ persists no task state, and does not mandate MAR. Select any execution substrate
 that demonstrably supplies the declared properties. Consequence and Product
 Acceptance rules remain unchanged on the direct path.
 
+Compile the smallest explicit worker input set for a replaceable external coding harness without starting that harness:
+
+```powershell
+python scripts/ai.py --root D:\\path\\to\\repo handoff `
+  --input TASK.md --input DESIGN_BASELINE.md
+```
+
+The JSON packet carries each selected repo-local UTF-8 file's relative path, SHA-256 identity and exact text plus the same property-derived execution route. Add `--require <property>` when the Goal needs governed execution properties. The handoff is a read-only projection: it grants no authority, persists no lifecycle state, and does not create/select a model, agent, provider, session, context engine or worker process. Input selection stays explicit so a Worker does not receive the entire CADS corpus by default.
+
 Read current Git and external-effect truth without writes:
 
 ```powershell
