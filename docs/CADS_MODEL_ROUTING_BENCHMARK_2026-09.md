@@ -6,6 +6,8 @@ Status: Experimental benchmark protocol, not CADS architecture or routing policy
 
 Measure whether newer model capability improves the CADS operating model before changing any canonical model-routing policy.
 
+This benchmark is also evidence for the DR-0014 Existential Challenge: stronger models should be allowed to make CADS scaffolding unnecessary. It must not be used to justify GPT-specific CADS architecture.
+
 This benchmark does **not** add a model router, scheduler, task lifecycle, worker runtime, provider abstraction, or new CADS control. It is an evaluation layer over the existing harness-neutral execution contract.
 
 The benchmark keeps three questions separate:

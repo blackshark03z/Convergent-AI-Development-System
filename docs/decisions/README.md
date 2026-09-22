@@ -7,6 +7,7 @@ tests or runtime evidence.
 
 ## Active
 
+- [DR-0014 — Require an existential challenge before durable CADS expansion](0014-existential-challenge-before-durable-expansion.md)
 - [DR-0013 — Default to direct execution and add governance only for required runtime properties](0013-direct-execution-and-conditional-governance.md)
 - [DR-0012 — Compile material design before execution using a replaceable spec substrate](0012-design-compilation-and-replaceable-spec-substrate.md)
 - [DR-0011 — Adopt adaptive control boundaries for progressive AI delivery](0011-adaptive-control-boundaries.md)

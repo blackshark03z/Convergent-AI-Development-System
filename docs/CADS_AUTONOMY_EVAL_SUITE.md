@@ -49,6 +49,8 @@ Stratify results by risk and failure class. A system must not appear more autono
 
 At minimum compare a current thin-CADS baseline with the candidate mechanisms actually under test. Keep Goal text, acceptance meaning and environmental preconditions equivalent between compared runs. Do not rewrite acceptance after observing a candidate merely to make one configuration pass.
 
+For a load-bearing CADS mechanism subject to DR-0014, comparison should include the relevant counterfactuals: a No-CADS baseline, a minimal assembled existing-system baseline, and Thin CADS. Independent research lanes may identify the concrete existing-system arm, but lane conclusions remain isolated until synthesis. KEEP, SHRINK, REPLACE and DELETE are all valid evidence outcomes.
+
 The comparison should also detect whether stronger model/harness capability actually reduces routine scaffolding and Owner attention. A capability improvement that leaves unnecessary manual relay or ceremony unchanged is not an autonomy improvement.
 
 ## Case interpretation
