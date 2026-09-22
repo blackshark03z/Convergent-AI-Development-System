@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -96,6 +97,36 @@ class ExecutionHandoffTests(unittest.TestCase):
             self.assertEqual(payload["route"], "DIRECT")
             self.assertFalse(payload["starts_harness"])
             self.assertEqual(before, after)
+
+
+    def test_cli_handoff_survives_narrow_windows_stdout_encoding(self):
+        with repository() as (root, _):
+            expected = "\ufeff# M\u1ee5c ti\u00eau\nGi\u1eef nguy\u00ean ti\u1ebfng Vi\u1ec7t trong packet.\n"
+            (root / "TASK.md").write_bytes(expected.encode("utf-8"))
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "cp1252"
+
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(AI),
+                    "--root",
+                    str(root),
+                    "handoff",
+                    "--input",
+                    "TASK.md",
+                ],
+                text=True,
+                encoding="cp1252",
+                errors="strict",
+                capture_output=True,
+                timeout=30,
+                env=env,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["inputs"][0]["content"], expected)
 
 
 if __name__ == "__main__":

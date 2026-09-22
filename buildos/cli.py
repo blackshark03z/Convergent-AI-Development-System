@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import sys
 from typing import Any
 
 from . import git_adapter
@@ -27,7 +28,13 @@ from .thin_guard import GuardInputError, check as check_boundary
 
 
 def _json(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2))
+    payload = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2)
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        payload.encode(encoding)
+    except (LookupError, UnicodeEncodeError):
+        payload = json.dumps(value, ensure_ascii=True, sort_keys=True, indent=2)
+    print(payload)
 
 
 def _scope_args(command: argparse.ArgumentParser) -> None:

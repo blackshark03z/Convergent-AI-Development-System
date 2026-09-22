@@ -78,6 +78,35 @@ semantic dependency.
 - ChatCode predictive retrieval also ranked unrelated legacy files for this
   already-bounded task. Treat explicit handoff inputs as authoritative execution
   context and heuristic retrieval only as supplemental discovery when scope is known.
-- Next: run one representative cross-project direct-handoff pilot before adding
-  any new CADS mechanism; measure first-pass acceptance, DESIGN_GAP frequency,
-  Owner interruption and execution overhead.
+
+- Cross-project Pilot 2 used clean AutoSub HEAD `e843b5dde1383248ef8d306a84a4402cd7fc627e`
+  for A5 Voice Preview Integrity. The explicit DIRECT packet contained five
+  repo-local inputs; `_cads_pilot_a5.md` was bound to SHA-256
+  `265c20c37d1ba4460bf6faddd3c84af79b7e77a295cdd8a9e42f05e105c07e9b`.
+- The first real cross-project handoff exposed a Windows portability defect:
+  JSON containing a BOM/Vietnamese text could raise `UnicodeEncodeError` when
+  stdout used cp1252. The CLI now preserves Unicode JSON when the stream supports
+  it and falls back to ASCII JSON escapes only when required by the output
+  encoding. The regression explicitly exercises `PYTHONIOENCODING=cp1252`.
+- Portability-fix evidence: 12/12 focused handoff/routing tests PASS; full active
+  CADS suite 134/134 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
+- Retried AutoSub handoff PASS: `DIRECT`, five inputs,
+  `authority_granted=false`, `persists_state=false`,
+  `starts_harness=false`. ChatCode ranked the explicit packet first, although
+  supplemental predictive retrieval again included an unrelated Gemini test.
+- AutoSub already implemented A5 stale-preview invalidation. The pilot therefore
+  produced a test-only candidate using the project's existing Python
+  source-contract pattern rather than rewriting working UI logic or adding a JS
+  test framework. Focused UI contract: 7/7 PASS on first candidate. A held-out
+  negative probe temporarily removed voice-change invalidation; the new oracle
+  failed as expected and the product source was restored exactly.
+- Pilot 2 metrics: first-pass candidate acceptance PASS; DESIGN_GAP count 0;
+  Owner interruptions 0; CADS portability repair rounds 1; product-logic repair
+  rounds 0. ChatCode semantic-write quota was again unavailable
+  (1041316 / 600000), while the native DIRECT path remained usable.
+- Conclusion from Pilots 1-2: keep explicit handoff inputs authoritative,
+  heuristic retrieval supplemental, and harness quota/model/session mechanics
+  outside CADS Core. Do not add a new CADS runtime/retrieval layer from this
+  evidence.
+- Next: close Pilot 2 cleanly, then benchmark the same direct-handoff contract on
+  a design-heavier cross-project Goal before considering any further CADS mechanism.
