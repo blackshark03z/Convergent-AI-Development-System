@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "suite_id": "cads-model-routing-pilot-v1",
+  "run_id": "2026-09-23-mr004-gpt6-luna-high",
+  "case_id": "MR-004",
+  "status": "ACCEPTED",
+  "evidence_role": "experimental input to DR-0014 Existential Challenge; not a canonical routing decision",
+  "base_revision": "75c0ec51c0470c659f3b8f88c7ca24d7a1a13bf8",
+  "reference_revision": "39112679b5f447ba0dcbb1e8b37971a5d98ac654",
+  "candidate": {
+    "model": "gpt-6-luna",
+    "reasoning_effort": "high",
+    "harness": "Codex CLI",
+    "harness_version": "0.155.0-alpha.9.2",
+    "execution": "DIRECT",
+    "environment": "isolated disposable Git worktree",
+    "candidate_patch_sha256": "fcbe15a24b246eb423f40aafd0558e2ff227cff39be54c26b48b9947f3da8da3",
+    "changed_files": [
+      "buildos/cli.py",
+      "tests/test_execution_handoff.py"
+    ],
+    "diff_summary": "2 files changed, 32 insertions(+), 1 deletion(-)"
+  },
+  "metrics": {
+    "wall_clock_seconds": 244.5666755,
+    "reported_total_tokens": 93809,
+    "input_tokens": null,
+    "output_tokens": null,
+    "cached_input_tokens": null,
+    "cost_usd": null,
+    "owner_active_attention_minutes_during_model_run": 0,
+    "owner_intervention_count_during_model_run": 0,
+    "owner_reexplanation_count": 0,
+    "repair_iterations": 0,
+    "scope_escape": false
+  },
+  "acceptance": {
+    "model_focused_tests": "12 passed",
+    "held_out_reference_oracle": "5/5 PASS",
+    "full_active_suite_on_named_benchmark_branch": "134/134 PASS; SIMPLIFIED_ACTIVE_SUITE=PASS",
+    "first_external_acceptance": "PASS",
+    "final_acceptance": "PASS",
+    "false_done_or_escaped_defect": false
+  },
+  "implementation_observation": {
+    "runtime_change": "Changed JSON output to ASCII-escaped JSON under legacy stdout encodings while preserving decoded content semantics.",
+    "model_added_regression": "Added a cp1252 strict stdout regression using BOM, Vietnamese text and emoji-like non-ASCII content.",
+    "exact_reference_patch_match_required": false
+  },
+  "harness_noise_excluded_from_model_score": [
+    "An earlier ChatCode-wrapped launcher was interrupted by the ChatCode watchdog before any candidate mutation; it was not counted as a model attempt.",
+    "The model's first full self-test was run on detached HEAD and hit an unrelated branch-name assumption; the same candidate passed the full suite after evaluation switched to a named disposable benchmark branch.",
+    "Two evaluator setup attempts failed before candidate evaluation because PYTHONPATH/working-directory handling prevented importing buildos; these were evaluator errors, not candidate failures."
+  ],
+  "promotion": {
+    "routing_policy_changed": false,
+    "reason": "One focused historical case is insufficient to promote a default model profile. Continue representative model and counterfactual runs under DR-0014."
+  }
+}
