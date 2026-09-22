@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "suite_id": "cads-model-routing-pilot-v1",
+  "status": "experimental",
+  "purpose": "Replay real historical CADS changes at pinned base revisions to compare model capability/economics without changing CADS semantics or adding a model runtime.",
+  "benchmark_protocol": "docs/CADS_MODEL_ROUTING_BENCHMARK_2026-09.md",
+  "autonomy_suite": "evals/autonomy/cases.json",
+  "candidate_profiles": [
+    {
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "role": "historical_control_when_available"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "high",
+      "role": "candidate"
+    },
+    {
+      "model": "gpt-6-luna",
+      "reasoning_effort": "max",
+      "role": "candidate"
+    },
+    {
+      "model": "gpt-6-sol",
+      "reasoning_effort": "high",
+      "role": "candidate"
+    }
+  ],
+  "execution_rule": {
+    "phase_a_harness": "DIRECT",
+    "same_goal_and_authority_across_profiles": true,
+    "reference_implementation_visible_to_candidate": false,
+    "reference_commit_use": "held_out_oracle_and_historical_intent_only",
+    "exact_patch_match_required": false,
+    "active_suite_command": "python scripts/self_test.py"
+  },
+  "metrics": [
+    "first_pass_acceptance",
+    "final_acceptance",
+    "false_done_or_escaped_defect",
+    "repair_iterations",
+    "owner_active_attention_minutes",
+    "owner_intervention_count",
+    "wall_clock_seconds",
+    "input_tokens",
+    "output_tokens",
+    "cached_input_tokens",
+    "cost_usd",
+    "candidate_identity",
+    "acceptance_evidence_refs",
+    "scope_escape"
+  ],
+  "cases": [
+    {
+      "id": "MR-001",
+      "title": "Compile material design before execution",
+      "task_class": "design_heavy_architecture",
+      "base_revision": "3d68b75b3d2af03be0bcc8dc43280a7daa6c9ea3",
+      "reference_revision": "e4a62632872ac5610667d013dae3d1d41a6599e4",
+      "goal": "Make CADS compile material product/design ambiguity into a worker-ready Design Baseline before execution when ambiguity is load-bearing, while preserving the cheap fast path for clear reversible work. Keep OpenSpec/Spec Kit or equivalent spec mechanisms replaceable substrates rather than CADS semantic dependencies. Add objective regression coverage and preserve the existing control model.",
+      "held_out_oracle_paths": [
+        "tests/test_design_compilation_boundary.py"
+      ],
+      "normal_acceptance": [
+        "python scripts/self_test.py"
+      ],
+      "related_autonomy_cases": [
+        "AE-022",
+        "AE-025",
+        "AE-028",
+        "AE-032"
+      ]
+    },
+    {
+      "id": "MR-002",
+      "title": "Direct execution by default, governed only by required runtime properties",
+      "task_class": "execution_policy",
+      "base_revision": "e4a62632872ac5610667d013dae3d1d41a6599e4",
+      "reference_revision": "9376c777076e3714ecb77d670fe02f7741b20a2c",
+      "goal": "Make direct execution the default CADS route. Use governed execution only when the Goal actually requires runtime isolation, recovery, fencing or equivalent properties. Preserve the five CADS controls and Product Acceptance semantics. Do not add a CADS-owned runtime, model router or lifecycle.",
+      "held_out_oracle_paths": [
+        "tests/test_execution_route.py"
+      ],
+      "normal_acceptance": [
+        "python scripts/self_test.py"
+      ],
+      "related_autonomy_cases": [
+        "AE-025",
+        "AE-027",
+        "AE-031",
+        "AE-035"
+      ]
+    },
+    {
+      "id": "MR-003",
+      "title": "Harness-neutral read-only execution handoff",
+      "task_class": "cross_harness_integration",
+      "base_revision": "9376c777076e3714ecb77d670fe02f7741b20a2c",
+      "reference_revision": "c67cd2f340929e78821fd9bec078dd6f42a97aa5",
+      "goal": "Make CADS direct execution operational through one harness-neutral, read-only handoff seam. The handoff must bind explicit repository-local UTF-8 inputs by path, SHA-256 and exact content, reuse the existing DIRECT/GOVERNED classifier, grant no authority, persist no lifecycle state and start no harness/model/agent/provider/session process. Keep CADS independent of any specific coding harness.",
+      "held_out_oracle_paths": [
+        "tests/test_execution_handoff.py"
+      ],
+      "normal_acceptance": [
+        "python scripts/self_test.py"
+      ],
+      "related_autonomy_cases": [
+        "AE-028",
+        "AE-030",
+        "AE-031",
+        "AE-035"
+      ]
+    },
+    {
+      "id": "MR-004",
+      "title": "Windows Unicode handoff portability defect",
+      "task_class": "focused_bugfix",
+      "base_revision": "75c0ec51c0470c659f3b8f88c7ca24d7a1a13bf8",
+      "reference_revision": "39112679b5f447ba0dcbb1e8b37971a5d98ac654",
+      "goal": "Fix execution-handoff JSON output on Windows when stdout uses a legacy encoding such as cp1252. Unicode, BOM and Vietnamese text must not crash the command; output must remain valid JSON and preserve handoff semantics. Add regression evidence without weakening existing behavior.",
+      "held_out_oracle_paths": [
+        "tests/test_execution_handoff.py"
+      ],
+      "normal_acceptance": [
+        "python scripts/self_test.py"
+      ],
+      "related_autonomy_cases": [
+        "AE-025",
+        "AE-033"
+      ]
+    }
+  ],
+  "phase_b": {
+    "purpose": "Measure harness overhead/value only after Phase A has credible model profiles.",
+    "hold_model_constant": true,
+    "compare": [
+      "DIRECT",
+      "GOVERNED_MAR_when_runtime_properties_require_it"
+    ],
+    "required_metrics": [
+      "wall_clock_seconds",
+      "block_cancel_retry_rate",
+      "owner_attention",
+      "recovery_quality",
+      "defects_prevented_or_recovered"
+    ]
+  },
+  "promotion_note": "Four CADS replay cases are a pilot only. Do not canonicalize a global routing policy until representative cross-project cases are added."
+}
