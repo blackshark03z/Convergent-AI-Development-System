@@ -17,6 +17,7 @@ from .external_effect import (
     list_effects,
     reconcile_effect,
 )
+from .execution_handoff import ExecutionHandoffError, compile_handoff
 from .execution_route import ExecutionRouteError, PROPERTY_ORDER, classify as classify_execution_route
 from .guarded_local import execute_high_cost
 from .legacy_effects import inspect_legacy_effects
@@ -62,6 +63,29 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
         help="derive DIRECT/GOVERNED from explicit execution-substrate requirements",
     )
     route.add_argument(
+        "--require",
+        dest="required_properties",
+        action="append",
+        default=[],
+        choices=PROPERTY_ORDER,
+        metavar="PROPERTY",
+        help="runtime property required by the accepted Goal/design; repeat as needed",
+    )
+
+    handoff = commands.add_parser(
+        "handoff",
+        help="compile explicit repo-local worker inputs without starting a harness",
+    )
+    handoff.add_argument(
+        "--input",
+        dest="handoff_inputs",
+        action="append",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="repo-local UTF-8 text input for the external coding harness; repeat as needed",
+    )
+    handoff.add_argument(
         "--require",
         dest="required_properties",
         action="append",
@@ -153,6 +177,13 @@ def execute(args: argparse.Namespace) -> int:
         if args.command == "route":
             _json(classify_execution_route(args.required_properties))
             return 0
+        if args.command == "handoff":
+            _json(compile_handoff(
+                args.root.resolve(),
+                args.handoff_inputs,
+                args.required_properties,
+            ))
+            return 0
         if args.command == "inspect":
             _json(_inspect(args.root.resolve()))
             return 0
@@ -219,6 +250,7 @@ def execute(args: argparse.Namespace) -> int:
         EvidenceEnvelopeError,
         EffectSafetyError,
         EffectStoreError,
+        ExecutionHandoffError,
         ExecutionRouteError,
         OSError,
         RuntimeError,
