@@ -34,7 +34,7 @@ consumes that packet natively -> Product Acceptance remains independent.
 
 # Non-goals
 
-No model/provider router, context engine, WebTurn equivalent, agent runtime,
+No sixth CADS control. No model/provider router, context engine, WebTurn equivalent, agent runtime,
 session manager, subagent framework, harness plugin framework, task lifecycle,
 routing database, automatic prompt planner, or CADS-owned worker launcher. Do not
 make ChatCode, Codex, Claude Code, OMP, MAR, OpenSpec or Spec Kit a permanent
