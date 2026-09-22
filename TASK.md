@@ -63,9 +63,21 @@ semantic dependency.
 # Progress / Discoveries / Next
 
 - Start HEAD: `9376c777076e3714ecb77d670fe02f7741b20a2c`.
-- DR-0012 already requires a bounded execution package and replaceable spec
-  substrate; DR-0013 already makes direct execution the default.
-- Added `buildos/execution_handoff.py` and focused tests.
-- Added the `handoff` CLI surface without starting or selecting a harness.
-- Next: document the seam, run focused/full verification on an isolated checkout,
-  then open/merge only after evidence is green.
+- PR #10 was squash-merged as `c67cd2f340929e78821fd9bec078dd6f42a97aa5`.
+  Remote and local `master` have the same verified tree
+  `6bd6407601362281e096cbea0b775bf8ee710006`.
+- Final pre-merge evidence: 13/13 targeted handoff/routing/contract tests PASS and
+  the full active suite 133/133 PASS with `SIMPLIFIED_ACTIVE_SUITE=PASS`.
+- Pilot 1 exercised the merged seam with a DIRECT handoff for this `TASK.md`,
+  bound to SHA-256
+  `be214c149f3ff20f07eeb042ce2d3b1d14cc431480cfe8ed93146486ec63eccf`.
+  ChatCode accepted the packet as execution context. Its semantic mutation API
+  was blocked by the daily AI-write quota (923410 / 600000), so no mutation was
+  attributed to that failed attempt; the equivalent native direct path performed
+  the bounded SoT update without MAR or a CADS-owned runtime.
+- ChatCode predictive retrieval also ranked unrelated legacy files for this
+  already-bounded task. Treat explicit handoff inputs as authoritative execution
+  context and heuristic retrieval only as supplemental discovery when scope is known.
+- Next: run one representative cross-project direct-handoff pilot before adding
+  any new CADS mechanism; measure first-pass acceptance, DESIGN_GAP frequency,
+  Owner interruption and execution overhead.
