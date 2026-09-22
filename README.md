@@ -95,6 +95,19 @@ skills from stack detection and does not grant external skills authority.
 
 ## Public surface
 
+Derive the lightest execution route from explicit runtime-property requirements:
+
+```powershell
+python scripts/ai.py route
+python scripts/ai.py route --require isolated-mutation --require durable-recovery
+```
+
+No requirements returns `DIRECT`. Any declared governed property returns
+`GOVERNED`. This is a read-only derived routing aid: it grants no authority,
+persists no task state, and does not mandate MAR. Select any execution substrate
+that demonstrably supplies the declared properties. Consequence and Product
+Acceptance rules remain unchanged on the direct path.
+
 Read current Git and external-effect truth without writes:
 
 ```powershell

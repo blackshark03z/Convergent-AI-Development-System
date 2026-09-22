@@ -16,6 +16,8 @@ Use one small control model; these are reasoning controls, not persisted phases:
 5. **Consequence** -> existing CADS Thin Guard only for applicable destructive,
    external, privileged/security-sensitive, or explicitly high-cost effects.
 
+Execution defaults direct; use governed execution only when the Goal requires runtime isolation, recovery, fencing, or equivalent properties.
+
 Conditional product/UI methods:
 
 - changed journey/navigation/discoverability -> `skills/product/user-facing-workflow.md`;

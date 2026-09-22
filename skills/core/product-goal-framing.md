@@ -125,6 +125,22 @@ If the request is already precise and correction is cheap/local, skip this
 artifact entirely. Optimize total time/cost to accepted product, not planning
 tokens in isolation.
 
+### Execution substrate requirements
+
+After material design is clear, name only the runtime properties that execution
+must actually supply. With no such property, prefer the normal direct coding
+harness path. Escalate to a governed substrate only when the Goal requires
+isolated mutation, durable recovery, concurrent-writer fencing, durable execution
+authority across client/session loss, enforced resource governance, or crash-safe
+canonical integration. These are capability requirements, not lifecycle phases
+or a mandate for MAR.
+
+`python scripts/ai.py route --require <property>` is an optional read-only helper
+that derives `DIRECT`/`GOVERNED` from those explicit properties. It does not infer
+risk, grant authority, select a vendor or prove that the chosen substrate satisfies
+the requirement. Consequential external effects still use the existing Consequence
+boundary regardless of route.
+
 ## Frame the Goal
 
 1. State one bounded Owner outcome in user-observable terms.

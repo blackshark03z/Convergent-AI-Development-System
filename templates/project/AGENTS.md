@@ -27,6 +27,8 @@ Use five reasoning controls, not a persisted lifecycle:
 5. **Consequence** — use the existing Thin Guard only for applicable destructive,
    external, privileged/security-sensitive, or explicitly high-cost effects.
 
+Execution defaults to the direct coding harness. Use a governed substrate only when the Goal explicitly requires runtime properties such as isolation, recovery, fencing, durable authority, resource governance or crash-safe integration.
+
 When full CADS skills are available, route Intent / Design to Product / Design Framing
 (`skills/core/product-goal-framing.md`) and use `skills/core/architecture-description.md`
 conditionally for material durable system shape/technology/runtime/state/deployment

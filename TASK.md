@@ -1,57 +1,73 @@
 # Goal
 
-Evolve CADS so current and future AI capability improvements can translate into more verified autonomy without turning today's compensating mechanisms into permanent constraints.
+Make CADS vNext operationally prefer the ChatCode-like direct coding path while
+keeping durable governance conditional on concrete execution properties.
 
 Preserve the canonical five-control model:
 
 `Reality -> Intent / Design -> Change -> Acceptance -> Consequence`
 
-The target layering is:
-
-`durable semantic invariants -> adaptive assurance -> removable capability scaffolding`
-
-Owner burden should shrink as demonstrated AI/tool capability and evidence quality improve. Autonomy may contract again when capability or evidence regresses; it is a reversible evidence-calibrated envelope, not a one-way ratchet.
-
 # Critical User Journey
 
-Tech Lead/Worker receives a Goal -> reconstructs current reality and durable semantic obligations -> selects the lightest assurance justified by risk and available evidence -> uses or removes capability scaffolding according to its current trigger -> executes through any compatible harness/protocol/topology -> verifies the same intent/authority/acceptance/consequence semantics -> asks the Owner only for genuinely subjective product judgement or consequential authority.
+Tech Lead receives a Goal -> reconstructs current reality -> compiles a
+goal-specific Design Baseline only when material ambiguity justifies it -> names
+only execution properties the Goal actually requires -> routes ordinary work
+directly to a compatible coding harness -> obtains a candidate -> independently
+attacks the candidate against the predefined acceptance -> uses a governed runtime
+such as MAR only when required properties justify it.
 
 # Acceptance
 
-- `evals/autonomy/cases.json` contains AE-027..AE-035, bringing the representative suite to exactly 35 cases.
-- The nine cases cover capability obstruction, harness semantic lock-in, Owner-burden stagnation, protocol lock-in, execution-topology lock-in, stale capability scaffolding, autonomy contraction/re-expansion after capability regression, correlated generator/verifier blind spots, and runtime/CADS semantic-contract mismatch.
-- `scripts/validate_autonomy_evals.py` admits up to 35 cases and requires all new failure classes while retaining existing fail-closed schema, risk, oracle and human-attention checks.
-- Existing autonomy regression tests are updated to the 35-case contract and continue to reject forbidden runtime/model trust state.
-- `ARCHITECTURE.md` states the durable-semantic-invariants / adaptive-assurance / removable-capability-scaffolding model and the reversible evidence-calibrated autonomy envelope.
-- Existing `docs/CADS_AUTONOMY_EVAL_SUITE.md` reflects the 35-case suite without creating a new artifact family.
+- A read-only `python scripts/ai.py route` command returns `DIRECT` when no
+  governed runtime property is declared.
+- Declaring any supported runtime property returns `GOVERNED`; properties are
+  deterministic, deduplicated and no route call persists lifecycle state or grants
+  authority.
+- The supported property set covers isolated mutation, durable recovery,
+  concurrent-writer fencing, durable execution authority, resource governance and
+  crash-safe integration.
+- Architecture/Decision truth states that MAR is an optional governed substrate,
+  not the default CADS coding path.
+- The Design Baseline template carries optional execution-substrate requirements
+  without naming one mandatory harness.
+- Product Acceptance explicitly attacks the candidate independently of the
+  Worker's completion narrative and does not require a second model universally.
+- Focused routing/contract tests pass, then the full active CADS self-test passes.
 - `docs/CONVERGENT_AI_DEVELOPMENT_STANDARD.md` remains unchanged.
-- Focused autonomy validation passes and MAR `python-portable` verification passes.
 
 # Non-goals
 
-No sixth CADS control is introduced. Do not create a new CADS control, lifecycle, workflow state, task database, model router, context governor, policy engine, protocol, execution topology or persistent autonomy controller. Do not add a new skill or artifact family. Do not implement a new agent runtime, benchmark runner, embeddings/vector DB, multi-agent orchestrator or remote cache. Do not change the frozen canonical Standard.
+No sixth CADS control. Do not add a task lifecycle, routing database, policy engine,
+numeric risk score, model/provider router, agent runtime, session manager,
+subagent framework, automatic danger classifier or mandatory MAR path. Do not
+make OpenSpec, Spec Kit, ChatCode, Codex, Claude Code, OMP or MAR a permanent CADS
+semantic dependency.
 
 # Constraints
 
-Capability is demonstrated by task-relevant evidence, not model branding, vendor tier or a permanently trusted harness. Semantic invariants outlive current implementation mechanisms. Assurance may strengthen or weaken with evidence; scaffolding must have a material trigger and remain removable. Product judgement and consequential authority remain Owner boundaries even as routine engineering attention shrinks.
+- Preserve the five-control CADS model and existing repository-context contract.
+- Keep routing derived/read-only: it may not grant authority or persist execution state.
+- Keep the execution harness replaceable; route on required properties, not vendor identity.
+- Preserve the frozen Convergent AI Development Standard unchanged in this slice.
 
 # Material Decisions
 
-- Preserve semantics, not today's harness mechanics.
-- Treat capability scaffolding as conditional and removable, never as an automatic permanent layer.
-- Use a reversible evidence-calibrated autonomy envelope: expand when evidence supports it; contract when capability/evidence regresses; re-expand when evidence recovers.
-- Do not require independent reviewers or extra models universally; seek materially diverse evidence when correlation risk can invalidate the oracle.
-- Runtime/MAR may execute CADS semantics but must not redefine CADS intent, authority, acceptance or consequence boundaries.
-- Keep the canonical five-control model unchanged.
+- Design heavy, execution light, acceptance independent, governance conditional.
+- Direct execution is the default when no material runtime property requires a
+  governed substrate.
+- Governed routing is property-based and harness-neutral.
+- Consequential effects still use the CADS Consequence boundary regardless of
+  execution route.
+- Independence belongs to the oracle/evidence, not automatically to reviewer
+  count or model count.
+- MAR may implement governed execution properties but may not redefine CADS
+  intent/design/acceptance semantics.
 
 # Progress / Discoveries / Next
 
-- Start HEAD: `a30b1311a9caf642a72c4de8ae42c5382cf72152`.
-- MAR runtime `local-6b28ea160b9e` recognizes CADS as mixed `artifact + python` and recommends `python-portable`.
-- This slice uses corrected `python-portable`: changed `tests/**/test_*.py` from candidate diff plus compileall, with evidence bound to the effective verification plan.
-- Planned delta is limited to the existing autonomy dataset, validator/test coverage, architecture clarification, eval-suite documentation and this TASK.md.
-- Verification target: focused autonomy validator/tests plus authoritative MAR `python-portable`; canonical Standard remains unchanged.
-- AE-027..AE-035 are now integrated in canonical local CADS reality at `1a6c4caedda329c9700fcda27e410a0f750bb487`; do not resubmit them because a later chat lacks direct MAR tool exposure.
-- DR-0009 records the transport-independent execution-authority rule. A 2026-09-19 ChatCode -> thin adapter -> MAR MCP probe returned the same canonical CADS project context through MAR's six canonical tools; the adapter is transport only, not a new authority.
-
-Next: publish the canonical local master chain to `origin/master`, confirm remote convergence, then close this Goal. Continue using the expanded autonomy suite to challenge future CADS/MAR changes without freezing current AI limitations into architecture.
+- Start HEAD: `e4a62632872ac5610667d013dae3d1d41a6599e4`.
+- DR-0011/DR-0012 already provide adaptive control and replaceable Design
+  Compilation; this slice operationalizes the missing execution-routing and
+  acceptance-independence boundary.
+- Next: implement route helper + docs/contracts, run focused/full verification,
+  integrate, then align MAR's own roadmap/README with its optional-kernel role.

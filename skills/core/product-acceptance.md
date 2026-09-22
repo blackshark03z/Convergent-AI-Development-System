@@ -59,6 +59,22 @@ necessary evidence about product outcome but does not by itself establish
 9. If Goal-created workspaces/residue now need closure, hand off to
    `workspace-hygiene.md`; cleanup is not itself proof of product acceptance.
 
+### Independent acceptance attack
+
+Acceptance is independent of the Worker's completion claim. Re-read the accepted
+Goal/Design Baseline and evaluate the identified candidate from those obligations;
+do not use the worker's completion narrative as an oracle. For a material Goal,
+include at least one cheap held-out, negative, composition, state-transition or
+supported-journey check when it can expose a plausible blind spot that focused
+implementation tests may miss.
+
+Independence is primarily an oracle/evidence property, not a universal requirement
+for another model. When generator/verifier correlation could materially invalidate
+the oracle, use proportionately diverse evidence such as a fresh evaluator context,
+a different tool/model, deterministic hidden check, runtime observation or human
+judgement where the criterion is genuinely subjective. Do not add reviewer ceremony
+when the existing objective oracle is already independent and decisive.
+
 Treat evidence criterion-by-criterion. A command, test, or observation proves an
 acceptance criterion only when it is a relevant oracle for that criterion and is
 tied to the identified candidate and applicable conditions. Missing matching

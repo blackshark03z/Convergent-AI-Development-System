@@ -37,6 +37,15 @@ boundaries that constrain this Goal. -->
 <!-- Only load-bearing existing/new boundaries and invariants. Do not prescribe classes,
 functions or file layout unless that detail is itself a material constraint. -->
 
+# Execution Substrate Requirements
+
+<!-- Optional. Declare only runtime properties this Goal actually requires. With none,
+use the normal DIRECT harness path. Current governed-property vocabulary:
+`isolated-mutation`, `durable-recovery`, `concurrent-writer-fencing`,
+`durable-execution-authority`, `resource-governance`, `crash-safe-integration`.
+A governed substrate must demonstrably provide every declared property; do not name MAR
+or another harness unless the implementation choice itself is materially load-bearing. -->
+
 # Acceptance / Oracle Map
 
 <!-- Map each material obligation to an observable oracle/evidence surface. Independent

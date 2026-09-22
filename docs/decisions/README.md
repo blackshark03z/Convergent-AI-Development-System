@@ -7,6 +7,7 @@ tests or runtime evidence.
 
 ## Active
 
+- [DR-0013 — Default to direct execution and add governance only for required runtime properties](0013-direct-execution-and-conditional-governance.md)
 - [DR-0012 — Compile material design before execution using a replaceable spec substrate](0012-design-compilation-and-replaceable-spec-substrate.md)
 - [DR-0011 — Adopt adaptive control boundaries for progressive AI delivery](0011-adaptive-control-boundaries.md)
 - [DR-0010 — Local research path attachment boundary](0010-local-research-path-attachment.md)

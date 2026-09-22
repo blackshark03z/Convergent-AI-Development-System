@@ -17,6 +17,7 @@ from .external_effect import (
     list_effects,
     reconcile_effect,
 )
+from .execution_route import ExecutionRouteError, PROPERTY_ORDER, classify as classify_execution_route
 from .guarded_local import execute_high_cost
 from .legacy_effects import inspect_legacy_effects
 from .legacy_reconciliation import carry_legacy_ambiguity
@@ -55,6 +56,20 @@ def parser(*, admin: bool = False) -> argparse.ArgumentParser:
     )
     result.add_argument("--root", type=Path, default=Path.cwd(), help="exact repository root")
     commands = result.add_subparsers(dest="command", required=True)
+
+    route = commands.add_parser(
+        "route",
+        help="derive DIRECT/GOVERNED from explicit execution-substrate requirements",
+    )
+    route.add_argument(
+        "--require",
+        dest="required_properties",
+        action="append",
+        default=[],
+        choices=PROPERTY_ORDER,
+        metavar="PROPERTY",
+        help="runtime property required by the accepted Goal/design; repeat as needed",
+    )
 
     commands.add_parser("inspect", help="read current Git/effect truth without writes")
 
@@ -135,6 +150,9 @@ def _inspect(root: Path) -> dict:
 
 def execute(args: argparse.Namespace) -> int:
     try:
+        if args.command == "route":
+            _json(classify_execution_route(args.required_properties))
+            return 0
         if args.command == "inspect":
             _json(_inspect(args.root.resolve()))
             return 0
@@ -201,6 +219,7 @@ def execute(args: argparse.Namespace) -> int:
         EvidenceEnvelopeError,
         EffectSafetyError,
         EffectStoreError,
+        ExecutionRouteError,
         OSError,
         RuntimeError,
         subprocess.SubprocessError,
