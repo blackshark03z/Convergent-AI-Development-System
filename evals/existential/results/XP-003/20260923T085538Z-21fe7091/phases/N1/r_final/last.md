@@ -1,0 +1,1 @@
+NOT_READY — The post-save status checks for `READY_TO_PREPARE`, but the production task uses `PREPARE_RANGE`, so it never shows PREPARE as the next action after approval. It also gives only generic production-status guidance when voice-map creation is required. The connected journey remains unverified.

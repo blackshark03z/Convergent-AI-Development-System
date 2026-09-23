@@ -1,0 +1,1 @@
+NOT_READY — The repair test invents voice-map tasks and stubs creation and approval, so it does not verify that the new button reaches the real actionable flow. The candidate also says voice configuration needs saving when it is already saved but another voice blocker remains, directing the Owner to the wrong action.

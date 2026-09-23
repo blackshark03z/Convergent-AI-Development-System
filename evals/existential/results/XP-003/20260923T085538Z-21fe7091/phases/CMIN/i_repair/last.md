@@ -1,0 +1,7 @@
+**The repair verified the candidate’s final voice-map path; I found no UI defect requiring a code change.** The existing button opens the production workbench, whose actions advance from map creation to review and then preparation.
+
+I updated [browser_assignment_flow_smoke.mjs](/D:/CADS-Benchmark/XP-003-AUTO-V2/arms/CMIN/scripts/browser_assignment_flow_smoke.mjs:325) and [test_assignment_workflow_browser.py](/D:/CADS-Benchmark/XP-003-AUTO-V2/arms/CMIN/tests/test_assignment_workflow_browser.py:237) to exercise and assert that journey. The fixture presents saved voice settings with final map creation still required; the browser check confirms the actionable button and the create → review → prepare transitions. No render command was issued. The voice-map mutation responses are simulated in the test, not sent to a backend.
+
+Checks passed: `python -m unittest tests.test_assignment_workflow_browser` (1 test), `node --check scripts/browser_assignment_flow_smoke.mjs`, and `git diff --check`.
+
+The existing candidate change in `ui/app.js` remains present and unmodified by this repair. This verifies the UI route and action dispatch with fixture state; it does not verify backend map creation or approval. No external or production services were called. This is a candidate for R review, not Product Acceptance.

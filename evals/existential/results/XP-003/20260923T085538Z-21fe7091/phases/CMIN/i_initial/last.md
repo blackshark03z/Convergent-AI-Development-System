@@ -1,0 +1,5 @@
+Implemented the missing next step in [ui/app.js](/D:/CADS-Benchmark/XP-003-AUTO-V2/arms/CMIN/ui/app.js:1619). When speaker review is complete, voice changes are saved, and a final voice map still needs creation, the voice section now offers **“Tạo bản đồ giọng cuối cùng”** and explains that it opens the production task. It does not start rendering.
+
+Checks run: `node --check ui/app.js`, `git diff --check`, and `python -m unittest tests.test_assignment_completed_review_browser tests.test_assignment_workflow_browser tests.test_casting_voice_map_ui` — all passed; 9 tests ran.
+
+The browser checks observed completed speaker review advancing to voice configuration, refreshed save status, and no render commands during the verified journey. They do not specifically exercise the newly added map creation button. No external or production services were called. This is a candidate for review, not Product Acceptance.

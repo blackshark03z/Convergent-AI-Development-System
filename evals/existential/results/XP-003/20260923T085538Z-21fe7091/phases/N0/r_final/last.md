@@ -1,0 +1,1 @@
+NOT_READY — A readback mismatch sets `batchReadbackFailed`, but reloading the registry never clears it. Because the save also clears the drafts, the Owner can be left with a blocked readiness step and no voice changes to save, even after a reload confirms the voices.

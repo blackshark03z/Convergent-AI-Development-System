@@ -1,0 +1,2 @@
+2026-09-23T09:32:21.654961Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\CADS-Benchmark\XP-003-AUTO-V2\arms\CMIN\tests\test_assignment_workflow_browser.py:
+        self.assertIn("Tiáº¿p tá»¥c", evidence["voiceSaveState"]["voiceNextAction"])
