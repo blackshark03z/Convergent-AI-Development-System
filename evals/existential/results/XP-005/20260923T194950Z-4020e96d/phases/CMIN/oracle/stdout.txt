@@ -1,0 +1,1 @@
+{"status": "FAIL", "reason": "OracleFailure: verification_readback: OracleFailure: step-one SMS wording was mistaken for accepted submission; transport_boundary: OracleFailure: pre-click transport loss did not stop for reconciliation; durable_ownership_and_reconciliation: OracleFailure: positive readback did not reconcile original submission without redispatch"}

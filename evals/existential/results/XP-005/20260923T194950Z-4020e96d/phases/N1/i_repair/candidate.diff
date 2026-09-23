@@ -1,0 +1,122 @@
+diff --git a/multiple_automation/publishing.py b/multiple_automation/publishing.py
+index 11c520b..1b9548b 100644
+--- a/multiple_automation/publishing.py
++++ b/multiple_automation/publishing.py
+@@ -171,6 +171,7 @@ class PrivatePublishService:
+         *,
+         expected_remote_channel_id: str | None = None,
+         expected_package_digest: str | None = None,
++        request_id: str | None = None,
+     ) -> PublishResult:
+         workspace = self.store.get_workspace(workspace_id)
+         local_channel_id = workspace.get("youtube_channel_id")
+@@ -199,6 +200,19 @@ class PrivatePublishService:
+             raise InvalidTransitionError("sealed ContentPackage operation is not PUBLISH_PRIVATE")
+ 
+         target = f"youtube-channel:{remote_channel_id}:package:{package.package_digest}"
++        self.store.bind_publish_request(
++            request_id or operation.operation_id,
++            workspace_id,
++            operation.operation_id,
++            {
++                "workspace_id": workspace_id,
++                "operation_id": operation.operation_id,
++                "remote_channel_id": remote_channel_id,
++                "content_package_id": package.content_package_id,
++                "package_digest": package.package_digest,
++                "target_identity": target,
++            },
++        )
+         effect = next(
+             (
+                 item
+@@ -296,7 +310,16 @@ class PrivatePublishService:
+             )
+ 
+         # Persist dispatch-uncertain lineage before crossing the external boundary.
+-        self.store.mark_effect_dispatched(effect.effect_id)
++        try:
++            self.store.mark_effect_dispatched(effect.effect_id)
++        except InvalidTransitionError:
++            return PublishResult(
++                "RECONCILE_REQUIRED",
++                operation.operation_id,
++                workspace_id,
++                effect.remote_id,
++                "another delivery owns or has dispatched this upload; reconcile before retry",
++            )
+         try:
+             self.adapter.dispatch_private_upload(remote_channel_id, package)
+         except Exception:
+diff --git a/multiple_automation/store.py b/multiple_automation/store.py
+index e0df09f..ccd52ab 100644
+--- a/multiple_automation/store.py
++++ b/multiple_automation/store.py
+@@ -172,6 +172,14 @@ class SQLiteProductStore:
+                     operation_id TEXT NOT NULL UNIQUE REFERENCES operations(operation_id)
+                 );
+ 
++                CREATE TABLE IF NOT EXISTS publish_requests (
++                    request_id TEXT PRIMARY KEY,
++                    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
++                    operation_id TEXT NOT NULL REFERENCES operations(operation_id),
++                    intent_digest TEXT NOT NULL,
++                    created_at TEXT NOT NULL
++                );
++
+                 CREATE TABLE IF NOT EXISTS external_effects (
+                     effect_id TEXT PRIMARY KEY,
+                     operation_id TEXT NOT NULL REFERENCES operations(operation_id),
+@@ -805,6 +813,28 @@ class SQLiteProductStore:
+             )
+         return self.get_operation(operation_id)
+ 
++    def bind_publish_request(self, request_id: str, workspace_id: str, operation_id: str, intent: dict[str, Any]) -> OperationRecord:
++        request_id = str(request_id or "").strip()
++        if not request_id:
++            raise InvalidTransitionError("stable client request_id is required for publish")
++        digest = intent_digest(intent)
++        with self._transaction() as db:
++            operation = self._require_row(db, "operations", "operation_id", operation_id)
++            if operation["workspace_id"] != workspace_id:
++                raise InvalidTransitionError("publish request operation belongs to another Workspace")
++            existing = db.execute("SELECT * FROM publish_requests WHERE request_id=?", (request_id,)).fetchone()
++            if existing:
++                if existing["intent_digest"] != digest:
++                    raise InvalidTransitionError("request identity was reused for a different publish intent or target")
++                if existing["operation_id"] != operation_id:
++                    return self._operation_from_row(self._require_row(db, "operations", "operation_id", existing["operation_id"]))
++                return self._operation_from_row(operation)
++            owner = db.execute("SELECT request_id, intent_digest FROM publish_requests WHERE operation_id=?", (operation_id,)).fetchone()
++            if owner:
++                raise InvalidTransitionError("active publish operation is already owned by another client request")
++            db.execute("INSERT INTO publish_requests VALUES (?, ?, ?, ?, ?)", (request_id, workspace_id, operation_id, digest, _now()))
++        return self.get_operation(operation_id)
++
+     def prepare_effect(
+         self,
+         operation_id: str,
+@@ -824,6 +854,14 @@ class SQLiteProductStore:
+             ).fetchone()
+             if not active or operation["terminal_at"] is not None:
+                 raise InvalidTransitionError("external effect requires a nonterminal active owning Operation")
++            existing = db.execute(
++                "SELECT * FROM external_effects WHERE operation_id=? AND effect_type=? AND target_identity=?",
++                (operation_id, effect_type, target_identity),
++            ).fetchone()
++            if existing:
++                if existing["intent_digest"] != digest:
++                    raise InvalidTransitionError("effect target was reused with different material intent")
++                return self._effect_from_row(existing)
+             db.execute(
+                 """INSERT INTO external_effects(
+                     effect_id, operation_id, workspace_id, effect_type, target_identity,
+@@ -1115,6 +1153,8 @@ class SQLiteProductStore:
+         with self._transaction() as db:
+             operation = self._require_row(db, "operations", "operation_id", operation_id)
+             if operation["terminal_at"] is not None:
++                if operation["state"] == target:
++                    return self._operation_from_row(operation)
+                 raise InvalidTransitionError("terminal Operation is historical and cannot reactivate")
+             active = db.execute(
+                 "SELECT workspace_id FROM workspace_active_operations WHERE operation_id=?",

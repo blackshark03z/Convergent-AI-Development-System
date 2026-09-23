@@ -1,0 +1,48 @@
+diff --git a/multiple_automation/publishing.py b/multiple_automation/publishing.py
+index 11c520b..6bd3bd0 100644
+--- a/multiple_automation/publishing.py
++++ b/multiple_automation/publishing.py
+@@ -296,7 +296,21 @@ class PrivatePublishService:
+             )
+ 
+         # Persist dispatch-uncertain lineage before crossing the external boundary.
+-        self.store.mark_effect_dispatched(effect.effect_id)
++        # The effect was read before the adapter observation. Another request may
++        # have claimed it while that observation was in flight. The SQLite
++        # transition is the dispatch claim: only the caller that atomically moves
++        # PREPARING -> DISPATCHED may cross the provider boundary.
++        try:
++            self.store.mark_effect_dispatched(effect.effect_id)
++        except InvalidTransitionError:
++            current = self.store.get_effect(effect.effect_id)
++            return PublishResult(
++                "RECONCILE_REQUIRED",
++                operation.operation_id,
++                workspace_id,
++                current.remote_id,
++                "another request claimed this upload; reconcile the original effect",
++            )
+         try:
+             self.adapter.dispatch_private_upload(remote_channel_id, package)
+         except Exception:
+@@ -462,7 +476,19 @@ class PrivatePublishService:
+                 "re-observe exact video editor before thumbnail dispatch",
+             )
+ 
+-        self.store.mark_effect_dispatched(current.effect_id)
++        # Claim the thumbnail effect atomically for the same reason as upload:
++        # concurrent retries must not both act on a stale PREPARING snapshot.
++        try:
++            self.store.mark_effect_dispatched(current.effect_id)
++        except InvalidTransitionError:
++            latest = self.store.get_effect(current.effect_id)
++            return PublishResult(
++                "RECONCILE_REQUIRED",
++                operation_id,
++                workspace_id,
++                remote_video_id,
++                "another request claimed this thumbnail; reconcile the original effect",
++            )
+         try:
+             self.adapter.dispatch_thumbnail(
+                 remote_channel_id,

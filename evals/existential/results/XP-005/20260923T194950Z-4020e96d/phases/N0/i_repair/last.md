@@ -1,0 +1,9 @@
+Implemented the repair in [store.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/N0/multiple_automation/store.py), [control_center.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/N0/multiple_automation/control_center.py), [raw_cdp.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/N0/multiple_automation/adapters/raw_cdp.py), and [test_publishing.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/N0/tests/test_publishing.py).
+
+An operation can now have only one task binding, enforced in the database transaction, so competing submissions cannot claim it before effects exist. A retry by the original client and task after terminal success returns the recorded operation and upload ID. Provider reconciliation now matches a marker derived from the operation and written into the upload description; title alone cannot attribute a video. If the provider readback cannot confirm the marker, the effect remains unresolved rather than being credited to a same-title upload.
+
+Added local fixture coverage for concurrent competing binds, terminal lost-response retry, and rejecting title-only matches.
+
+Checks run: `python -m pytest tests/test_publishing.py -q` passed (18 tests); `python -m compileall -q multiple_automation tests` passed; `git diff --check` passed.
+
+Limitations: live provider visibility of the description marker was not tested. If the provider’s content row does not expose it, reconciliation stays unresolved. No live or production submission was made. The working tree also contains an existing `app.py` change from the supplied candidate; I did not alter it for this repair.

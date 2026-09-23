@@ -1,0 +1,6 @@
+{
+  "exit_code": 1,
+  "classification": "FAIL",
+  "reason": "status and exit match fail protocol",
+  "timed_out": false
+}

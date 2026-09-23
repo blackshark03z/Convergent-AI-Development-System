@@ -1,0 +1,187 @@
+diff --git a/multiple_automation/adapters/raw_cdp.py b/multiple_automation/adapters/raw_cdp.py
+index 2b12e7f..721b13e 100644
+--- a/multiple_automation/adapters/raw_cdp.py
++++ b/multiple_automation/adapters/raw_cdp.py
+@@ -520,7 +520,9 @@ class RawCDPPhoneUIAdapter:
+         result = self.runner.run("VERIFY_SUBMIT_PHONE", PHONE_NUMBER=phone_number, CHANNEL_ID=getattr(self, "remote_channel_id", ""))
+         return str(result.get("state") or "UNKNOWN")
+ 
+-    def reconcile_phone_submission(self) -> str:
++    def reconcile_phone_submission(self, effect_id: str, target_identity: str) -> str:
++        # The visible form state carries no submission identity. The orchestration
++        # layer treats this legacy state as unattributed and keeps the effect open.
+         result = self.runner.run("VERIFY_RECONCILE_PHONE", CHANNEL_ID=getattr(self, "remote_channel_id", ""))
+         return str(result.get("state") or "UNKNOWN")
+ 
+@@ -528,7 +530,8 @@ class RawCDPPhoneUIAdapter:
+         result = self.runner.run("VERIFY_SUBMIT_OTP", OTP_CODE=code, CHANNEL_ID=getattr(self, "remote_channel_id", ""))
+         return str(result.get("state") or "UNKNOWN")
+ 
+-    def reconcile_otp_submission(self) -> str:
++    def reconcile_otp_submission(self, effect_id: str, target_identity: str) -> str:
++        # A verified page state alone cannot prove which OTP submission caused it.
+         result = self.runner.run("VERIFY_RECONCILE_OTP", CHANNEL_ID=getattr(self, "remote_channel_id", ""))
+         return str(result.get("state") or "UNKNOWN")
+ 
+diff --git a/multiple_automation/eligibility_phone.py b/multiple_automation/eligibility_phone.py
+index d137d20..6897103 100644
+--- a/multiple_automation/eligibility_phone.py
++++ b/multiple_automation/eligibility_phone.py
+@@ -45,9 +45,9 @@ class PhoneProviderAdapter(Protocol):
+ class PhoneVerificationUIAdapter(Protocol):
+     def observe_eligibility(self, remote_channel_id: str) -> EligibilityObservation: ...
+     def submit_phone(self, phone_number: str) -> str: ...
+-    def reconcile_phone_submission(self) -> str: ...
++    def reconcile_phone_submission(self, effect_id: str, target_identity: str) -> Any: ...
+     def submit_otp(self, code: str) -> str: ...
+-    def reconcile_otp_submission(self) -> str: ...
++    def reconcile_otp_submission(self, effect_id: str, target_identity: str) -> Any: ...
+ 
+ 
+ @dataclass(frozen=True)
+@@ -352,9 +352,9 @@ class EligibilityPhoneService:
+         if effect.state == EffectState.SUCCEEDED.value:
+             return None
+         if effect.state != EffectState.PREPARING.value:
+-            reconciled = self.ui.reconcile_phone_submission()
+-            if reconciled == "ACCEPTED":
+-                self.store.mark_effect_succeeded(effect.effect_id, evidence={"reconciled": True})
++            reconciled = self.ui.reconcile_phone_submission(effect.effect_id, effect.target_identity)
++            if self._attributed_reconciliation(reconciled, effect, "ACCEPTED"):
++                self.store.mark_effect_succeeded(effect.effect_id, evidence=reconciled)
+                 self.store.update_phone_lease_state(lease_ref, "WAITING_FOR_OTP")
+                 return None
+             if reconciled == "NEEDS_OPERATOR":
+@@ -414,9 +414,9 @@ class EligibilityPhoneService:
+         if effect.state == EffectState.SUCCEEDED.value:
+             return None
+         if effect.state != EffectState.PREPARING.value:
+-            reconciled = self.ui.reconcile_otp_submission()
+-            if reconciled == "VERIFIED":
+-                self.store.mark_effect_succeeded(effect.effect_id, evidence={"reconciled": True})
++            reconciled = self.ui.reconcile_otp_submission(effect.effect_id, effect.target_identity)
++            if self._attributed_reconciliation(reconciled, effect, "VERIFIED"):
++                self.store.mark_effect_succeeded(effect.effect_id, evidence=reconciled)
+                 return None
+             if reconciled == "NEEDS_OPERATOR":
+                 self.store.mark_effect_needs_operator(effect.effect_id, evidence={"reconciled": True})
+@@ -451,11 +451,31 @@ class EligibilityPhoneService:
+         )
+ 
+     def _effect_for(self, operation_id: str, effect_type: str, lease_ref: str):
++        target = (
++            f"google-phone-submit:{lease_ref}"
++            if effect_type == "google.phone.submit"
++            else f"google-otp-submit:{lease_ref}"
++        )
+         return next(
+             (
+                 effect
+                 for effect in self.store.list_effects(operation_id)
+-                if effect.effect_type == effect_type and lease_ref in effect.target_identity
++                if effect.effect_type == effect_type and effect.target_identity == target
+             ),
+             None,
+         )
++
++    @staticmethod
++    def _attributed_reconciliation(result: Any, effect: Any, state: str) -> bool:
++        """Only accept a positive result cryptographically/structurally bound to this effect.
++
++        Legacy adapters return a bare state string from the current browser screen. That
++        state is not attributable to a particular submission and must not close an effect.
++        """
++        return (
++            isinstance(result, dict)
++            and result.get("state") == state
++            and result.get("effect_id") == effect.effect_id
++            and result.get("target_identity") == effect.target_identity
++            and result.get("submission_id") == effect.effect_id
++        )
+diff --git a/tests/test_eligibility_phone.py b/tests/test_eligibility_phone.py
+index ee545ce..5d0f297 100644
+--- a/tests/test_eligibility_phone.py
++++ b/tests/test_eligibility_phone.py
+@@ -76,6 +76,7 @@ class FakeUI:
+         self.otp_outcome = "VERIFIED"
+         self.phone_submits = 0
+         self.otp_submits = 0
++        self.phone_reconcile_result = "UNKNOWN"
+ 
+     def observe_eligibility(self, remote_channel_id: str) -> EligibilityObservation:
+         return EligibilityObservation(self.required, not self.required, f"token-{self.required}")
+@@ -84,8 +85,10 @@ class FakeUI:
+         self.phone_submits += 1
+         return self.phone_outcome
+ 
+-    def reconcile_phone_submission(self) -> str:
+-        return "UNKNOWN"
++    def reconcile_phone_submission(self, effect_id: str, target_identity: str) -> str:
++        if callable(self.phone_reconcile_result):
++            return self.phone_reconcile_result(effect_id, target_identity)
++        return self.phone_reconcile_result
+ 
+     def submit_otp(self, code: str) -> str:
+         self.otp_submits += 1
+@@ -93,7 +96,7 @@ class FakeUI:
+             self.required = False
+         return self.otp_outcome
+ 
+-    def reconcile_otp_submission(self) -> str:
++    def reconcile_otp_submission(self, effect_id: str, target_identity: str) -> str:
+         return "UNKNOWN"
+ 
+ 
+@@ -189,6 +192,37 @@ class EligibilityPhoneTests(unittest.TestCase):
+         self.assertEqual("RECONCILE_REQUIRED", second.status)
+         self.assertEqual(1, self.ui.phone_submits)
+ 
++    def test_unattributed_positive_screen_state_does_not_reconcile_phone_effect(self) -> None:
++        self.ui.phone_outcome = "UNKNOWN"
++        self.assertEqual("RECONCILE_REQUIRED", self.service.ensure_required_eligibility(self.workspace_id).status)
++        self.ui.reconcile_phone_submission = lambda effect_id, target: "ACCEPTED"
++        restarted = EligibilityPhoneService(
++            SQLiteProductStore(self.store.path), self.provider, self.ui, self.vault  # type: ignore[arg-type]
++        )
++        result = restarted.ensure_required_eligibility(self.workspace_id)
++        self.assertEqual("RECONCILE_REQUIRED", result.status)
++        self.assertEqual(1, self.ui.phone_submits)
++
++    def test_exact_submission_evidence_closes_only_its_phone_effect(self) -> None:
++        self.ui.phone_outcome = "UNKNOWN"
++        self.service.ensure_required_eligibility(self.workspace_id)
++        operation = self.store.get_active_operation(self.workspace_id)
++        effect = next(e for e in self.store.list_effects(operation.operation_id) if e.effect_type == "google.phone.submit")
++        self.ui.phone_reconcile_result = lambda effect_id, target: {
++            "state": "ACCEPTED",
++            "effect_id": effect_id,
++            "target_identity": target,
++            "submission_id": effect.effect_id,
++            "evidence_source": "fixture-exact-submission",
++        }
++        restarted = EligibilityPhoneService(
++            SQLiteProductStore(self.store.path), self.provider, self.ui, self.vault  # type: ignore[arg-type]
++        )
++        result = restarted.ensure_required_eligibility(self.workspace_id)
++        self.assertEqual("WAITING_FOR_OTP", result.status)
++        self.assertEqual("SUCCEEDED", restarted.store.get_effect(effect.effect_id).state)
++        self.assertEqual(1, self.ui.phone_submits)
++
+     def test_timeout_uses_one_materially_different_sequential_replacement(self) -> None:
+         first = self.service.ensure_required_eligibility(self.workspace_id)
+         self.assertEqual("WAITING_FOR_OTP", first.status)
+diff --git a/tests/test_runtime_adapters.py b/tests/test_runtime_adapters.py
+index 80e4484..006500f 100644
+--- a/tests/test_runtime_adapters.py
++++ b/tests/test_runtime_adapters.py
+@@ -349,8 +349,8 @@ def test_phone_adapter_maps_operator_and_verified_states() -> None:
+     second = adapter.observe_eligibility("UC_A")
+     assert first.evidence_token == "NEEDS_OPERATOR"
+     assert second.custom_thumbnail_enabled
+-    assert adapter.reconcile_phone_submission() == "ACCEPTED"
+-    assert adapter.reconcile_otp_submission() == "VERIFIED"
++    assert adapter.reconcile_phone_submission("effect-1", "target-1") == "ACCEPTED"
++    assert adapter.reconcile_otp_submission("effect-2", "target-2") == "VERIFIED"
+ 
+ 
+ def test_publish_adapter_maps_exact_studio_readback() -> None:

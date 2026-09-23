@@ -1,0 +1,5 @@
+M  multiple_automation/adapters/raw_cdp.py
+M  multiple_automation/eligibility_phone.py
+M  multiple_automation/store.py
+M  tests/test_eligibility_phone.py
+M  tests/test_runtime_adapters.py

@@ -1,0 +1,5 @@
+**Implemented:** `finish_operation` now treats a repeated request to finish an operation in the same terminal state as idempotent. It returns the existing operation record, allowing duplicate completion after response loss without reactivating the task. A request to change an already terminal operation to a different state still fails.
+
+**Checks:** `python -m pytest tests/test_publishing.py -q` passed: 13 tests.
+
+**Evidence and limits:** The fixture suite covers upload response loss across restart, ambiguous thumbnail outcomes across restart, and reconciliation of an observed existing upload without redispatch. I did not add coverage for stable client request identities or concurrent duplicate delivery. A concurrent fixture attempt exposed an unresolved race while calls reconcile the thumbnail effect; I removed that test rather than claim concurrent delivery is handled. The service currently relies on the persisted operation and package/channel identity, not an explicit client-supplied request ID. No live submission or external provider was used.

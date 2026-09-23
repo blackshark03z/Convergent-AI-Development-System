@@ -1,0 +1,5 @@
+Implemented an atomic dispatch claim for upload and thumbnail effects in [publishing.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/CCURRENT/multiple_automation/publishing.py). If a concurrent request has already claimed an effect, the stale caller now returns `RECONCILE_REQUIRED` without dispatching it.
+
+Checks run: `python -m pytest tests/test_publishing.py -q` passed (13 tests); `git diff --check` passed.
+
+This is a partial candidate, not a complete implementation of the brief. The existing submit path has no persisted client/request identity, and provider observations are not shown here to prove exact request-to-remote attribution across ambiguous matches. I did not add those behaviors or a new fixture, so ownership, changed-intent protection, delayed retries, and the requested concurrent duplicate product-path evidence remain unverified. No live submission or external provider was used.

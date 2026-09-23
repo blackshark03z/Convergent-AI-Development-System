@@ -1,0 +1,1 @@
+I added durable publish request binding and an atomic guard against duplicate upload dispatch. I have **not** finished the repair: exact-task evidence checks, competing-request and partial-success fixture coverage, and the requested deterministic checks remain incomplete. The candidate is not ready for review; I can continue the implementation if you want.

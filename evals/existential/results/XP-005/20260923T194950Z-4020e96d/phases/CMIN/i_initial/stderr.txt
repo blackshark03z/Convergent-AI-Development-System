@@ -1,0 +1,2 @@
+2026-09-23T20:11:05.758486Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-005\20260923T194950Z-4020e96d\arms\CMIN\multiple_automation\eligibility_phone.py:
+    def reconcile_phone_submission(self) -> str:

@@ -1,0 +1,1 @@
+NOT_READY — The browser submission sends no stable request ID, so a retry is not durably tied to its initiating client. Remote readback matches by title rather than exact effect identity, leaving consequential results open to misattribution. The required partial-effect, concurrent-duplicate, and competing-intent product-path evidence is also absent.

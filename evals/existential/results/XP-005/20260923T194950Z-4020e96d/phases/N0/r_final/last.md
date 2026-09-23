@@ -1,0 +1,1 @@
+NOT_READY — Concurrent retries of the same task can both reach effect preparation. After one marks the effect dispatched, the other raises an uncaught transition error instead of returning or resuming the original operation. The added concurrency test covers competing tasks, not this retry path.

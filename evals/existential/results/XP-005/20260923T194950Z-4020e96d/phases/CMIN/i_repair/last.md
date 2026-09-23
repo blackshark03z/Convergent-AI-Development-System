@@ -1,0 +1,12 @@
+Implemented the repair in the existing phone verification flow. This is a candidate for R review; I am not claiming Product Acceptance.
+
+- [eligibility_phone.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/CMIN/multiple_automation/eligibility_phone.py) now accepts client, retry, and task identities and stores them in the operation intent. A retry with changed identity is rejected. Uncertain acquisitions reuse their exact effect record and stop for reconciliation instead of acquiring another number. An eligible observation does not hide an unresolved effect, and a competing task cannot proceed through that unresolved operation.
+- [store.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/CMIN/multiple_automation/store.py) persists a dispatch record ID and preserves it when reconciliation evidence is added.
+- [tests/test_eligibility_phone.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/CMIN/tests/test_eligibility_phone.py) adds fixtures for changed retry identity, an eligible observation with unresolved submission, ambiguous acquisition retry, and evidence tied to a stored submission record. Existing lost response and repeated retry coverage also ran.
+- The working tree also contains the prior candidate changes in [raw_cdp.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/CMIN/multiple_automation/adapters/raw_cdp.py) and [test_runtime_adapters.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T194950Z-4020e96d/arms/CMIN/tests/test_runtime_adapters.py).
+
+**Checks:** `python -m unittest tests.test_eligibility_phone tests.test_runtime_adapters` passed (14 tests). `git diff --check` passed. No live or external effects were used.
+
+**Observed behavior:** Ambiguous phone submissions and acquisitions remain unresolved across retry; mismatched retry ownership is rejected; current browser screen state alone cannot resolve an effect.
+
+**Remaining limits:** The provider adapter has no exact-history reconciliation path for an ambiguous acquisition, so that case safely remains `RECONCILE_REQUIRED`. The added fixtures do not establish confirmed partial acquisition recovery. The default identity values preserve the existing UI call path; callers needing distinct client or retry identity must pass those values explicitly.

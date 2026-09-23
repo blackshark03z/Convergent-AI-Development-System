@@ -1,0 +1,5 @@
+M  multiple_automation/adapters/raw_cdp.py
+M  multiple_automation/app.py
+M  multiple_automation/control_center.py
+M  multiple_automation/store.py
+M  tests/test_publishing.py
