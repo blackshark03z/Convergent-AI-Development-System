@@ -1,0 +1,403 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { boundedBrowserTimeout } from "./_xp003_browser_acceptance_runtime.mjs";
+
+const baseUrl = process.argv[2];
+if (!baseUrl) throw new Error("Usage: node scripts/browser_assignment_flow_smoke.mjs <base-url>");
+
+const browserExe = [
+  process.env.STORY_AUDIO_BROWSER_EXE,
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+].filter(Boolean).find(existsSync);
+if (!browserExe) throw new Error("No supported Chromium browser was found.");
+
+const testRoot = process.env.STORY_AUDIO_ASSIGNMENT_TEST_ROOT;
+if (!testRoot) throw new Error("STORY_AUDIO_ASSIGNMENT_TEST_ROOT is required.");
+const profile = await mkdtemp(join(testRoot, "browser-"));
+const child = spawn(browserExe, [
+  "--headless=new",
+  "--disable-gpu",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--remote-debugging-port=0",
+  `--user-data-dir=${profile}`,
+  `${baseUrl}/#/assignment?book=1&from=1&to=10&skip_completed=1`,
+], { stdio: "ignore" });
+
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function poll(callback, timeoutMs = 15000) {
+  const deadline = Date.now() + boundedBrowserTimeout(timeoutMs);
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const value = await callback();
+      if (value) return value;
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(50);
+  }
+  throw lastError || new Error("Timed out waiting for browser state.");
+}
+
+let socket;
+try {
+  const port = await poll(async () => Number(
+    (await readFile(join(profile, "DevToolsActivePort"), "utf8")).split(/\r?\n/)[0]
+  ) || null);
+  const page = await poll(async () => {
+    const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+    return pages.find(item => item.type === "page" && item.url.startsWith(baseUrl));
+  });
+  socket = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+
+  let nextId = 1;
+  const pending = new Map();
+  const browserErrors = [];
+  socket.addEventListener("message", event => {
+    const message = JSON.parse(event.data);
+    if (message.method === "Runtime.exceptionThrown") {
+      browserErrors.push(
+        message.params?.exceptionDetails?.exception?.description
+        || message.params?.exceptionDetails?.text
+        || "runtime exception"
+      );
+    }
+    if (message.method === "Runtime.consoleAPICalled" && message.params?.type === "error") {
+      browserErrors.push((message.params.args || []).map(item => item.value || item.description).join(" "));
+    }
+    if (!message.id || !pending.has(message.id)) return;
+    const waiter = pending.get(message.id);
+    pending.delete(message.id);
+    if (message.error) waiter.reject(new Error(message.error.message));
+    else waiter.resolve(message.result);
+  });
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    socket.send(JSON.stringify({ id, method, params }));
+  });
+  const evaluate = async expression => {
+    const result = await send("Runtime.evaluate", {
+      expression,
+      awaitPromise: true,
+      returnByValue: true,
+    });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    }
+    return result.result.value;
+  };
+  const waitFor = (expression, timeoutMs = 15000) => poll(
+    async () => (await evaluate(expression)) || null,
+    timeoutMs,
+  );
+  const click = selector => evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) throw new Error(${JSON.stringify(`Missing ${selector}`)});
+    el.click();
+    return true;
+  })()`);
+  const setSelect = (selector, value) => evaluate(`(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) throw new Error(${JSON.stringify(`Missing ${selector}`)});
+    el.value = ${JSON.stringify(value)};
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  })()`);
+
+  await send("Runtime.enable");
+  await send("Page.enable");
+  await send("Emulation.setDeviceMetricsOverride", {
+    width: 1366,
+    height: 768,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await waitFor(`document.readyState === "complete"`);
+  await waitFor(`window.storyAudioAppState && document.querySelector('[data-speaker-suggestion-card]')`);
+
+  const initial = await evaluate(`(() => {
+    const review = document.querySelector('[data-assignment-section="review"]');
+    const voices = document.querySelector('[data-assignment-section="voices"]');
+    const steps = [...document.querySelectorAll('.assignment-workflow-steps > div')].map(row => row.innerText);
+    return {
+      hash: location.hash,
+      steps,
+      reviewOpen: !!review?.open,
+      voicesOpen: !!voices?.open,
+      sectionsSeparate: !!review && !!voices && review !== voices,
+      unresolvedNotice: !!document.querySelector('[data-jump-to-speaker-review]'),
+      unresolvedVoiceRows: [...document.querySelectorAll('[data-voice-library-row]')].filter(row => row.getAttribute('data-voice-library-row').startsWith('unresolved-dialogue:')).length,
+      characterRows: document.querySelectorAll('[data-voice-library-row^="character:"]').length,
+      preflightPrimaryCount: document.querySelectorAll('[data-open-production-preflight]').length,
+      sectionTwoPreflightPrimaryCount: voices?.querySelectorAll('[data-open-production-preflight]').length || 0,
+      sectionTwoConditionLink: voices?.querySelector('[data-jump-to-assignment-preflight]')?.textContent || '',
+    };
+  })()`);
+
+  const lockedVoiceStep = await evaluate(`(() => {
+    const voices = document.querySelector('[data-assignment-section="voices"]');
+    return {
+      locked: voices?.classList.contains('is-locked'),
+      ariaDisabled: voices?.getAttribute('aria-disabled'),
+      remaining: voices?.innerText || '',
+      voiceRows: voices?.querySelectorAll('[data-voice-library-row]').length || 0,
+      voiceActions: voices?.querySelectorAll('[data-registry-apply]').length || 0,
+    };
+  })()`);
+  let layoutEvidence = null;
+  let sampleDetailPersistence = null;
+  const inspectVoiceLayout = `(() => {
+    const row = document.querySelector('[data-voice-library-row="character:25"]');
+    const reviewPane = row?.querySelector('.assignment-registry-review-pane');
+    const details = reviewPane?.querySelector('[data-registry-detail="character:25"]');
+    const grid = details?.querySelector('.assignment-dialogue-samples-grid');
+    const card = grid?.querySelector('.assignment-dialogue-sample');
+    const context = card?.querySelector('.assignment-dialogue-context');
+    const text = context?.querySelector('span');
+    if (!row || !reviewPane || !details || !grid || !card || !context || !text) return null;
+    const contextRect = context.getBoundingClientRect();
+    const textRect = text.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const reviewRect = reviewPane.getBoundingClientRect();
+    return {
+      gridColumns: getComputedStyle(grid).gridTemplateColumns.trim().split(/\\s+/).filter(Boolean).length,
+      gridAlign: getComputedStyle(grid).alignItems,
+      textWidthRatio: contextRect.width ? textRect.width / contextRect.width : 0,
+      reviewWidthRatio: rowRect.width ? reviewRect.width / rowRect.width : 0,
+      contextInsideSpeakerRow: details.closest('tr') === row,
+      contextLabel: details.querySelector('summary')?.textContent || '',
+      replacementCharacter: reviewPane.innerText.includes('âˆ©â”â•œ'),
+    };
+  })()`;
+  await setSelect('[data-speaker-review-filter="confidence"]', "HIGH");
+  const filterBeforeJump = await evaluate(`document.querySelector('[data-speaker-review-filter="confidence"]').value`);
+  await click('[data-jump-to-speaker-review]');
+  const unresolvedNavigation = await waitFor(`(() => {
+    const review = document.querySelector('[data-assignment-section="review"]');
+    const active = document.activeElement;
+    return review?.open && !!active?.closest('[data-speaker-suggestion-card]');
+  })()`);
+  const navigationState = await evaluate(`({
+    hash: location.hash,
+    filter: document.querySelector('[data-speaker-review-filter="confidence"]')?.value,
+    activeCard: document.activeElement?.closest('[data-speaker-suggestion-card]')?.dataset?.speakerSuggestionCard || null,
+  })`);
+
+  const key = await evaluate(`document.querySelector('[data-speaker-suggestion-card]')?.dataset?.speakerSuggestionCard`);
+  await click(`[data-speaker-suggestion-submit="${key}"]`);
+  const speakerFinalizePending = await waitFor(`(() => {
+    const task=window.storyAudioAppState?.productionProjection?.canonical_task?.task_type;
+    const button=document.querySelector('[data-finalize-speaker-drafts]');
+    if(task!=="APPROVE_READY_SPEAKER_DRAFTS"||!button)return null;
+    return {task,label:button.textContent,step:document.querySelector('.assignment-workflow-steps > div:first-child')?.innerText||'',voiceLocked:document.querySelector('[data-assignment-section="voices"]')?.classList.contains('is-locked')};
+  })()`, 20000);
+  await click('[data-finalize-speaker-drafts]');
+  try {
+    await waitFor(`document.querySelector('.assignment-workflow-steps > div:first-child')?.classList.contains('complete')
+      && document.querySelector('[data-assignment-section="voices"]')?.open
+      && !document.querySelector('[data-voice-library-row^="unresolved-dialogue:"]')
+      && window.storyAudioAppState?.bookVoiceRegistry?.result?.speaker_state?.status === 'APPROVED_CURRENT'`, 20000);
+  } catch (error) {
+    const diagnostic = await evaluate(`({
+      steps: document.querySelector('.assignment-workflow-steps')?.innerText || '',
+      voicesOpen: !!document.querySelector('[data-assignment-section="voices"]')?.open,
+      unresolvedRows: document.querySelectorAll('[data-voice-library-row^="unresolved-dialogue:"]').length,
+      registryStatus: window.storyAudioAppState?.bookVoiceRegistry?.status,
+      commandActive: !!window.storyAudioAppState?.productionCommand?.active,
+    })`);
+    throw new Error(`${error.message} ${JSON.stringify(diagnostic)}`);
+  }
+  layoutEvidence = await waitFor(inspectVoiceLayout);
+  await evaluate(`(() => {
+    const more = document.querySelector('[data-registry-sample-detail="character:25"]');
+    if (!more) throw new Error('Nested dialogue details missing for character:25');
+    more.open = true;
+    return true;
+  })()`);
+  await waitFor(`window.storyAudioAppState.bookVoiceRegistry.openSampleDetails?.["character:25"] === true`);
+  await evaluate(`renderAssignmentPage()`);
+  sampleDetailPersistence = await waitFor(`(() => {
+    const more = document.querySelector('[data-registry-sample-detail="character:25"]');
+    if (!more?.open) return null;
+    return {persisted:true,label:more.querySelector('summary')?.textContent || ''};
+  })()`);
+  const reviewCompletion = await evaluate(`(() => {
+    const rows = [...document.querySelectorAll('[data-voice-library-row="character:25"]')];
+    return {
+      reviewComplete: document.querySelector('.assignment-workflow-steps > div:first-child')?.classList.contains('complete'),
+      voiceEmphasized: document.querySelector('[data-assignment-section="voices"]')?.classList.contains('is-current'),
+      voiceOpen: document.querySelector('[data-assignment-section="voices"]')?.open,
+      characterRows: rows.length,
+      unresolvedRows: document.querySelectorAll('[data-voice-library-row^="unresolved-dialogue:"]').length,
+    };
+  })()`);
+
+  await waitFor(`!window.storyAudioAppState.productionCommand?.active
+    && !window.storyAudioAppState.bookVoiceRegistry?.loading
+    && !window.storyAudioAppState.bookVoiceRegistry?.speakerSuggestions?.loading`);
+  await evaluate(`Promise.all([
+    loadBookVoiceRegistry(),
+    loadSpeakerReviewSuggestions(),
+    loadProductionTaskProjection({ silent: true }),
+  ])`);
+
+  // A prior workflow jump intentionally uses smooth scrolling, and registry /
+  // speaker-review refreshes may still have a queued animation-frame restore.
+  // Establish a genuinely quiescent UI before measuring the polling invariant;
+  // otherwise a busy full-suite run can attribute that earlier navigation to
+  // loadJobs(), or capture a node just before the queued reconciliation runs.
+  await waitFor(`(async () => {
+    document.activeElement?.blur?.();
+    applyDeferredSpeakerReviewUpdate();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    let previous = window.scrollY;
+    let stableSamples = 0;
+    for (let index = 0; index < 20 && stableSamples < 4; index += 1) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const current = window.scrollY;
+      stableSamples = Math.abs(current - previous) <= 1 ? stableSamples + 1 : 0;
+      previous = current;
+    }
+    const queue = window.storyAudioAppState.bookVoiceRegistry?.speakerSuggestions;
+    return stableSamples >= 4
+      && !window.storyAudioAppState.bookVoiceRegistry?.loading
+      && !queue?.loading
+      && !queue?.deferredResult;
+  })()`, 5000);
+
+  const pollingStability = await evaluate(`(async () => {
+    const initialScope = document.querySelector('[data-registry-scope-key="character:25"]');
+    if (!initialScope) throw new Error('Character scope control missing after review completion');
+    initialScope.value = 'range';
+    initialScope.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const voiceBeforeChange = document.querySelector('[data-registry-voice-key="character:25"]');
+    if (!voiceBeforeChange) throw new Error('Character voice control missing after scope change');
+    voiceBeforeChange.value = 'commander';
+    voiceBeforeChange.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const node = document.querySelector('[data-registry-voice-key="character:25"]');
+    const scopeNode = document.querySelector('[data-registry-scope-key="character:25"]');
+    if (!node || !scopeNode) throw new Error('Character controls missing after voice change');
+    node.focus({ preventScroll: true });
+    const scrollBefore = window.scrollY;
+    for (let index = 0; index < 3; index += 1) await loadJobs();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return {
+      sameVoiceNode: document.querySelector('[data-registry-voice-key="character:25"]') === node,
+      sameScopeNode: document.querySelector('[data-registry-scope-key="character:25"]') === scopeNode,
+      focused: document.activeElement === node,
+      voice: node.value,
+      scope: scopeNode.value,
+      sectionOpen: document.querySelector('[data-assignment-section="voices"]')?.open,
+      scrollStable: Math.abs(window.scrollY - scrollBefore) <= 1,
+      impact: document.querySelector('[data-registry-impact="character:25"]')?.innerText || '',
+    };
+  })()`);
+
+  try {
+    await waitFor(`document.querySelector('[data-save-voice-batch]') && !document.querySelector('[data-save-voice-batch]').disabled`);
+  } catch (error) {
+    const diagnostic = await evaluate(`(() => {
+      const context = currentProductionWorkingContext();
+      const row = window.storyAudioAppState?.bookVoiceRegistry?.result?.rows?.find(item => item.speaker_key === 'character:25');
+      return {
+        drafts: window.storyAudioAppState?.bookVoiceRegistry?.drafts || {},
+        batchText: document.querySelector('[data-registry-batch-save]')?.innerText || '',
+        batchDisabled: document.querySelector('[data-save-voice-batch]')?.disabled,
+        rowActions: row?.actions || null,
+        pending: context ? registryPendingVoiceChanges(context).map(item => ({speaker:item.row.speaker_key,scope:item.scope,voice:item.voice,fromVoice:item.fromVoice})) : [],
+      };
+    })()`);
+    throw new Error(`${error.message} ${JSON.stringify(diagnostic)}`);
+  }
+  await click('[data-save-voice-batch]');
+  await waitFor(`!window.storyAudioAppState.productionCommand?.active
+    && !window.storyAudioAppState.bookVoiceRegistry?.loading
+    && !window.storyAudioAppState.bookVoiceRegistry?.batchSaving`, 20000);
+  const voiceSaveState = await evaluate(`({
+    command: window.storyAudioAppState.productionCommand,
+    rowError: window.storyAudioAppState.bookVoiceRegistry?.rowErrors?.['character:25'] || null,
+    rowResult: window.storyAudioAppState.bookVoiceRegistry?.rowResults?.['character:25'] || null,
+    preflightEnabled: !!document.querySelector('[data-open-production-preflight]:not([disabled])'),
+    step3Action: document.querySelector('[data-assignment-casting-next]')?.textContent || '',
+    task: window.storyAudioAppState?.productionProjection?.canonical_task?.task_type || null,
+    commands: null,
+  })`);
+  voiceSaveState.commands = await evaluate(`fetch('/api/fixture/commands').then(response => response.json())`);
+  if (voiceSaveState.preflightEnabled || voiceSaveState.task !== 'PREPARE_RANGE_INPUTS') {
+    throw new Error(`Voice save bypassed Final Voice Map gate: ${JSON.stringify(voiceSaveState)}`);
+  }
+  await waitFor(`window.storyAudioAppState?.productionProjection?.canonical_task?.task_type==="PREPARE_RANGE_INPUTS" && !!document.querySelector('[data-assignment-casting-next]')`, 20000);
+  await click('[data-assignment-casting-next]');
+  const castingDraftState = await waitFor(`(() => {
+    const task=window.storyAudioAppState?.productionProjection?.canonical_task?.task_type;
+    const button=document.querySelector('[data-assignment-casting-next]');
+    if(task!=="APPROVE_RANGE_CASTING_PLANS"||!button)return null;
+    return {task,label:button.textContent};
+  })()`, 20000);
+  await click('[data-assignment-casting-next]');
+  const castingApprovedState = await waitFor(`(() => {
+    const task=window.storyAudioAppState?.productionProjection?.canonical_task?.task_type;
+    const button=document.querySelector('[data-open-production-preflight]:not([disabled])');
+    if(task!=="PREPARE_RANGE"||!button)return null;
+    return {task,label:button.textContent};
+  })()`, 20000);
+
+  const commandsBeforePreflight = await evaluate(`fetch('/api/fixture/commands').then(response => response.json())`);
+  await click('[data-open-production-preflight]:not([disabled])');
+  await waitFor(`location.hash.startsWith("#/production")`);
+  const readyNavigation = await evaluate(`({
+    hash: location.hash,
+    workingContext: window.storyAudioAppState.productionWorkingContext,
+  })`);
+  const commandsAfterPreflight = await evaluate(`fetch('/api/fixture/commands').then(response => response.json())`);
+
+  if (browserErrors.length) throw new Error(`Browser errors: ${browserErrors.join(" | ")}`);
+  process.stdout.write(JSON.stringify({
+    ok: true,
+    initial,
+    lockedVoiceStep,
+    speakerFinalizePending,
+    reviewCompletion,
+    voiceSaveState,
+    castingDraftState,
+    castingApprovedState,
+    readyNavigation,
+    renderCommands: commandsAfterPreflight.filter(command => ["PREPARE", "START_RENDER"].includes(String(command.command_type || ""))),
+  }));
+} finally {
+  try {
+    socket?.close();
+  } catch {}
+  const browserExited = new Promise(resolve => {
+    if (child.exitCode !== null) resolve();
+    else child.once("exit", resolve);
+  });
+  child.kill();
+  await Promise.race([browserExited, delay(3000)]);
+  let cleanupError = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      await rm(profile, { recursive: true, force: true });
+      cleanupError = null;
+      break;
+    } catch (error) {
+      cleanupError = error;
+      if (!["EBUSY", "EPERM"].includes(error?.code) || attempt === 29) break;
+      await delay(200);
+    }
+  }
+  if (cleanupError) {
+    process.stderr.write(`Warning: disposable browser profile cleanup deferred: ${cleanupError.message}\n`);
+  }
+}

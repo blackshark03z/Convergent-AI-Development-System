@@ -1,0 +1,49 @@
+{
+    "schema_version":  1,
+    "case_id":  "XP-003",
+    "status":  "ORACLE_QUALIFIED",
+    "date":  "2026-09-23",
+    "neutral_projection_commit":  "a2189b9cbe597fa3f769bac569553855efc6996f",
+    "qualified_neutral_tree":  "bf92d466eb896196bb560e554b3a3720f690f2ed",
+    "heldout_oracle_sha256":  "4953603b0355d9a2e500fdebcf89103e17c7ebf1d618d00fef1a306faf46c1ca",
+    "oracle_runner_sha256":  "6e6f95fa299d4d6f648d719102325f6df1acaee9cef8c0f2e6d6f0112d342b55",
+    "hidden_fixture_sha256":  "35ce2bc4d96235e6bfc9e281ac8b0648c134bac916abde2ee2ca7a58fe5d992a",
+    "hidden_browser_runtime_sha256":  "79a79ae06e4d5666b73ef0f4e2e036f16f06bf83772089fac2ec3e21a20323db",
+    "oracle_hash_basis":  "runner digest: SHA-256 after CRLF-to-LF normalization",
+    "prompt_leak_matches":  0,
+    "base_preflight":  {
+                           "source_revision":  "e07820fcc43f1dbfb1de84feb32fee6cfd4329f2",
+                           "expected":  "FAIL",
+                           "actual":  "FAIL",
+                           "evidence":  "Browser journey cannot complete the speaker-review to voice-assignment transition."
+                       },
+    "reference_preflight":  {
+                                "source_revision":  "25a09b4b1a76628f67676c4635ff853c385bec7c",
+                                "expected":  "PASS",
+                                "actual":  "PASS",
+                                "evidence":  {
+                                                 "speaker_blocker_visible":  true,
+                                                 "voice_locked_until_speaker_review_complete":  true,
+                                                 "voice_step_opens_after_review":  true,
+                                                 "voice_save_exposes_next_action":  true,
+                                                 "casting_review_exposes_next_action":  true,
+                                                 "production_scope_preserved":  true,
+                                                 "silent_render":  false
+                                             }
+                            },
+    "neutralization":  {
+                           "files":  [
+                                         ".buildos-authority.json",
+                                         ".buildos-policy.json",
+                                         "AGENTS.md",
+                                         "TASK.md",
+                                         "NEXT_TASK.md"
+                                     ],
+                           "directories":  [
+                                               ".buildos-legacy",
+                                               "skills",
+                                               "templates"
+                                           ]
+                       },
+    "qualification_note":  "Historical reference was used only to qualify behavioral discrimination. R/I never receive reference bytes or held-out oracle files."
+}
