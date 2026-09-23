@@ -233,7 +233,40 @@ def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path
             raise RunError("HARNESS_INVALID", f"resume completed candidate changed: {arm}")
 
     start_index = len(completed)
+    ns.resume_arm = None
+    ns.resume_phase = None
+    if start_index < len(ARMS) and status == "NEEDS_AUTH":
+        arm = ARMS[start_index]
+        phases = out / "phases" / arm
+        workspace = out / "arms" / arm
+        repair_dir = phases / "i_repair"
+        error_text = str(result.get("error") or "").lower().replace("/", "\\")
+        expected_suffix = f"\\phases\\{arm.lower()}\\i_repair"
+        repair_trace = ""
+        for trace_name in ("events.jsonl", "stderr.txt"):
+            trace_path = repair_dir / trace_name
+            if trace_path.is_file():
+                repair_trace += trace_path.read_text(encoding="utf-8", errors="replace")
+        resumable_repair = (
+            error_text.endswith(expected_suffix)
+            and workspace.is_dir()
+            and (phases / "r_brief" / "last.md").is_file()
+            and (phases / "i_initial" / "last.md").is_file()
+            and (phases / "r_review" / "last.md").is_file()
+            and repair_dir.is_dir()
+            and not (repair_dir / "last.md").is_file()
+            and AUTH_PATTERN.search(repair_trace)
+        )
+        if resumable_repair:
+            roots = git(["rev-list", "--max-parents=0", "HEAD"], workspace).splitlines()
+            if len(roots) != 1 or git(["rev-parse", f"{roots[0]}^{{tree}}"], workspace) != neutral_tree:
+                raise RunError("HARNESS_INVALID", f"resume partial repair baseline mismatch: {arm}")
+            ns.resume_arm = arm
+            ns.resume_phase = "i_repair"
+
     for arm in ARMS[start_index:]:
+        if ns.resume_arm == arm and ns.resume_phase == "i_repair":
+            continue
         for stale in (out / "phases" / arm, out / "arms" / arm, out / "evaluation" / arm):
             if stale.exists():
                 remove_tree(stale)
@@ -423,6 +456,43 @@ def judgment(text: str, repair_allowed: bool) -> str:
     return match.group(1)
 
 
+def load_completed_phase(output: Path) -> tuple[dict, str]:
+    last_path = output / "last.md"
+    if not last_path.is_file():
+        raise RunError("HARNESS_INVALID", f"resume phase is missing completion report: {output}")
+    last = last_path.read_text(encoding="utf-8", errors="replace")
+    usage = {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+    events = output / "events.jsonl"
+    if events.is_file():
+        for line in events.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
+                observed = event["usage"]
+                for key in usage:
+                    usage[key] += int(observed.get(key) or 0)
+    return {
+        "seconds": None,
+        "timed_out": False,
+        "exit_code": 0,
+        "usage": usage,
+        "output": str(output),
+        "resumed_from_existing": True,
+    }, last
+
+
+def archive_interrupted_phase(output: Path) -> Path:
+    index = 1
+    while True:
+        archive = output.parent / f"{output.name}_interrupted_{index}"
+        if not archive.exists():
+            output.rename(archive)
+            return archive
+        index += 1
+
+
 def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -> dict:
     workspace = out / "arms" / arm
     phases = out / "phases" / arm
@@ -430,6 +500,58 @@ def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -
         str(out / "arms" / sibling) for sibling in ARMS if sibling != arm
     )
     r_prompt = (case / "prompts" / f"{arm}.txt").read_text(encoding="utf-8")
+    if getattr(ns, "resume_arm", None) == arm and getattr(ns, "resume_phase", None) == "i_repair":
+        first_record, brief = load_completed_phase(phases / "r_brief")
+        initial_record, initial_last = load_completed_phase(phases / "i_initial")
+        review_record, review_last = load_completed_phase(phases / "r_review")
+        if "IMPLEMENTATION_BRIEF" not in brief or judgment(review_last, True) != "REPAIR":
+            raise RunError("HARNESS_INVALID", f"resume repair continuity invalid: {arm}")
+        interrupted = phases / "i_repair"
+        saved_prompt = (interrupted / "prompt.md").read_text(encoding="utf-8")
+        archive = archive_interrupted_phase(interrupted)
+        repair = codex(cli, workspace, saved_prompt, ns.i_model, ns.i_effort, ns.i_seconds,
+                       phases / "i_repair", forbidden_markers)
+        if OWNER_PATTERN.search(repair["last"]):
+            raise RunError("NEEDS_OWNER", f"I repair found material Owner ambiguity in {arm}")
+        snapshot = candidate(workspace, phases / "i_repair")
+        final_review = run_r(
+            cli,
+            workspace,
+            review_prompt(
+                r_prompt,
+                brief + "\nR repair brief:\n" + review_last,
+                initial_last + "\nRepair report:\n" + repair["last"],
+                snapshot,
+                True,
+            ),
+            ns.r_model,
+            ns.r_effort,
+            ns.r_seconds,
+            phases / "r_final",
+            forbidden_markers,
+        )
+        if final_review["timed_out"]:
+            raise RunError("HARNESS_INVALID", f"final R review timed out: {arm}")
+        if OWNER_PATTERN.search(final_review["last"]):
+            raise RunError("NEEDS_OWNER", f"R found material Owner ambiguity in {arm}")
+        verdict = judgment(final_review["last"], False)
+        repair_record = {k: v for k, v in repair.items() if k != "last"}
+        repair_record["resumed_after_auth"] = True
+        repair_record["interrupted_attempt"] = str(archive)
+        return {
+            "brief": brief,
+            "brief_words": len(brief.split()),
+            "r_brief": first_record,
+            "i_initial": initial_record,
+            "r_review": review_record,
+            "i_repair": repair_record,
+            "r_final": {k: v for k, v in final_review.items() if k != "last"},
+            "repair_count": 1,
+            "verdict": verdict,
+            "candidate_tree": snapshot["tree"],
+            "candidate_state": snapshot["state"],
+        }
+
     first = run_r(cli, workspace, r_prompt, ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_brief", forbidden_markers)
     if first["timed_out"]:
         raise RunError("HARNESS_INVALID", f"R brief timed out: {arm}")
