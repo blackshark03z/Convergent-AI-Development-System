@@ -1,0 +1,74 @@
+﻿{
+    "schema":  "cads-existential-xp001-ri-result-v2",
+    "date":  "2026-09-23",
+    "status":  "VALID_WITH_RECONSTRUCTED_SESSION_CONTINUITY",
+    "implementer":  {
+                        "model":  "gpt-6-luna",
+                        "reasoning_effort":  "medium",
+                        "initial_budget_seconds":  180,
+                        "repair_cycles":  1,
+                        "repair_budget_seconds":  180
+                    },
+    "continuity":  {
+                       "r":  "reconstructed",
+                       "i_repair":  "reconstructed"
+                   },
+    "invalid_harness_attempts_excluded":  true,
+    "arms":  {
+                 "N0":  {
+                            "r_final":  "NOT_READY",
+                            "candidate_tree":  "9c8e43485583b07fca435ac98f203afe4d125927",
+                            "oracle":  "FAIL",
+                            "classification":  "correct_rejection",
+                            "layout1366":  {
+                                               "primary_visible":  false,
+                                               "top":  1024.125,
+                                               "bottom":  1066.125,
+                                               "viewport_height":  768,
+                                               "scroll_y":  0
+                                           }
+                        },
+                 "N1":  {
+                            "r_final":  "NOT_READY",
+                            "candidate_tree":  "13c34c527692c9534d55cd6cca49a670bb7849d7",
+                            "oracle":  "FAIL",
+                            "classification":  "correct_rejection",
+                            "layout1366":  {
+                                               "primary_visible":  false,
+                                               "top":  1011.125,
+                                               "bottom":  1053.125,
+                                               "viewport_height":  768,
+                                               "scroll_y":  0
+                                           }
+                        },
+                 "CMIN":  {
+                              "r_final":  "READY",
+                              "candidate_tree":  "767a35981b1467d4d3a17cebee60c023eccca62e",
+                              "oracle":  "PASS",
+                              "classification":  "correct_acceptance",
+                              "layout1366":  {
+                                                 "primary_visible":  true,
+                                                 "top":  714,
+                                                 "bottom":  756,
+                                                 "viewport_height":  768,
+                                                 "scroll_y":  0
+                                             }
+                          },
+                 "CCURRENT":  {
+                                  "r_final":  "NOT_READY",
+                                  "candidate_tree":  "8c9be171f3f9b676f135b43a2ea03a7a6589d14f",
+                                  "oracle":  "PASS",
+                                  "classification":  "overconservative_rejection",
+                                  "layout1366":  {
+                                                     "primary_visible":  true,
+                                                     "top":  714,
+                                                     "bottom":  756,
+                                                     "viewport_height":  768,
+                                                     "scroll_y":  0
+                                                 }
+                              }
+             },
+    "false_done_count":  0,
+    "xp001_inference":  "C-min is the only arm with both R READY and held-out PASS; C-current also passed the hidden product oracle but self-blocked on stricter evidence/acceptance.",
+    "global_decision":  "DEFER_UNTIL_XP002_TO_XP005"
+}

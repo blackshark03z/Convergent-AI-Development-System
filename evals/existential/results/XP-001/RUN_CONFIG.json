@@ -1,0 +1,17 @@
+﻿{
+    "schema":  "cads-xp001-i-run-config-v2",
+    "implementer_model":  "gpt-6-luna",
+    "reasoning_effort":  "medium",
+    "codex_cli":  "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+    "user_config":  "ignored",
+    "exec_rules":  "ignored",
+    "session":  "ephemeral",
+    "initial_budget_seconds":  180,
+    "max_repair_cycles":  1,
+    "repair_budget_seconds":  180,
+    "valid_execution_mode":  "danger-full-access",
+    "valid_execution_reason":  "Codex CLI non-interactive Windows probes forced workspace-write sessions to read-only; the same automation full-access invocation was therefore used for all valid arms inside disposable local benchmark clones with external/production effects forbidden by the briefs.",
+    "invalid_harness_probes_excluded":  true,
+    "r_session_continuity":  "reconstructed",
+    "i_repair_session_continuity":  "reconstructed"
+}
