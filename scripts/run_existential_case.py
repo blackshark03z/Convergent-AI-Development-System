@@ -164,6 +164,14 @@ def preflight(case_id: str, cli_override: str | None = None) -> tuple[dict, Path
     return manifest, case, source, cli
 
 
+def remove_tree(path: Path) -> None:
+    def retry_writeable(func, name, _exc_info) -> None:
+        os.chmod(name, stat.S_IWRITE)
+        func(name)
+
+    shutil.rmtree(path, onerror=retry_writeable)
+
+
 def prepare_run(out: Path, force: bool) -> None:
     if out.exists():
         if not force or not (out / MARKER).is_file():
@@ -171,6 +179,68 @@ def prepare_run(out: Path, force: bool) -> None:
         shutil.rmtree(out)
     out.mkdir(parents=True)
     (out / MARKER).write_text("CADS existential runner v1\n", encoding="utf-8")
+
+
+def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path, cli: str,
+               ns: argparse.Namespace) -> tuple[dict, int]:
+    if not out.is_dir() or not (out / MARKER).is_file():
+        raise RunError("HARNESS_INVALID", f"resume output is not a marked runner directory: {out}")
+    result_path = out / "result" / "result.json"
+    result = read_json(result_path)
+    if result.get("schema") != "cads-existential-runner-v1" or result.get("case_id") != case_id:
+        raise RunError("HARNESS_INVALID", "resume result identity/schema mismatch")
+    if result.get("run_id") != out.name:
+        raise RunError("HARNESS_INVALID", "resume run_id does not match output directory")
+    if result.get("status") != "NEEDS_AUTH":
+        raise RunError("HARNESS_INVALID", f"resume requires NEEDS_AUTH status, got {result.get('status')}")
+    expected_models = {
+        "R": {"model": ns.r_model, "effort": ns.r_effort, "seconds": ns.r_seconds},
+        "I": {"model": ns.i_model, "effort": ns.i_effort, "seconds": ns.i_seconds},
+    }
+    if result.get("models") != expected_models:
+        raise RunError("HARNESS_INVALID", "resume model/effort/timeout configuration mismatch")
+    if result.get("pinned_base") != manifest["pinned_base"] or result.get("source") != str(source):
+        raise RunError("HARNESS_INVALID", "resume source/base mismatch")
+    qualification = str(case / manifest["qualification_file"])
+    if result.get("qualification") != qualification:
+        raise RunError("HARNESS_INVALID", "resume qualification mismatch")
+    stored_cli = result.get("codex_cli")
+    if not isinstance(stored_cli, str) or Path(stored_cli).resolve() != Path(cli).resolve():
+        raise RunError("HARNESS_INVALID", "resume Codex CLI mismatch")
+
+    neutral = out / "neutral"
+    if not neutral.is_dir():
+        raise RunError("HARNESS_INVALID", "resume neutral projection missing")
+    neutral_tree = git(["rev-parse", "HEAD^{tree}"], neutral)
+    if neutral_tree != manifest.get("qualified_neutral_tree") or result.get("neutral_tree") != neutral_tree:
+        raise RunError("HARNESS_INVALID", "resume neutral projection identity mismatch")
+
+    arms = result.get("arms")
+    if not isinstance(arms, dict):
+        raise RunError("HARNESS_INVALID", "resume arms record is invalid")
+    completed = list(arms.keys())
+    if completed != list(ARMS[:len(completed)]):
+        raise RunError("HARNESS_INVALID", f"resume arms are not a completed prefix: {completed}")
+    for arm in completed:
+        workspace = out / "arms" / arm
+        state = arms[arm].get("candidate_state")
+        if not workspace.is_dir() or not isinstance(state, str) or state_digest(git_state(workspace)) != state:
+            raise RunError("HARNESS_INVALID", f"resume completed candidate changed: {arm}")
+
+    start_index = len(completed)
+    for arm in ARMS[start_index:]:
+        for stale in (out / "phases" / arm, out / "arms" / arm, out / "evaluation" / arm):
+            if stale.exists():
+                remove_tree(stale)
+        target = out / "arms" / arm
+        target.parent.mkdir(exist_ok=True)
+        git(["clone", "--quiet", str(neutral), str(target)], out, 120)
+        if git(["rev-parse", "HEAD^{tree}"], target) != neutral_tree:
+            raise RunError("HARNESS_INVALID", f"resume projection mismatch: {arm}")
+
+    result["status"] = "RUNNING"
+    result.pop("error", None)
+    return result, start_index
 
 
 def project(manifest: dict, source: Path, out: Path) -> str:
@@ -500,19 +570,26 @@ def main() -> int:
     parser.add_argument("--i-seconds", type=int, default=600)
     parser.add_argument("--codex-cli")
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--resume-out", type=Path)
     ns = parser.parse_args()
     if ns.preflight and ns.probe_models:
         parser.error("--preflight and --probe-models are separate checks; run one at a time")
+    if ns.resume_out and (ns.out or ns.force or ns.preflight or ns.probe_models):
+        parser.error("--resume-out cannot be combined with --out/--force/--preflight/--probe-models")
     if ns.r_seconds < 1 or ns.i_seconds < 1:
         parser.error("timeouts must be positive")
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+
+    if ns.resume_out:
+        out = ns.resume_out.resolve()
+        run_id = out.name
+    else:
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+        out = ns.out.resolve() if ns.out else Path(tempfile.gettempdir()) / "cads-existential" / ns.case_id / run_id
     result = {"schema": "cads-existential-runner-v1", "case_id": ns.case_id, "run_id": run_id, "status": "RUNNING",
               "models": {"R": {"model": ns.r_model, "effort": ns.r_effort, "seconds": ns.r_seconds}, "I": {"model": ns.i_model, "effort": ns.i_effort, "seconds": ns.i_seconds}}, "arms": {}}
-    out = ns.out.resolve() if ns.out else Path(tempfile.gettempdir()) / "cads-existential" / ns.case_id / run_id
     prepared = False
     try:
         manifest, case, source, cli = preflight(ns.case_id, ns.codex_cli)
-        result.update({"source": str(source), "pinned_base": manifest["pinned_base"], "qualification": str(case / manifest["qualification_file"]), "codex_cli": cli})
         if ns.preflight:
             print(json.dumps({"status": "PREFLIGHT_OK", "case_id": ns.case_id, "source": str(source), "codex_cli": cli}))
             return 0
@@ -522,16 +599,24 @@ def main() -> int:
             return 0
         if out.is_relative_to(ROOT) or out.is_relative_to(source):
             raise RunError("HARNESS_INVALID", "run output must be outside CADS and source repositories")
-        prepare_run(out, ns.force)
-        prepared = True
-        result["neutral_tree"] = project(manifest, source, out)
+
+        if ns.resume_out:
+            result, start_index = resume_run(out, ns.case_id, manifest, case, source, cli, ns)
+            prepared = True
+        else:
+            result.update({"source": str(source), "pinned_base": manifest["pinned_base"], "qualification": str(case / manifest["qualification_file"]), "codex_cli": cli})
+            prepare_run(out, ns.force)
+            prepared = True
+            result["neutral_tree"] = project(manifest, source, out)
+            start_index = 0
+
         ns.forbidden_common = [
             str(ROOT),
             str(source),
             str(manifest.get("hidden_reference_revision") or ""),
             *[str(x) for x in manifest.get("hidden_observation_markers", [])],
         ]
-        for arm in ARMS:
+        for arm in ARMS[start_index:]:
             result["arms"][arm] = run_arm(arm, case, out, cli, ns)
             save_result(out, result, False)
         evaluate(manifest, case, out, result["arms"])
