@@ -1,0 +1,4 @@
+A  tests/test_product_acceptance.py
+M  videopipeline/cli.py
+A  videopipeline/product_acceptance.py
+M  videopipeline/web/server.py

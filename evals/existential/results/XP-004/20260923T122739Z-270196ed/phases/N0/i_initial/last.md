@@ -1,0 +1,7 @@
+Implemented a shared offline RC4 acceptance verifier in [product_acceptance.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-004/20260923T122739Z-270196ed/arms/N0/videopipeline/product_acceptance.py). It checks format grammar, asset hashes and provenance, plan and timeline hashes, output hash, F4 layout evidence, render observations, and product-state file hashes. Added the `verify-format` CLI command and `POST /api/format/verify`, both using the same verifier. Added synthetic fixtures for F1–F5 and changed-asset/timeline rejection cases in [test_product_acceptance.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-004/20260923T122739Z-270196ed/arms/N0/tests/test_product_acceptance.py).
+
+**Checks run:** `python -m pytest tests/test_product_acceptance.py tests/test_format_grammar.py tests/test_golden_fixtures.py videopipeline/tests/test_web_server.py -q` passed (31 tests); `python -m compileall -q videopipeline` passed; `python -m videopipeline.cli --help` lists `verify-format`.
+
+**Limitations:** Fixtures use synthetic files and render observations supplied as evidence; they do not render video or independently inspect pixels. I did not run the exact same evidence through both CLI and Web endpoints as an integration check. The existing pipeline’s compose/render flow is not yet wired to generate this acceptance evidence automatically, so this adds a shared verification gate rather than proving full product-path acceptance.
+
+No material owner decision was needed. I cannot claim Product Acceptance.

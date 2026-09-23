@@ -1,0 +1,6 @@
+2026-09-23T12:39:00.732472Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-004\20260923T122739Z-270196ed\arms\N1\videopipeline\cli.py:
+    from .models import TimelineSchedule, VisualSegment
+2026-09-23T12:43:17.192561Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-004\20260923T122739Z-270196ed\arms\N1\videopipeline\web\server.py:
+        if fmt_choice in ("f2-l", "f1"):
+            veo_clips = []
+            log_event(f"[Stage 2 Assets] Format {fmt_choice.upper()}: Sáºµn sÃ ng {stock_mgr.unused_count} clips má»›i 100% (ÄÃ£ lá»c bá» {reg_stats['total_used']} clips Ä‘Ã£ dÃ¹ng tá»« cÃ¡c video trÆ°á»›c).")

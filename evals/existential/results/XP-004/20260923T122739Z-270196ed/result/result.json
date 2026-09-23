@@ -1,0 +1,90 @@
+{
+  "schema": "cads-existential-runner-v1",
+  "case_id": "XP-004",
+  "run_id": "20260923T122739Z-270196ed",
+  "status": "NEEDS_AUTH",
+  "models": {
+    "R": {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "seconds": 240
+    },
+    "I": {
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "seconds": 600
+    }
+  },
+  "arms": {
+    "N0": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** Product acceptance for the canonical RC4 F1–F5 formats proves that the selected format’s legal sources survive the real plan → timeline → compose → render path, and binds the accepted master to the exact product state and media used.\n\n**Acceptance:**\n\n- Offline, distinguishable fixtures exercise each format through the CLI and Web product paths without hand-built schedules or external providers. Both paths apply the same format rules and report the same acceptance outcome.\n- Verification checks the rendered result as well as its plan and timeline: F1 has a generated-video opening and generated-image body; F2 has a generated-video opening plus both stock and generated video afterward; F3 uses generated images throughout; F4 visibly combines the original video inset with an online-stock background; F5 uses online-stock footage throughout. Source class must be supported by the selected asset’s provenance, not merely its label.\n- A missing, substituted, ambiguous, or changed required asset; a changed plan or timeline; or a stale or changed output prevents Product Accepted. Failure remains attributed to the selected format unless an explicit, authorized format change creates a newly verified run.\n- The final acceptance evidence identifies the selected format, exact input assets and content, relevant product code/configuration state, verified plan/timeline/compose state, and final output content. It can be checked against those states and fails if any bound state changes.\n\n**Constraints:** Use the current RC4 canonical format meanings. Verification must run locally without paid providers or the canonical production runtime. Implementation shape and evidence serialization are open.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 252,
+      "r_brief": {
+        "seconds": 101.59,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 396281,
+          "cached_input_tokens": 339968,
+          "output_tokens": 2660
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T122739Z-270196ed\\phases\\N0\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 180.44,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 720209,
+          "cached_input_tokens": 664320,
+          "output_tokens": 6560
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T122739Z-270196ed\\phases\\N0\\i_initial"
+      },
+      "r_review": {
+        "seconds": 60.75,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 124243,
+          "cached_input_tokens": 91904,
+          "output_tokens": 1733
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T122739Z-270196ed\\phases\\N0\\r_review"
+      },
+      "i_repair": {
+        "seconds": 40.53,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 146524,
+          "cached_input_tokens": 108288,
+          "output_tokens": 904
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T122739Z-270196ed\\phases\\N0\\i_repair"
+      },
+      "r_final": {
+        "seconds": 40.55,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 67020,
+          "cached_input_tokens": 54272,
+          "output_tokens": 641
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T122739Z-270196ed\\phases\\N0\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "e163050f8076d46ce36e56fec5cc8d7de531ba00",
+      "candidate_state": "5e337e35a92182aafef3169d3ecf888cada8d27ae3c6ff0b61c8f55695245f79"
+    }
+  },
+  "source": "D:\\Video\\AutoVideoPipeline",
+  "pinned_base": "79ac228d14b1ac743ab760bc4c87f87adc433533",
+  "qualification": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\cases\\XP-004\\PRECHECK.json",
+  "codex_cli": "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+  "neutral_tree": "5b60e9938fdef5b60250805d3490f55bc4aefcef",
+  "evidence_package": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\results\\XP-004\\20260923T122739Z-270196ed",
+  "error": "Codex auth/quota failure; see C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T122739Z-270196ed\\phases\\N1\\r_review"
+}

@@ -1,0 +1,1 @@
+NOT_READY — The verifier accepts caller-supplied provenance and render observations, and the fixtures use arbitrary bytes instead of exercising or decoding real CLI and Web renders. Acceptance therefore does not prove the selected format’s product path or output lineage.

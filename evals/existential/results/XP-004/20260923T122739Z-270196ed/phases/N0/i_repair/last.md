@@ -1,0 +1,3 @@
+I wasn’t able to complete the repair. The existing verifier still trusts caller-supplied provenance and render observations, and I did not connect acceptance to artifacts from actual offline CLI and Web runs.
+
+I inspected the format validator, timeline builder, CLI, and Web compose handlers. The current pipeline has separate compose paths, and its render path uses the NVENC engine; the required offline fixtures and shared path need further implementation before this candidate can be reviewed against the repair brief. No checks were run.

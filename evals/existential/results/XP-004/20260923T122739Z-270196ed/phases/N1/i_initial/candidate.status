@@ -1,0 +1,8 @@
+M  videopipeline/cli.py
+A  videopipeline/format_evidence.py
+A  videopipeline/format_semantics.py
+M  videopipeline/format_validator.py
+M  videopipeline/models.py
+M  videopipeline/stages/stage3_compose/timeline_builder.py
+M  videopipeline/stages/stage4_render/nvenc_engine.py
+M  videopipeline/web/server.py
