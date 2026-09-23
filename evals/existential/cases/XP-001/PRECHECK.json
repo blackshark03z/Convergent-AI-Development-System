@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-001",
+  "status": "ORACLE_QUALIFIED",
+  "date": "2026-09-23",
+  "neutral_projection_commit": "c0f5c0309f07e89c8712eb07bbfd3f9ca219b3a7",
+  "heldout_oracle_sha256": "f1d93b476c35c6e4a25919d15eb66961940114a52b1639736b54ab5fd82c2611",
+  "oracle_hash_basis": "canonical Git-staged LF-normalized bytes",
+  "base_preflight": {
+    "source_revision": "b6a9efb1de053edccbf9541deaaf21a830d71727",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "evidence": {
+      "viewport": "1366x768",
+      "scrollY": 0,
+      "primaryVisible": false,
+      "primaryTop": 1024.125,
+      "primaryBottom": 1066.125,
+      "horizontal": false,
+      "nested": []
+    }
+  },
+  "reference_preflight": {
+    "source_revision": "dbef3b7",
+    "expected": "PASS",
+    "actual": "PASS",
+    "evidence": {
+      "viewport": "1366x768",
+      "scrollY": 0,
+      "primaryVisible": true,
+      "primaryTop": 395.96875,
+      "primaryBottom": 437.96875,
+      "horizontal": false,
+      "nested": []
+    }
+  },
+  "historical_fixture_drift": {
+    "observed": true,
+    "excluded_from_scoring": true,
+    "detail": "The historical full range-browser scenario fails in both full base and neutral base before the layout assertion with Missing exact manual speaker option: narrator. XP-001 held-out oracle bypasses that unrelated stale speaker interaction while preserving the same frozen product fixture setup and deep Production state."
+  },
+  "qualification_rule": "The oracle is outcome-oriented and qualified because it fails the pinned pre-fix base and passes the pinned historical reference under the same neutral projection."
+}
