@@ -226,14 +226,20 @@ def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path
     if not neutral.is_dir():
         raise RunError("HARNESS_INVALID", "resume neutral projection missing")
     neutral_tree = git(["rev-parse", "HEAD^{tree}"], neutral)
-    if neutral_tree != manifest.get("qualified_neutral_tree") or result.get("neutral_tree") != neutral_tree:
+    expected_mode = "full_project" if ns.full_project else "neutral"
+    if result.get("projection_mode", "neutral") != expected_mode:
+        raise RunError("HARNESS_INVALID", "resume projection mode mismatch")
+    if result.get("neutral_tree") != neutral_tree:
+        raise RunError("HARNESS_INVALID", "resume projection identity mismatch")
+    if not ns.full_project and neutral_tree != manifest.get("qualified_neutral_tree"):
         raise RunError("HARNESS_INVALID", "resume neutral projection identity mismatch")
 
+    active_arms = tuple(ns.active_arms)
     arms = result.get("arms")
     if not isinstance(arms, dict):
         raise RunError("HARNESS_INVALID", "resume arms record is invalid")
     completed = list(arms.keys())
-    if completed != list(ARMS[:len(completed)]):
+    if completed != list(active_arms[:len(completed)]):
         raise RunError("HARNESS_INVALID", f"resume arms are not a completed prefix: {completed}")
     for arm in completed:
         workspace = out / "arms" / arm
@@ -244,8 +250,8 @@ def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path
     start_index = len(completed)
     ns.resume_arm = None
     ns.resume_phase = None
-    if start_index < len(ARMS) and status == "NEEDS_AUTH":
-        arm = ARMS[start_index]
+    if start_index < len(active_arms) and status == "NEEDS_AUTH":
+        arm = active_arms[start_index]
         phases = out / "phases" / arm
         workspace = out / "arms" / arm
         repair_dir = phases / "i_repair"
@@ -273,7 +279,7 @@ def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path
             ns.resume_arm = arm
             ns.resume_phase = "i_repair"
 
-    for arm in ARMS[start_index:]:
+    for arm in active_arms[start_index:]:
         if ns.resume_arm == arm and ns.resume_phase == "i_repair":
             continue
         for stale in (out / "phases" / arm, out / "arms" / arm, out / "evaluation" / arm):
@@ -290,7 +296,7 @@ def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path
     return result, start_index
 
 
-def project(manifest: dict, source: Path, out: Path) -> str:
+def project(manifest: dict, source: Path, out: Path, full_project: bool = False) -> str:
     neutral = out / "neutral"
     neutral.mkdir()
     archive = out / "base.zip"
@@ -301,18 +307,19 @@ def project(manifest: dict, source: Path, out: Path) -> str:
             if not destination.is_relative_to(neutral.resolve()):
                 raise RunError("HARNESS_INVALID", "unsafe archive member")
         zf.extractall(neutral)
-    for name in manifest["neutralization"]["files"]:
-        (neutral / name).unlink(missing_ok=True)
-    for name in manifest["neutralization"]["directories"]:
-        shutil.rmtree(neutral / name, ignore_errors=True)
+    if not full_project:
+        for name in manifest["neutralization"]["files"]:
+            (neutral / name).unlink(missing_ok=True)
+        for name in manifest["neutralization"]["directories"]:
+            shutil.rmtree(neutral / name, ignore_errors=True)
     git(["init", "--quiet"], neutral)
     git(["add", "-A"], neutral)
     git(["-c", "user.name=CADS Benchmark", "-c", "user.email=benchmark@local.invalid", "commit", "--quiet", "-m", "neutral projection"], neutral, 120)
     tree = git(["rev-parse", "HEAD^{tree}"], neutral)
-    if tree != manifest.get("qualified_neutral_tree"):
+    if not full_project and tree != manifest.get("qualified_neutral_tree"):
         raise RunError("CASE_NOT_READY", f"neutral projection differs from qualified tree: {tree}")
     paths = git(["ls-files"], neutral).splitlines()
-    if any(Path(path).name == "AGENTS.md" or path.endswith(".rules") or path.startswith((".codex/", ".agents/plugins/")) for path in paths):
+    if not full_project and any(Path(path).name == "AGENTS.md" or path.endswith(".rules") or path.startswith((".codex/", ".agents/plugins/")) for path in paths):
         raise RunError("HARNESS_INVALID", "neutral projection contains inherited project rules/config/plugins")
     for arm in ARMS:
         target = out / "arms" / arm
@@ -506,7 +513,7 @@ def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -
     workspace = out / "arms" / arm
     phases = out / "phases" / arm
     forbidden_markers = tuple(ns.forbidden_common) + tuple(
-        str(out / "arms" / sibling) for sibling in ARMS if sibling != arm
+        str(out / "arms" / sibling) for sibling in ns.active_arms if sibling != arm
     )
     r_prompt = (case / "prompts" / f"{arm}.txt").read_text(encoding="utf-8")
     if getattr(ns, "resume_arm", None) == arm and getattr(ns, "resume_phase", None) == "i_repair":
@@ -630,11 +637,11 @@ def classify_oracle(protocol: dict, stdout: bytes, stderr: bytes, exit_code: int
 
 def evaluate(manifest: dict, case: Path, out: Path, results: dict) -> None:
     # Freeze and verify every arm before exposing any candidate to the oracle.
-    for arm in ARMS:
+    for arm in results:
         frozen = out / "arms" / arm
         if state_digest(git_state(frozen)) != results[arm]["candidate_state"]:
             raise RunError("HARNESS_INVALID", f"candidate changed before oracle: {arm}")
-    for arm in ARMS:
+    for arm in results:
         frozen = out / "arms" / arm
         if state_digest(git_state(frozen)) != results[arm]["candidate_state"]:
             raise RunError("HARNESS_INVALID", f"candidate changed before oracle: {arm}")
@@ -724,6 +731,7 @@ def main() -> int:
     parser.add_argument("--probe-models", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--record-sot", action="store_true")
+    parser.add_argument("--full-project", action="store_true", help="confirmation mode: retain the complete pinned product repository and omit N0")
     parser.add_argument("--r-model", default="gpt-6-sol")
     parser.add_argument("--i-model", default="gpt-6-luna")
     parser.add_argument("--r-effort", default="high", choices=("low", "medium", "high", "xhigh"))
@@ -740,6 +748,7 @@ def main() -> int:
         parser.error("--resume-out cannot be combined with --out/--force/--preflight/--probe-models")
     if ns.r_seconds < 1 or ns.i_seconds < 1:
         parser.error("timeouts must be positive")
+    ns.active_arms = ARMS[1:] if ns.full_project else ARMS
 
     if ns.resume_out:
         out = ns.resume_out.resolve()
@@ -766,10 +775,10 @@ def main() -> int:
             result, start_index = resume_run(out, ns.case_id, manifest, case, source, cli, ns)
             prepared = True
         else:
-            result.update({"source": str(source), "pinned_base": manifest["pinned_base"], "qualification": str(case / manifest["qualification_file"]), "codex_cli": cli})
+            result.update({"source": str(source), "pinned_base": manifest["pinned_base"], "qualification": str(case / manifest["qualification_file"]), "codex_cli": cli, "projection_mode": "full_project" if ns.full_project else "neutral"})
             prepare_run(out, ns.force)
             prepared = True
-            result["neutral_tree"] = project(manifest, source, out)
+            result["neutral_tree"] = project(manifest, source, out, ns.full_project)
             start_index = 0
 
         ns.forbidden_common = [
@@ -778,7 +787,7 @@ def main() -> int:
             str(manifest.get("hidden_reference_revision") or ""),
             *[str(x) for x in manifest.get("hidden_observation_markers", [])],
         ]
-        for arm in ARMS[start_index:]:
+        for arm in ns.active_arms[start_index:]:
             result["arms"][arm] = run_arm(arm, case, out, cli, ns)
             save_result(out, result, False)
         evaluate(manifest, case, out, result["arms"])
