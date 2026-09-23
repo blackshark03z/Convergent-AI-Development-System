@@ -191,8 +191,13 @@ def resume_run(out: Path, case_id: str, manifest: dict, case: Path, source: Path
         raise RunError("HARNESS_INVALID", "resume result identity/schema mismatch")
     if result.get("run_id") != out.name:
         raise RunError("HARNESS_INVALID", "resume run_id does not match output directory")
-    if result.get("status") != "NEEDS_AUTH":
-        raise RunError("HARNESS_INVALID", f"resume requires NEEDS_AUTH status, got {result.get('status')}")
+    status = result.get("status")
+    resumable_contamination = (
+        status == "HARNESS_INVALID"
+        and str(result.get("error") or "").startswith("hidden/sibling/source contamination detected;")
+    )
+    if status != "NEEDS_AUTH" and not resumable_contamination:
+        raise RunError("HARNESS_INVALID", f"resume requires NEEDS_AUTH or discardable contamination failure, got {status}")
     expected_models = {
         "R": {"model": ns.r_model, "effort": ns.r_effort, "seconds": ns.r_seconds},
         "I": {"model": ns.i_model, "effort": ns.i_effort, "seconds": ns.i_seconds},
@@ -329,14 +334,40 @@ def codex(cli: str, workspace: Path, prompt: str, model: str, effort: str, secon
     trace_text = last + "\n" + stderr_text + "\n" + event_text
     if AUTH_PATTERN.search(trace_text):
         raise RunError("NEEDS_AUTH", f"Codex auth/quota failure; see {output}")
+    intent_parts = [last, stderr_text]
+    for line in event_text.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") in {"error", "turn.failed"}:
+            intent_parts.append(str(event.get("message") or event.get("error") or ""))
+        item = event.get("item")
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type == "agent_message":
+            intent_parts.append(str(item.get("text") or ""))
+        elif item_type == "command_execution":
+            intent_parts.append(str(item.get("command") or ""))
+        elif item_type == "file_change":
+            for change in item.get("changes") or []:
+                if isinstance(change, dict):
+                    intent_parts.append(str(change.get("path") or ""))
+
     normalized_trace = trace_text.lower().replace("/", "\\")
+    normalized_intent = "\n".join(intent_parts).lower().replace("/", "\\")
     leaked = []
     for raw_marker in forbidden_markers:
         marker = str(raw_marker or "").strip()
         if not marker:
             continue
         variants = {marker.lower(), marker.lower().replace("/", "\\")}
-        if any(v and v in normalized_trace for v in variants):
+        path_marker = bool(re.match(r"^[A-Za-z]:[\\/]", marker)) or marker.startswith("\\\\")
+        haystack = normalized_intent if path_marker else normalized_trace
+        if any(v and v in haystack for v in variants):
             leaked.append(marker)
     if leaked:
         (output / "contamination.txt").write_text("\n".join(leaked) + "\n", encoding="utf-8")
