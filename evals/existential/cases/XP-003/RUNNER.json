@@ -1,27 +1,54 @@
 {
-  "schema_version": 1,
-  "case_id": "XP-003",
-  "status": "ORACLE_QUALIFIED",
-  "source_candidates": ["D:\\Youtube\\Story Trans And Audio"],
-  "environment": {"codex_cli_candidates": ["D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe", "codex"]},
-  "pinned_base": "e07820fcc43f1dbfb1de84feb32fee6cfd4329f2",
-  "qualified_neutral_tree": "bf92d466eb896196bb560e554b3a3720f690f2ed",
-  "neutralization": {
-    "files": [".buildos-authority.json", ".buildos-policy.json", "AGENTS.md", "TASK.md", "NEXT_TASK.md"],
-    "directories": [".buildos-legacy", "skills", "templates"]
-  },
-  "qualification_file": "PRECHECK.json",
-  "qualification_status": "ORACLE_QUALIFIED",
-  "qualified_oracle_file": "xp003_oracle.mjs",
-  "oracle_command": ["{python}", "{case_dir}/xp003_oracle_runner.py", "{candidate_dir}"],
-  "oracle_result": {
-    "format": "xp003-browser-v1",
-    "pass_exit": 0,
-    "fail_exit": 1,
-    "status_field": "status",
-    "pass_status": "PASS",
-    "fail_status": "FAIL"
-  },
-  "hidden_reference_revision": "25a09b4b1a76628f67676c4635ff853c385bec7c",
-  "hidden_observation_markers": ["xp003_oracle.mjs", "_xp003_oracle.mjs", "xp003_fixture.py", "xp003_oracle_runner.py"]
+    "schema_version":  1,
+    "case_id":  "XP-003",
+    "status":  "ORACLE_QUALIFIED",
+    "source_candidates":  [
+                              "D:\\Youtube\\Story Trans And Audio"
+                          ],
+    "environment":  {
+                        "codex_cli_candidates":  [
+                                                     "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+                                                     "codex"
+                                                 ]
+                    },
+    "pinned_base":  "e07820fcc43f1dbfb1de84feb32fee6cfd4329f2",
+    "qualified_neutral_tree":  "85a27fb5d98cd3382d8ead7b79a694eb2be8281e",
+    "neutralization":  {
+                           "files":  [
+                                         ".buildos-authority.json",
+                                         ".buildos-policy.json",
+                                         "AGENTS.md",
+                                         "TASK.md",
+                                         "NEXT_TASK.md",
+                                         "docs/ai-build-os/provenance/pre-v1.16/AGENTS.md"
+                                     ],
+                           "directories":  [
+                                               ".buildos-legacy",
+                                               "skills",
+                                               "templates"
+                                           ]
+                       },
+    "qualification_file":  "PRECHECK.json",
+    "qualification_status":  "ORACLE_QUALIFIED",
+    "qualified_oracle_file":  "xp003_oracle.mjs",
+    "oracle_command":  [
+                           "{python}",
+                           "{case_dir}/xp003_oracle_runner.py",
+                           "{candidate_dir}"
+                       ],
+    "oracle_result":  {
+                          "format":  "xp003-browser-v1",
+                          "pass_exit":  0,
+                          "fail_exit":  1,
+                          "status_field":  "status",
+                          "pass_status":  "PASS",
+                          "fail_status":  "FAIL"
+                      },
+    "hidden_reference_revision":  "25a09b4b1a76628f67676c4635ff853c385bec7c",
+    "hidden_observation_markers":  [
+                                       "xp003_oracle.mjs",
+                                       "_xp003_oracle.mjs",
+                                       "xp003_fixture.py",
+                                       "xp003_oracle_runner.py"
+                                   ]
 }
