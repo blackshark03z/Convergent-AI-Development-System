@@ -1,11 +1,15 @@
-# Active Decision Index
+# Decision Index — CADS Research Archive
 
-Read this index during Project Cold-Start and open only records relevant to the
-current Goal. Accepted Decision Records preserve durable rationale and settled
-direction; they do not replace current `TASK.md`, `ARCHITECTURE.md`, Git/source,
-tests or runtime evidence.
+CADS is retired as an active development architecture. For any archival or
+knowledge-extraction work, read DR-0015 first. Older records preserve the history
+that led to the final system and must not be interpreted as instructions to
+bootstrap or extend CADS for new projects.
 
-## Active
+## Active closure decision
+
+- [DR-0015 — Retire CADS as the active development architecture](0015-retire-cads-active-architecture.md)
+
+## Historical accepted decisions before retirement
 
 - [DR-0014 — Require an existential challenge before durable CADS expansion](0014-existential-challenge-before-durable-expansion.md)
 - [DR-0013 — Default to direct execution and add governance only for required runtime properties](0013-direct-execution-and-conditional-governance.md)

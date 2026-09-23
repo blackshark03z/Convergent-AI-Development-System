@@ -1,5 +1,10 @@
 # Convergent AI Development System (CADS)
 
+> **RETIRED / END-OF-LIFE — 2026-09-24**
+> CADS is no longer the active development architecture and must not be used to bootstrap new projects. This repository is preserved as a research archive/reference implementation. See [`DR-0015`](docs/decisions/0015-retire-cads-active-architecture.md) and the [final existential disposition](docs/CADS_EXISTENTIAL_FINAL_DISPOSITION_2026-09-24.md). Successor work uses the smaller AI-native model built primarily from existing Git/CI/provider/runtime primitives, with AI Tech Lead discovery/acceptance framing and task-local external-effect safety retained only where useful.
+
+The material below documents the final historical CADS architecture. It is retained for auditability and knowledge extraction, not as the default workflow for new work.
+
 CADS combines the Convergent AI Development Standard, project-entry/cold-start
 protocols, and a thin guard for explicit consequential boundaries. Normal
 development stays native to Git, editors, tests, CI and the Worker.

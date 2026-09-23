@@ -1,6 +1,8 @@
 # Worker operating map
 
-On first contact, new Tech Lead/Worker session, or stale/unknown context, **MUST**
+> **CADS IS RETIRED / END-OF-LIFE.** Do not bootstrap or adopt CADS for new projects and do not extend its architecture. This file is retained only so archival/research work inside this repository remains interpretable. See `docs/decisions/0015-retire-cads-active-architecture.md`.
+
+For archival work inside this repository only, on first contact, new Tech Lead/Worker session, or stale/unknown context, **MUST**
 run [`skills/core/project-cold-start.md`](skills/core/project-cold-start.md) to
 reconstruct current reality before planning or implementation.
 

@@ -1,5 +1,7 @@
 # Convergent AI Development System (CADS) architecture
 
+> **ARCHIVED / EOL — 2026-09-24.** This file records the final historical CADS architecture. It is not the target architecture for new projects. See `docs/decisions/0015-retire-cads-active-architecture.md`.
+
 ## Ownership
 
 The Owner owns desired product outcome, material product trade-offs,
