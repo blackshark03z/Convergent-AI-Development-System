@@ -1,0 +1,3 @@
+REPAIR: Keep the current Production action visible at 1366×768 and 1366×600, but correct the desktop bar’s placement. At 1366px, its fixed left edge is about 359px while the task canvas begins about 488px, so it can cover the chapter queue and technical details. Keep the bar within the task area and ensure long content remains reachable without obstruction.
+
+Before READY, obtain browser evidence from an isolated fixture for both viewports, including a changed current action, a no-action state, keyboard and pointer reachability, content clearance, and no horizontal overflow. The reported test failures occurred before those checks, so they do not establish acceptance.

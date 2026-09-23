@@ -1,0 +1,12 @@
+Implemented part of the repair in this disposable clone. **The retry identity and dispatch safeguards are in place, but the required lost-response, restart, competing-request, and ambiguous-evidence scenarios were not demonstrated with new local fixtures. This candidate is incomplete and not ready for acceptance.**
+
+Changed files and behavior:
+
+- [app.py](C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CMIN/multiple_automation/app.py): the phone-verification UI now stores a client intent ID in browser `localStorage` and sends it with the request. Publish requests also send an ID keyed to the workspace and review digest.
+- [control_center.py](C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CMIN/multiple_automation/control_center.py) and [store.py](C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CMIN/multiple_automation/store.py): publish requires a client ID; binding rejects a competing ID while an operation is unresolved. Terminal publish retries read the known upload effect’s remote ID.
+- [eligibility_phone.py](C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CMIN/multiple_automation/eligibility_phone.py): a retry will not acquire another phone number when the exact acquisition effect is already beyond `PREPARING`; it returns a reconciliation action.
+- [raw_cdp.py](C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CMIN/multiple_automation/adapters/raw_cdp.py): upload descriptions carry a package digest marker, and Studio readback requires that marker along with title and Private visibility before attributing a video.
+
+Checks run: `python -m compileall -q multiple_automation`; `python -m pytest tests/test_eligibility_phone.py tests/test_publishing.py tests/test_app_channel_feedback.py -q` (23 passed); `git diff --check` (passed).
+
+**Known limits:** I did not add the requested fixture coverage for lost responses, restart recovery, concurrent competing IDs, or ambiguous publish evidence. Phone acquisition has no exact provider reconciliation path here; an uncertain acquisition stays blocked for operator/provider reconciliation. The UI and upload marker behavior were not exercised end to end. No live or external effects were used.

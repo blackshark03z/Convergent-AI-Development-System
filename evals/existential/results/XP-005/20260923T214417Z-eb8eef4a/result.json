@@ -1,0 +1,228 @@
+{
+  "schema": "cads-existential-runner-v1",
+  "case_id": "XP-005",
+  "run_id": "20260923T214417Z-eb8eef4a",
+  "status": "COMPLETE",
+  "models": {
+    "R": {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "seconds": 240
+    },
+    "I": {
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "seconds": 600
+    }
+  },
+  "arms": {
+    "N1": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** A phone or client can recover an uncertain consequential submission under its original task identity. The system reconciles effects already attempted before deciding whether any dispatch is safe.\n\n**Acceptance:**\n\n- A submission has a stable identity bound to its initiating client, target, and intended task. A retry of that task returns or resumes its existing operation and effects, including after transport loss or restart; it does not create another dispatch.\n- Reusing that identity with materially different intent is rejected. An explicitly new task remains distinct from the original. If it could compete with an unresolved effect, it cannot dispatch until that effect is reconciled.\n- Recovery checks each possible partial effect against evidence attributable to the original task. Confirmed effects are recorded and not repeated. Redispatch occurs only with positive evidence of no effect or a proven idempotent retry path.\n- Ambiguous, missing, or conflicting attribution leaves the task in a visible recovery state and blocks consequential redispatch. A result is never assigned by list position, recency, or timing.\n- Fixture tests cover response loss before and after a partial effect, duplicate retries, changed intent, a competing new task, and ambiguous reconciliation. They assert task ownership, effect lineage, and dispatch counts.\n\n**Constraints:** Use local/provider fixtures only. No live consequential submission.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 215,
+      "r_brief": {
+        "seconds": 100.02,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 562924,
+          "cached_input_tokens": 484992,
+          "output_tokens": 3161
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\N1\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 120.01,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 770841,
+          "cached_input_tokens": 716800,
+          "output_tokens": 4705
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\N1\\i_initial"
+      },
+      "r_review": {
+        "seconds": 80.08,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 322744,
+          "cached_input_tokens": 277888,
+          "output_tokens": 2681
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\N1\\r_review"
+      },
+      "i_repair": {
+        "seconds": 80.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 427500,
+          "cached_input_tokens": 383232,
+          "output_tokens": 1753
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\N1\\i_repair"
+      },
+      "r_final": {
+        "seconds": 40.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 90784,
+          "cached_input_tokens": 69120,
+          "output_tokens": 598
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\N1\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "2c892b93ddeb438da1abbec7bbdfc5628ecc6054",
+      "candidate_state": "62bbf4fab3faa65369fb1a79e476e7cc37d0c80f76936b8d91899081eeaa849d",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\N1\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CMIN": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** A consequential submission remains attributable to the initiating client and its intended task when the response is lost or a side effect is only partly confirmed. A retry of that same task resumes its original operation; an intentional new task has distinct lineage.\n\n**Acceptance:**\n- With local fixtures, lose the response after a paid phone acquisition or publish dispatch. Retrying the same client intent, including after restart, returns or reconciles the original operation and effect without a second consequential dispatch.\n- A repeated intent with changed payload, or a competing client intent for the same unresolved target, cannot take over the original operation or dispatch. An explicitly new task receives new lineage only when the prior effect has been reconciled and the new action is authorized.\n- Reconciliation uses evidence tied to the exact operation, target, and effect. If evidence cannot establish whether the prior dispatch took effect, the result remains unresolved and redispatch is blocked. Result order or timing alone never establishes attribution.\n- The client can observe which operation owns the submission, its current outcome, and the safe next action.\n\n**Constraints:** Use local/provider fixtures only. Do not perform live consequential submissions or external effects.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 200,
+      "r_brief": {
+        "seconds": 100.09,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 416784,
+          "cached_input_tokens": 366208,
+          "output_tokens": 3944
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CMIN\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 120.02,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 651010,
+          "cached_input_tokens": 609024,
+          "output_tokens": 4163
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CMIN\\i_initial"
+      },
+      "r_review": {
+        "seconds": 100.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 321213,
+          "cached_input_tokens": 266240,
+          "output_tokens": 3710
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CMIN\\r_review"
+      },
+      "i_repair": {
+        "seconds": 200.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1545829,
+          "cached_input_tokens": 1476608,
+          "output_tokens": 6277
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CMIN\\i_repair"
+      },
+      "r_final": {
+        "seconds": 60.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 126408,
+          "cached_input_tokens": 88064,
+          "output_tokens": 1783
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CMIN\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "5ea1912139d68e00c3ec5512bb9ed705f4fb00af",
+      "candidate_state": "8414731dafdfdc050b789598abb83a8f6f0c18dbc1370ce1b37ef988e90de01c",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CMIN\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CCURRENT": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** A consequential submission remains owned by the initiating phone or client and its original intended task when the response is lost or partial effects may have occurred. Recovery reconciles that submission before deciding whether any further dispatch is safe.\n\n**Acceptance:**\n\n- Persist the initiating client, stable task intent, owning operation, and effect lineage before dispatch. A retry of the same intended task resumes that lineage and cannot create a duplicate consequential effect.\n- A changed intent presented as the same retry is rejected. An intentional new or competing task has distinct identity and cannot take over or bypass an unresolved submission.\n- Reconcile each possibly completed side effect using evidence tied to the exact task and target. Do not attribute an unrelated result by recency or ordering. If evidence cannot establish the outcome or prove a retry safe, retain a visible unresolved state and do not redispatch.\n- Demonstrate these outcomes through the product submission path with local/provider fixtures covering lost responses, partial success, restart, duplicate and competing submissions, and unrelated or reordered provider results. Bind the evidence to the candidate revision. No live consequential submission.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 190,
+      "r_brief": {
+        "seconds": 80.02,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 295780,
+          "cached_input_tokens": 241664,
+          "output_tokens": 2916
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CCURRENT\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 160.02,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1136525,
+          "cached_input_tokens": 1076736,
+          "output_tokens": 5024
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CCURRENT\\i_initial"
+      },
+      "r_review": {
+        "seconds": 80.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 542766,
+          "cached_input_tokens": 479488,
+          "output_tokens": 2257
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CCURRENT\\r_review"
+      },
+      "i_repair": {
+        "seconds": 160.08,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1189003,
+          "cached_input_tokens": 1124352,
+          "output_tokens": 5687
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CCURRENT\\i_repair"
+      },
+      "r_final": {
+        "seconds": 60.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 208572,
+          "cached_input_tokens": 167936,
+          "output_tokens": 1914
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CCURRENT\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "cb251a2a47c334525a31de27b43102727a922cff",
+      "candidate_state": "a774812f7cefba38e039a9242f0f8fbf553d7a51f15f6e4b4df63cef946031cc",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-005\\20260923T214417Z-eb8eef4a\\phases\\CCURRENT\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    }
+  },
+  "source": "C:\\Multiple Automation",
+  "pinned_base": "7683e2617f2aacb962c905bfe1eb67a749252f6d",
+  "qualification": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\cases\\XP-005\\PRECHECK.json",
+  "codex_cli": "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+  "projection_mode": "full_project",
+  "neutral_tree": "63420ba8fa42325c5d3166e4a097b855cd00bbf5",
+  "evidence_package": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\results\\XP-005\\20260923T214417Z-eb8eef4a"
+}

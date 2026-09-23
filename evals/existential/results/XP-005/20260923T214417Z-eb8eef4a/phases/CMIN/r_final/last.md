@@ -1,0 +1,1 @@
+NOT_READY — A successful phone retry returns `ELIGIBLE` without the original operation’s outcome. A changed provider catalog can also give an uncertain acquisition a new target and permit another paid acquisition. The required local retry and ambiguity scenarios remain untested.

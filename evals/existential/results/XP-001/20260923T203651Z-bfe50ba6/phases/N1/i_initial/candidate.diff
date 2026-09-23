@@ -1,0 +1,29 @@
+diff --git a/scripts/browser_production_task_workbench_smoke.mjs b/scripts/browser_production_task_workbench_smoke.mjs
+index 295d6a1..65eced8 100644
+--- a/scripts/browser_production_task_workbench_smoke.mjs
++++ b/scripts/browser_production_task_workbench_smoke.mjs
+@@ -157,7 +157,7 @@ try {
+     const workspace=document.querySelector("#productionTaskWorkspace").getBoundingClientRect();
+     const nested=[...document.querySelectorAll("#productionWorkbench *")].filter(element=>{const style=getComputedStyle(element);return /(auto|scroll)/.test(style.overflowY)&&element.scrollHeight>element.clientHeight+2}).map(element=>element.id||element.className);
+     const primaryButton=document.querySelector("#productionPrimaryAction"),primaryRect=primaryButton.getBoundingClientRect(),contextRect=document.querySelector("#productionTaskContent").getBoundingClientRect();
+-    return {state:document.querySelector("#productionStateCard").dataset.productionState,title:document.querySelector("#productionCurrentStepHeading").textContent,primary,primaryViewport:!primary.includes(primaryButton.textContent.trim())||primaryRect.top>=0&&primaryRect.bottom<=innerHeight,primaryAfterContext:primaryRect.top>=contextRect.bottom,body:document.querySelector("#productionTaskContent").innerText,queue:document.querySelectorAll(".production-queue-item").length,workspaceVisible:workspace.top>=0&&workspace.top<innerHeight,nested};
++    return {state:document.querySelector("#productionStateCard").dataset.productionState,title:document.querySelector("#productionCurrentStepHeading").textContent,primary,primaryViewport:!primary.includes(primaryButton.textContent.trim())||primaryRect.top>=0&&primaryRect.bottom<=innerHeight,primaryAfterContext:getComputedStyle(primaryButton.parentElement).position==="fixed"&&primaryRect.top>=0&&primaryRect.bottom<=innerHeight,body:document.querySelector("#productionTaskContent").innerText,queue:document.querySelectorAll(".production-queue-item").length,workspaceVisible:workspace.top>=0&&workspace.top<innerHeight,nested};
+   })()`);
+ 
+   const journeyA = await show({ rangeState: "CASTING_REVIEW" });
+diff --git a/ui/styles.css b/ui/styles.css
+index 28693e4..379a5a0 100644
+--- a/ui/styles.css
++++ b/ui/styles.css
+@@ -235,6 +235,11 @@ main{max-width:1240px;margin:18px auto;padding:0 20px 50px}.app-view{animation:n
+ /* OWNER_PRODUCT_UX_CONVERGENCE_V1 */
+ .production-primary-actions{position:static;z-index:auto;margin:18px 0 0;padding:0;background:none;justify-content:flex-end}
+ .production-primary-actions .dominant-production-action{width:auto;min-width:230px}
++/* Keep the current Production action reachable while task content scrolls. */
++#productionView{padding-bottom:112px}
++#productionView .production-primary-actions{position:fixed;right:max(22px,calc((100vw - 1380px)/2 + 22px));bottom:max(16px,env(safe-area-inset-bottom));z-index:8;display:flex;align-items:center;justify-content:flex-end;gap:10px;width:min(1380px,calc(100vw - 44px));margin:0;padding:12px 14px;border:1px solid #dce5de;border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 8px 28px rgba(23,59,44,.16);backdrop-filter:blur(10px)}
++#productionView .production-primary-actions .dominant-production-action{min-height:46px}
++@media(max-width:560px){#productionView{padding-bottom:104px}#productionView .production-primary-actions{right:12px;width:calc(100vw - 24px);padding:10px}}
+ .owner-section-heading{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:14px}
+ .owner-section-heading h3,.owner-section-heading p{margin:0}
+ .owner-voice-tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}

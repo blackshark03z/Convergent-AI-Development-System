@@ -1,0 +1,5 @@
+Changed the Production action area in [ui/styles.css](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/N1/ui/styles.css) to stay pinned at the bottom of the viewport while task content scrolls, with extra page padding so content remains reachable. Updated the existing browser check in [browser_production_task_workbench_smoke.mjs](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/N1/scripts/browser_production_task_workbench_smoke.mjs) to check the pinned action’s visibility.
+
+Checks run: seven workbench unit tests passed; the isolated Production workbench browser journey passed; `node --check` passed for both JavaScript files; `git diff --check` passed. An initial broader browser run also hit unrelated fixture failures; the focused workbench browser check passed afterward.
+
+The browser check exercised changing task states and verified their current action labels. I did not verify pointer and keyboard activation or inspect the action at both requested heights (1366×768 and 1366×600), so those acceptance details remain unverified. I cannot claim Product Acceptance.

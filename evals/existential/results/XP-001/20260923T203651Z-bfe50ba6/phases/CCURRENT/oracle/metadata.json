@@ -1,0 +1,6 @@
+{
+  "exit_code": 0,
+  "classification": "PASS",
+  "reason": "exit matches pass protocol",
+  "timed_out": false
+}

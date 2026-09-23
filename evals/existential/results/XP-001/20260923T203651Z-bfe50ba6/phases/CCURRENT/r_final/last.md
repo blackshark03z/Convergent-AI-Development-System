@@ -1,0 +1,1 @@
+NOT_READY — The required isolated-browser checks at 1366×768 and 1366×600 were not completed. The browser tests failed before action visibility, transitions, reachability, and content clearance could be verified.

@@ -1,0 +1,1 @@
+NOT_READY — `/publish` still accepts only a review digest and does not require or bind a client/task identity. Identity is optional at content seal, and a completed task cannot return its historical result through the public path. The required public-path recovery cases are also untested.

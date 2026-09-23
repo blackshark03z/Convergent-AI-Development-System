@@ -1,0 +1,262 @@
+diff --git a/multiple_automation/adapters/raw_cdp.py b/multiple_automation/adapters/raw_cdp.py
+index 2b12e7f..70255f9 100644
+--- a/multiple_automation/adapters/raw_cdp.py
++++ b/multiple_automation/adapters/raw_cdp.py
+@@ -545,10 +545,12 @@ class RawCDPPublishAdapter:
+         title = str(package.metadata.get("title") or "").strip()
+         if not title:
+             return PublishObservation("UNCERTAIN", evidence={"reason": "sealed title missing"})
++        marker = f"[MA-PACKAGE:{package.package_digest}]"
+         result = self.runner.run(
+             "PUBLISH_OBSERVE",
+             CHANNEL_ID=remote_channel_id,
+             VIDEO_TITLE=title,
++            PACKAGE_MARKER=marker,
+         )
+         state = str(result.get("state") or "UNCERTAIN")
+         return PublishObservation(
+@@ -573,7 +575,8 @@ class RawCDPPublishAdapter:
+             CHANNEL_ID=remote_channel_id,
+             ASSET_PATH=package.asset_path,
+             VIDEO_TITLE=str(package.metadata.get("title") or ""),
+-            VIDEO_DESCRIPTION=str(package.metadata.get("description") or ""),
++            VIDEO_DESCRIPTION=(str(package.metadata.get("description") or "").rstrip()
++                              + f"\n\n[MA-PACKAGE:{package.package_digest}]"),
+             MADE_FOR_KIDS="1" if bool(package.metadata.get("made_for_kids")) else "0",
+         )
+         if result.get("state") != "PRIVATE_UPLOAD_DISPATCHED":
+@@ -639,6 +642,7 @@ class HybridPublishAdapter(RawCDPPublishAdapter):
+         if not title:
+             return PublishObservation("UNCERTAIN", evidence={"reason": "sealed title missing"})
+         normalized_title = " ".join(title.split())
++        package_marker = f"[MA-PACKAGE:{package.package_digest}]"
+         async with async_playwright() as playwright:
+             browser = await playwright.chromium.connect_over_cdp(
+                 f"http://127.0.0.1:{self.runner.cdp_port}"
+@@ -676,7 +680,7 @@ class HybridPublishAdapter(RawCDPPublishAdapter):
+                         if not await row.count():
+                             continue
+                         context = " ".join(((await row.first.inner_text()) or "").split())
+-                        if normalized_title in context:
++                        if normalized_title in context and package_marker in context:
+                             candidates[match.group(1)] = context
+                     if candidates:
+                         break
+@@ -701,7 +705,7 @@ class HybridPublishAdapter(RawCDPPublishAdapter):
+                             "candidate_count": len(candidates),
+                             "link_count": link_count,
+                             "surface_ready": surface_ready,
+-                            "reason": "multiple_title_matches",
++                            "reason": "multiple_exact_package_matches",
+                             "source": "playwright-studio-content-readback",
+                         },
+                     )
+diff --git a/multiple_automation/app.py b/multiple_automation/app.py
+index 45e5d4a..2185961 100644
+--- a/multiple_automation/app.py
++++ b/multiple_automation/app.py
+@@ -62,8 +62,8 @@ async function inspectChannel(){
+  }catch(e){channelActions.set(workspaceId,{pending:false,error:true,status:'REQUEST_FAILED',next_action:e.message||'Chưa nhận được kết quả. Kiểm tra trạng thái Workspace trước khi tiếp tục.'});renderSelectedWorkspace()}
+ }
+ async function selectChannelPack(){let packs=[];try{packs=await api('/api/channel-packs')}catch(e){toast(e.message,true);return}const current=workspaces.find(w=>w.workspace_id===selected)?.channel_pack?.pack_id||'';const options=`<option value="">-- Chọn Channel Pack --</option>`+packs.map(p=>`<option value="${esc(p.pack_id)}" ${p.pack_id===current?'selected':''}>${esc(p.channel_name)} · ${esc(p.pack_id)}</option>`).join('');openModal('Chọn Channel Pack',`<div class="field"><label>Desired Channel Pack</label><select id="selected_channel_pack">${options}</select></div><div class="note">Pack được lưu bằng pack_id trong Workspace. Luồng tạo channel sẽ fail closed nếu chưa chọn pack.</div>`,async()=>{try{const pack=f('selected_channel_pack');if(!pack)throw Error('Hãy chọn Channel Pack');await api(`/api/workspaces/${selected}/channel-pack/select`,'POST',{pack_id:pack});closeModal();await refresh(selected);toast('Đã chọn Channel Pack')}catch(e){toast(e.message,true)}})}
+-function verifyPhoneEligibility(){openModal('Xác minh eligibility bằng số thuê',`<div class="note">Phí ViOTP tối đa 3.000đ mỗi lần thuê, tổng tối đa 6.000đ. Hệ thống chỉ dùng luồng đã giới hạn tối đa 2 lease tuần tự, không xoay số để bypass Google, và sẽ dừng khi gặp security challenge.</div>`,async()=>{try{await api(`/api/workspaces/${selected}/eligibility/verify`,'POST',{});closeModal();await refresh(selected);toast('Đã chạy bước xác minh có chi phí')}catch(e){toast(e.message,true)}})}
+-function openPublishReview(r){const shortSha=String(r.asset_sha256||'').slice(0,16),shortThumbSha=String(r.thumbnail_sha256||'').slice(0,16),shortDigest=String(r.package_digest||'').slice(0,16);openModal('Review publish intent',`<div class="kv"><div class="k">Exact channel ID</div><div class="v">${esc(r.remote_channel_id)}</div><div class="k">Title</div><div class="v">${esc(r.title)}</div><div class="k">Video</div><div class="v">${esc(r.asset_name)}</div><div class="k">Video SHA-256</div><div class="v">${esc(shortSha)}…</div><div class="k">Thumbnail</div><div class="v">${esc(r.thumbnail_name)}</div><div class="k">Thumbnail SHA-256</div><div class="v">${esc(shortThumbSha)}…</div><div class="k">Package digest</div><div class="v">${esc(shortDigest)}…</div><div class="k">Visibility</div><div class="v">${esc(r.visibility)}</div><div class="k">Made for kids</div><div class="v">${r.made_for_kids?'Yes':'No'}</div></div><div class="note">Approval is bound to this exact sealed video + thumbnail package and exact channel. If any identity changes, the backend rejects the stale approval before upload.</div>`,async()=>{try{const out=await api(`/api/workspaces/${selected}/publish`,'POST',{review_digest:r.review_digest});closeModal();await refresh(selected);toast(out.result?.status==='SUCCEEDED'?'Private video + thumbnail reconciled successfully':'Publish requires reconciliation')}catch(e){toast(e.message,true)}},'Approve & upload Private')}
++function verifyPhoneEligibility(){const intentKey='ma:phone:'+selected;let intentId=localStorage.getItem(intentKey);if(!intentId){intentId=crypto.randomUUID();localStorage.setItem(intentKey,intentId)}openModal('Xác minh eligibility bằng số thuê',`<div class="note">Phí ViOTP tối đa 3.000đ mỗi lần thuê, tổng tối đa 6.000đ. Hệ thống chỉ dùng luồng đã giới hạn tối đa 2 lease tuần tự, không xoay số để bypass Google, và sẽ dừng khi gặp security challenge.</div>`,async()=>{try{await api(`/api/workspaces/${selected}/eligibility/verify`,'POST',{client_intent_id:intentId});closeModal();await refresh(selected);toast('Đã chạy bước xác minh có chi phí')}catch(e){toast(e.message,true)}})}
++function openPublishReview(r){const intentKey='ma:publish:'+selected+':'+r.review_digest;let intentId=localStorage.getItem(intentKey);if(!intentId){intentId=crypto.randomUUID();localStorage.setItem(intentKey,intentId)}const shortSha=String(r.asset_sha256||'').slice(0,16),shortThumbSha=String(r.thumbnail_sha256||'').slice(0,16),shortDigest=String(r.package_digest||'').slice(0,16);openModal('Review publish intent',`<div class="kv"><div class="k">Exact channel ID</div><div class="v">${esc(r.remote_channel_id)}</div><div class="k">Title</div><div class="v">${esc(r.title)}</div><div class="k">Video</div><div class="v">${esc(r.asset_name)}</div><div class="k">Video SHA-256</div><div class="v">${esc(shortSha)}…</div><div class="k">Thumbnail</div><div class="v">${esc(r.thumbnail_name)}</div><div class="k">Thumbnail SHA-256</div><div class="v">${esc(shortThumbSha)}…</div><div class="k">Package digest</div><div class="v">${esc(shortDigest)}…</div><div class="k">Visibility</div><div class="v">${esc(r.visibility)}</div><div class="k">Made for kids</div><div class="v">${r.made_for_kids?'Yes':'No'}</div></div><div class="note">Approval is bound to this exact sealed video + thumbnail package and exact channel. If any identity changes, the backend rejects the stale approval before upload.</div>`,async()=>{try{const out=await api(`/api/workspaces/${selected}/publish`,'POST',{review_digest:r.review_digest,client_intent_id:intentId});closeModal();await refresh(selected);toast(out.result?.status==='SUCCEEDED'?'Private video + thumbnail reconciled successfully':'Publish requires reconciliation')}catch(e){toast(e.message,true)}},'Approve & upload Private')}
+ function configureContentRoot(){const current=workspaces.find(w=>w.workspace_id===selected)?.content_root||'';openModal('Cấu hình ContentRoot',`<div class="field"><label>Thư mục gốc chứa các ContentPackage</label><input id="content_root" value="${esc(current)}" placeholder="D:\\Video\\content_packages"></div><div class="note">Chỉ các thư mục con trực tiếp có package.json/metadata.json mới được discover. Đổi ContentRoot bị khóa khi Workspace đang có operation.</div>`,async()=>{try{await api(`/api/workspaces/${selected}/content-root`,'POST',{content_root:f('content_root')});closeModal();await refresh(selected);toast('Đã lưu ContentRoot')}catch(e){toast(e.message,true)}})}
+ async function selectContentPackage(){try{const out=await api(`/api/workspaces/${selected}/content/packages`);const packages=out.packages||[],valid=packages.filter(p=>p.valid),invalid=packages.filter(p=>!p.valid);if(!packages.length){toast('Không tìm thấy ContentPackage trong ContentRoot',true);return}const options=valid.map(p=>`<option value="${esc(p.package_ref)}">${esc(p.title||p.package_id||p.package_ref)} · ${esc(p.package_ref)}</option>`).join('');const invalidHtml=invalid.length?`<div class="note"><strong>Package chưa hợp lệ:</strong>${invalid.map(p=>`<div>${esc(p.package_ref)} — ${esc((p.errors||[]).join('; '))}</div>`).join('')}</div>`:'';openModal('Chọn ContentPackage',`${valid.length?`<div class="field"><label>Package hợp lệ</label><select id="package_ref">${options}</select></div>`:'<div class="note">Không có package hợp lệ để seal.</div>'}${invalidHtml}<div class="note">Tool sẽ revalidate và seal lại exact video + thumbnail từ Workspace ContentRoot trước khi mở Publish Review.</div>`,async()=>{try{if(!valid.length)throw Error('Không có ContentPackage hợp lệ');const out2=await api(`/api/workspaces/${selected}/content/seal`,'POST',{package_ref:f('package_ref')});closeModal();await refresh(selected);openPublishReview(out2.publish_review)}catch(e){toast(e.message,true)}},'Seal & review')}catch(e){toast(e.message,true)}}
+ async function reviewPublish(){try{const out=await api(`/api/workspaces/${selected}/publish/review`,'POST',{});openPublishReview(out.publish_review)}catch(e){toast(e.message,true)}}
+@@ -201,7 +201,8 @@ class ControlCenterHandler(BaseHTTPRequestHandler):
+                 ),
+                 "channel-pack": lambda: self.controller.apply_channel_pack(workspace_id, str(body.get("pack_path") or "")),
+                 "eligibility": lambda: self.controller.inspect_eligibility(workspace_id),
+-                "eligibility/verify": lambda: self.controller.ensure_eligibility(workspace_id),
++                "eligibility/verify": lambda: self.controller.ensure_eligibility(
++                    workspace_id, str(body.get("client_intent_id") or "") or None),
+                 "content-root": lambda: self.controller.set_content_root(
+                     workspace_id,
+                     str(body.get("content_root") or ""),
+@@ -214,6 +215,7 @@ class ControlCenterHandler(BaseHTTPRequestHandler):
+                 "publish": lambda: self.controller.publish_private(
+                     workspace_id,
+                     str(body.get("review_digest") or ""),
++                    str(body.get("client_intent_id") or "") or None,
+                 ),
+             }
+             if action not in routes:
+diff --git a/multiple_automation/control_center.py b/multiple_automation/control_center.py
+index d0ce43c..bd5fdc5 100644
+--- a/multiple_automation/control_center.py
++++ b/multiple_automation/control_center.py
+@@ -633,8 +633,10 @@ class ProductController:
+         result = self._eligibility_service(workspace_id).inspect_required_eligibility(workspace_id)
+         return {"result": asdict(result), "workspace": self.workspace_overview(workspace_id)}
+ 
+-    def ensure_eligibility(self, workspace_id: str) -> dict[str, Any]:
+-        result = self._eligibility_service(workspace_id).ensure_required_eligibility(workspace_id)
++    def ensure_eligibility(self, workspace_id: str, client_intent_id: str | None = None) -> dict[str, Any]:
++        if not client_intent_id:
++            raise InvalidTransitionError("client_intent_id is required for paid phone verification submissions")
++        result = self._eligibility_service(workspace_id).ensure_required_eligibility(workspace_id, client_intent_id)
+         return {"result": asdict(result), "workspace": self.workspace_overview(workspace_id)}
+ 
+     def seal_content(self, workspace_id: str, package_path: str) -> dict[str, Any]:
+@@ -694,8 +696,20 @@ class ProductController:
+         review = PublishReviewService(self.store).review(workspace_id)
+         return {"publish_review": asdict(review), "workspace": self.workspace_overview(workspace_id)}
+ 
+-    def publish_private(self, workspace_id: str, review_digest: str) -> dict[str, Any]:
++    def publish_private(self, workspace_id: str, review_digest: str, client_intent_id: str | None = None) -> dict[str, Any]:
++        if not client_intent_id:
++            raise InvalidTransitionError("client_intent_id is required for publish submissions")
++        intent_payload = {"action": "publish_private", "review_digest": review_digest}
++        prior = self.store.get_client_intent_operation(workspace_id, client_intent_id or "", intent_payload)
++        if prior is not None and prior.terminal_at is not None:
++            effects = self.store.list_effects(prior.operation_id)
++            remote_id = next((e.remote_id for e in effects if e.effect_type == "youtube.video.upload" and e.remote_id), None)
++            return {"result": {"status": prior.state, "operation_id": prior.operation_id,
++                               "workspace_id": workspace_id, "remote_video_id": remote_id,
++                               "next_action": "review current Workspace state"},
++                    "workspace": self.workspace_overview(workspace_id)}
+         review = PublishReviewService(self.store).approve(workspace_id, review_digest)
++        self.store.bind_client_intent(workspace_id, client_intent_id, intent_payload, review.operation_id)
+         runner = self._runner_for_workspace(workspace_id)
+         result = PrivatePublishService(self.store, HybridPublishAdapter(runner)).publish(
+             workspace_id,
+diff --git a/multiple_automation/eligibility_phone.py b/multiple_automation/eligibility_phone.py
+index d137d20..f6827c9 100644
+--- a/multiple_automation/eligibility_phone.py
++++ b/multiple_automation/eligibility_phone.py
+@@ -119,7 +119,7 @@ class EligibilityPhoneService:
+             "attach and seal the ContentPackage",
+         )
+ 
+-    def ensure_required_eligibility(self, workspace_id: str) -> EligibilityResult:
++    def ensure_required_eligibility(self, workspace_id: str, client_intent_id: str | None = None) -> EligibilityResult:
+         inspected = self.inspect_required_eligibility(workspace_id)
+         if inspected.status != "PHONE_VERIFICATION_REQUIRED":
+             return inspected
+@@ -152,6 +152,16 @@ class EligibilityPhoneService:
+             if operation.intent.get("remote_channel_id") != remote_channel_id:
+                 raise InvalidTransitionError("verification resume changed exact channel identity")
+ 
++        if client_intent_id:
++            client_payload = {"action": "phone_verification", "remote_channel_id": remote_channel_id,
++                              "provider": "VIOTP", "max_allocated_leases": MAX_ALLOCATED_LEASES,
++                              "max_unit_price_vnd": 3000, "max_total_price_vnd": 6000,
++                              "network_preference": list(NETWORK_PREFERENCE)}
++            prior_intent = self.store.get_client_intent_operation(workspace_id, client_intent_id, client_payload)
++            if prior_intent and prior_intent.operation_id != operation.operation_id:
++                raise InvalidTransitionError("client intent belongs to another verification operation")
++            self.store.bind_client_intent(workspace_id, client_intent_id, client_payload, operation.operation_id)
++
+         leases = self.store.list_phone_leases(operation.operation_id)
+         if not leases:
+             allocation = self._allocate_next(workspace_id, operation.operation_id, rental_index=1)
+@@ -199,10 +209,10 @@ class EligibilityPhoneService:
+             )
+         if otp.state is ProviderOperationState.EXPIRED:
+             self.store.update_phone_lease_state(str(current["lease_ref"]), "EXPIRED")
+-            return self.ensure_required_eligibility(workspace_id)
++            return self.ensure_required_eligibility(workspace_id, client_intent_id)
+         if otp.state is not ProviderOperationState.OTP_RECEIVED or not otp.code:
+             self.store.update_phone_lease_state(str(current["lease_ref"]), "OTP_TIMEOUT")
+-            return self.ensure_required_eligibility(workspace_id)
++            return self.ensure_required_eligibility(workspace_id, client_intent_id)
+ 
+         otp_result = self._ensure_otp_submitted(
+             workspace_id,
+@@ -264,7 +274,13 @@ class EligibilityPhoneService:
+                 f"refresh provider network catalog; {network_name} is unavailable",
+             )
+         target = f"viotp:youtube:{service.provider_service_id}:{network.name}:lease-{rental_index}"
+-        effect = self.store.prepare_effect(
++        effect = next((item for item in self.store.list_effects(operation_id)
++                       if item.effect_type == "phone.number.acquire" and item.target_identity == target), None)
++        if effect is not None and effect.state != EffectState.PREPARING.value:
++            return EligibilityResult("RECONCILE_REQUIRED", workspace_id, operation_id,
++                "reconcile the exact provider acquisition effect; do not acquire another number")
++        if effect is None:
++            effect = self.store.prepare_effect(
+             operation_id,
+             "phone.number.acquire",
+             target,
+@@ -276,7 +292,7 @@ class EligibilityPhoneService:
+                 "rental_index": rental_index,
+                 "quoted_price_vnd": service.price,
+             },
+-        )
++            )
+         self.store.mark_effect_dispatched(effect.effect_id)
+         result = self.provider.acquire(service, network.name)
+         if result.state == "PRICE_LIMIT":
+diff --git a/multiple_automation/store.py b/multiple_automation/store.py
+index e0df09f..9f48ec6 100644
+--- a/multiple_automation/store.py
++++ b/multiple_automation/store.py
+@@ -167,6 +167,15 @@ class SQLiteProductStore:
+                     terminal_at TEXT
+                 );
+ 
++                CREATE TABLE IF NOT EXISTS client_operation_intents (
++                    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
++                    client_intent_id TEXT NOT NULL,
++                    payload_digest TEXT NOT NULL,
++                    operation_id TEXT NOT NULL REFERENCES operations(operation_id),
++                    created_at TEXT NOT NULL,
++                    PRIMARY KEY(workspace_id, client_intent_id)
++                );
++
+                 CREATE TABLE IF NOT EXISTS workspace_active_operations (
+                     workspace_id TEXT PRIMARY KEY REFERENCES workspaces(workspace_id),
+                     operation_id TEXT NOT NULL UNIQUE REFERENCES operations(operation_id)
+@@ -805,6 +814,49 @@ class SQLiteProductStore:
+             )
+         return self.get_operation(operation_id)
+ 
++    def bind_client_intent(self, workspace_id: str, client_intent_id: str, payload: dict[str, Any], operation_id: str) -> OperationRecord:
++        """Durably bind one client retry key and exact payload to its owning operation."""
++        key = str(client_intent_id or "").strip()
++        if not key or len(key) > 200:
++            raise ValueError("client_intent_id is required and must be at most 200 characters")
++        digest = intent_digest(payload)
++        now = _now()
++        with self._transaction() as db:
++            operation = self._require_row(db, "operations", "operation_id", operation_id)
++            if operation["workspace_id"] != workspace_id:
++                raise InvalidTransitionError("client intent operation belongs to another Workspace")
++            existing = db.execute(
++                "SELECT payload_digest, operation_id FROM client_operation_intents WHERE workspace_id=? AND client_intent_id=?",
++                (workspace_id, key),
++            ).fetchone()
++            if existing:
++                if existing["payload_digest"] != digest:
++                    raise IdentityConflictError("client intent was already bound to a different payload")
++                if existing["operation_id"] != operation_id:
++                    raise IdentityConflictError("client intent cannot take over another operation")
++            else:
++                owner = db.execute("""SELECT i.client_intent_id FROM client_operation_intents i
++                    JOIN operations o ON o.operation_id=i.operation_id
++                    WHERE i.workspace_id=? AND o.terminal_at IS NULL LIMIT 1""", (workspace_id,)).fetchone()
++                if owner and (owner["client_intent_id"] != key or operation["terminal_at"] is not None):
++                    raise IdentityConflictError("another client intent owns the unresolved Workspace operation")
++                db.execute("INSERT INTO client_operation_intents VALUES (?, ?, ?, ?, ?)",
++                           (workspace_id, key, digest, operation_id, now))
++        return self.get_operation(operation_id)
++
++    def get_client_intent_operation(self, workspace_id: str, client_intent_id: str, payload: dict[str, Any]) -> OperationRecord | None:
++        key = str(client_intent_id or "").strip()
++        if not key:
++            return None
++        with self._reader() as db:
++            row = db.execute("SELECT payload_digest, operation_id FROM client_operation_intents WHERE workspace_id=? AND client_intent_id=?",
++                             (workspace_id, key)).fetchone()
++        if row is None:
++            return None
++        if row["payload_digest"] != intent_digest(payload):
++            raise IdentityConflictError("client intent was already bound to a different payload")
++        return self.get_operation(str(row["operation_id"]))
++
+     def prepare_effect(
+         self,
+         operation_id: str,

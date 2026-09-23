@@ -1,0 +1,5 @@
+**Implemented the layout repair** in [ui/styles.css](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/CCURRENT/ui/styles.css): the fixed Production action bar now aligns with the task card’s left and right edges, keeping it clear of the chapter queue and technical details.
+
+**Checks run:** `git diff --check` passed. Seven Production task workbench unit tests passed. Two existing Production browser tests failed before reaching viewport checks: one hit the missing narrator option reported previously; the other failed its context assertion and showed corrupted browser text.
+
+I did **not** obtain browser evidence at 1366×768 or 1366×600 for action transitions, no-action states, keyboard or pointer reachability, content clearance, or horizontal overflow. Those remain unverified, so this is not READY evidence. No provider calls or canonical runtime were used.

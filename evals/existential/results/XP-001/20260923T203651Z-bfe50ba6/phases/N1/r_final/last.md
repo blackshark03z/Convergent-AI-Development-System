@@ -1,0 +1,1 @@
+NOT_READY — The repaired browser checks were not run. The “no scope” case only toggles a CSS class on a selected-scope fixture, so the actual no-scope action remains unverified.

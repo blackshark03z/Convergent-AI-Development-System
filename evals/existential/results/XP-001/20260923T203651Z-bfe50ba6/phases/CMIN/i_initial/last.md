@@ -1,0 +1,7 @@
+Implemented the Production layout correction in [ui/index.html](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/CMIN/ui/index.html), [ui/styles.css](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/CMIN/ui/styles.css), and [browser_production_task_workbench_smoke.mjs](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/CMIN/scripts/browser_production_task_workbench_smoke.mjs).
+
+The current task’s primary action now appears before its variable review content and stays fixed in view on desktop, with space reserved below it. Existing button identity and workflow gates are preserved; compact layouts keep the action in the normal flow. The browser fixture covers a long voice task at 1366×768 and 1366×600.
+
+**Checks:** the Production browser workflow passed; 34 task workbench and projection tests passed; `git diff --check` passed.
+
+The browser fixture confirmed the action remained visible and unobscured at page top and while scrolling, with no horizontal overflow, and its click dispatched for the current `ASSIGN_VOICE` task. The constrained fixture stubs the action handler, so it does not perform a backend mutation. No provider, canonical runtime, PREPARE, START_RENDER, or Human QA action was invoked. This is implementation evidence, not Product Acceptance.

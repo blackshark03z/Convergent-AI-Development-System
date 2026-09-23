@@ -1,0 +1,5 @@
+Implemented the Production desktop layout change in [ui/styles.css](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-001/20260923T203651Z-bfe50ba6/arms/CCURRENT/ui/styles.css): the current task’s action bar stays fixed at the bottom of desktop viewports, and the task card reserves space so its final content can scroll clear of it. The existing task still determines which action appears; this change adds no action to states without one. First-use and smaller-screen layouts retain their existing behavior.
+
+**Checks run:** `git diff --check` passed. The Production browser test suite ran, but both tests failed before completing the requested viewport checks: one reported a missing narrator option; the other failed its primary-action/context assertion and showed corrupted text in the browser output.
+
+**Evidence and limitations:** No rendered evidence was obtained at 1366×768 or 1366×600, and keyboard/pointer reachability, task transitions, no-action states, and content clearance remain unverified. No provider calls or canonical runtime were used. No material product assumptions were needed.

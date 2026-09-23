@@ -1,0 +1,5 @@
+Implemented exact-task reconciliation in [publishing.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CCURRENT/multiple_automation/publishing.py) and added unrelated-result coverage in [test_publishing.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-005/20260923T214417Z-eb8eef4a/arms/CCURRENT/tests/test_publishing.py).
+
+A provider match now counts only when it identifies the sealed package digest and exact channel/package target. Uncertain or mismatched observations leave the effect visibly unresolved and block dispatch. The local fixture suite passed: `14 passed`; `git diff --check` passed. The tested candidate is based on revision `191739c0efbf9f3086043fa9bcae71bbf1ee3f1f`.
+
+The added fixture covers an unrelated, reordered provider result. Existing publishing fixtures cover success, preexisting matches, dispatch loss/restart, and thumbnail recovery. I did not verify initiating-client identity persistence, competing-client submissions, or a live provider’s ability to return exact task evidence; no live submission was attempted. I do not claim Product Acceptance.

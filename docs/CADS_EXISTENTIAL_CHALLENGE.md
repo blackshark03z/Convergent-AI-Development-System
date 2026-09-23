@@ -169,13 +169,19 @@ changes.
 ## Current application
 
 The independent A-F round completed on 2026-09-23 and produced a provisional
-**SHRINK — benchmark-gated** synthesis. That is research evidence, not an
+**SHRINK — benchmark-gated** synthesis. Controlled P1 then materially
+differentiated the arms on XP-001, which triggered the two predeclared
+full-project confirmations. Both confirmations were non-discriminating, so the
+frozen exit rule resolves the existential disposition as **INCONCLUSIVE** on
+2026-09-24. The provisional SHRINK result remains research history, not an
 architecture promotion.
 
 Canonical research artifacts:
 
 - `docs/CADS_EXISTENTIAL_CHALLENGE_SYNTHESIS_2026-09-23.md`
 - `docs/CADS_EXISTENTIAL_PILOT_2026-09.md`
+- `docs/CADS_EXISTENTIAL_P1_RESULTS_2026-09-24.md`
+- `docs/CADS_EXISTENTIAL_FINAL_DISPOSITION_2026-09-24.md`
 - `evals/existential/cads_v1.json`
 
 The pilot distinguishes:

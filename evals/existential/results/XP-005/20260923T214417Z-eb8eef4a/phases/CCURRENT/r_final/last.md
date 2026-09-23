@@ -1,0 +1,1 @@
+NOT_READY — The production publish adapter observes videos by title and supplies neither the task digest nor the exact target identity required for reconciliation. The fixtures synthesize those fields, so the evidence does not show that the product path can attribute a completed upload or thumbnail to the initiating task.

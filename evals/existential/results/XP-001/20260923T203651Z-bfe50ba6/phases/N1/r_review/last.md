@@ -1,0 +1,3 @@
+REPAIR: The no-scope state uses `production-first-use`, whose later CSS rule sets the action area to `position: static` and overrides the new fixed rule. Make the primary action visible at page scroll position 0 in that state while keeping the change local to Production.
+
+Extend the isolated browser check at 1366×768 and 1366×600 for both no scope and a selected scope with content taller than the viewport. Assert that the current action is fully visible, unobscured, pointer and keyboard operable, and still invokes its existing behavior after a task change. Also verify that the task content remains reachable and there is no horizontal overflow. The current check does not assert its `primaryViewport` result or exercise activation.

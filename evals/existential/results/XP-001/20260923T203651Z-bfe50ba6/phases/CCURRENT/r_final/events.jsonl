@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a0d047-745c-7c30-adb2-d4af663b1cca"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"NOT_READY — The required isolated-browser checks at 1366×768 and 1366×600 were not completed. The browser tests failed before action visibility, transitions, reachability, and content clearance could be verified."}}
+{"type":"turn.completed","usage":{"input_tokens":19366,"cached_input_tokens":12416,"cache_write_input_tokens":0,"output_tokens":433,"reasoning_output_tokens":383}}

@@ -1,0 +1,1 @@
+NOT_READY — The fixed Production action bar overlaps the global toast at the bottom right and sits above it, obscuring success or error feedback. The reported browser check did not cover that state, so existing Production feedback is not preserved.

@@ -1,0 +1,5 @@
+REPAIR: The candidate is not ready. The production publish adapter observes videos by title and never supplies the task and target identities that the new match check requires; the fixture supplies those identities itself. The change also does not persist the initiating client or distinguish its retry from a competing submission.
+
+Carry the initiating client, stable task intent, and owning operation through the product submission path before dispatch. Resume that lineage only for the same client and intent; reject changed intent presented as a retry, and keep a competing task from taking over an unresolved effect. Reconcile upload and any partial thumbnail effect using provider evidence tied to the exact task and target. Where the provider cannot establish that attribution or prove dispatch safe, show the unresolved state and block redispatch.
+
+Demonstrate these outcomes through the product path with local/provider fixtures for lost responses, restart, duplicate and competing submissions, partial effects, and unrelated or reordered results. Bind the evidence to the repaired candidate revision. Do not make a live consequential submission.
