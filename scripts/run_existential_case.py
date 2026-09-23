@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "evals" / "existential" / "cases"
 ARMS = ("N0", "N1", "CMIN", "CCURRENT")
 AUTH_PATTERN = re.compile(r"(quota exceeded|rate.limit|usage.limit|insufficient.credits|authentication failed|unauthorized|not logged in|sign in to codex|login required|http (401|429))", re.I)
-OWNER_PATTERN = re.compile(r"OWNER_INPUT_REQUIRED\s*:\s*yes|NEEDS_OWNER|MATERIAL_OWNER_AMBIGUITY", re.I)
+OWNER_PATTERN = re.compile(r"(?mi)^\s*(?:OWNER_INPUT_REQUIRED\s*:\s*yes|NEEDS_OWNER\s*:|MATERIAL_OWNER_AMBIGUITY\s*:)")
 MARKER = ".cads-existential-run"
 
 class RunError(Exception):
@@ -590,7 +590,7 @@ def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -
     if "IMPLEMENTATION_BRIEF" not in brief:
         raise RunError("HARNESS_INVALID", f"R omitted IMPLEMENTATION_BRIEF: {arm}")
     common = (case / "prompts" / "I_COMMON.txt").read_text(encoding="utf-8")
-    i_prompt = f"{common}\n\nIMPLEMENTATION_BRIEF\n{brief}\n\nWork only inside this disposable clone. Do not call external or production services, paid providers, or mutate any path outside this clone. Do not inspect benchmark harness, oracle, reference, or sibling arms. Report NEEDS_OWNER if material Owner intent or authority is missing.\n"
+    i_prompt = f"{common}\n\nIMPLEMENTATION_BRIEF\n{brief}\n\nWork only inside this disposable clone. Do not call external or production services, paid providers, or mutate any path outside this clone. Do not inspect benchmark harness, oracle, reference, or sibling arms. If and only if material Owner intent or authority is missing, write a line exactly `NEEDS_OWNER: <specific missing decision or authority>`. Do not use NEEDS_OWNER for implementation difficulty, failed tests, or an incomplete candidate.\n"
     initial = codex(cli, workspace, i_prompt, ns.i_model, ns.i_effort, ns.i_seconds, phases / "i_initial", forbidden_markers)
     if OWNER_PATTERN.search(initial["last"]):
         raise RunError("NEEDS_OWNER", f"I found material Owner ambiguity in {arm}; see {initial['output']}")
