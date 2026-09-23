@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "benchmark_case": "XP-001",
+  "batch_id": "2026-09-23-gpt6-luna-high-codex-cli-quota-invalid",
+  "status": "INVALID_HARNESS_QUOTA",
+  "eligible_for_comparison": false,
+  "model": "gpt-6-luna",
+  "reasoning_effort": "high",
+  "harness": "Codex CLI",
+  "harness_version": "0.155.0-alpha.9.2",
+  "execution": "DIRECT",
+  "neutral_projection_commit": "c0f5c0309f07e89c8712eb07bbfd3f9ca219b3a7",
+  "frozen_case_commit": "a4e31f9eb0f1d1fc001b8b062853ccef631a7829",
+  "frozen_prompt_commit": "5e9e453b03ef07a5374dc3c008aece959b82f4a5",
+  "heldout_oracle_sha256": "f1d93b476c35c6e4a25919d15eb66961940114a52b1639736b54ab5fd82c2611",
+  "failure_classification": "HARNESS_ACCOUNT_USAGE_LIMIT",
+  "shared_failure_message": "You've hit your usage limit.",
+  "owner_attention_during_candidate_runs_minutes": 0,
+  "arms": {
+    "N0": {
+      "job_id": "job-18d7cbb2b26f8878-b0",
+      "process_duration_ms": 139364,
+      "exit_code": 1,
+      "candidate_completed": false,
+      "partial_mutation": true,
+      "partial_diff": "ui/styles.css: 6 insertions",
+      "event_log_sha256": "6b2257e143429d97f6bd56405336a8edfa5e54599dcbe7a624c6ca5305409137",
+      "scoring": "INVALID",
+      "note": "The model inspected the repository and began a CSS change, then the provider/account usage limit terminated the turn before verification or final response."
+    },
+    "N1": {
+      "job_id": "job-18d7cbb681375f20-b1",
+      "process_duration_ms": 4550,
+      "exit_code": 1,
+      "candidate_completed": false,
+      "partial_mutation": false,
+      "scoring": "INVALID",
+      "note": "Usage limit occurred immediately after turn start."
+    },
+    "C_MIN": {
+      "job_id": "job-18d7cbb6ed312288-b2",
+      "process_duration_ms": 3863,
+      "exit_code": 1,
+      "candidate_completed": false,
+      "partial_mutation": false,
+      "scoring": "INVALID",
+      "note": "Usage limit occurred immediately after turn start."
+    },
+    "C_CURRENT": {
+      "job_id": "job-18d7cbb767eb050c-b3",
+      "process_duration_ms": 4345,
+      "exit_code": 1,
+      "candidate_completed": false,
+      "partial_mutation": false,
+      "scoring": "INVALID",
+      "note": "Usage limit occurred immediately after turn start."
+    }
+  },
+  "interpretation": [
+    "Do not score any arm.",
+    "Do not run the held-out oracle on the N0 partial mutation as candidate evidence.",
+    "Do not attribute this batch to CADS, N0, N1, C-min, C-current, model reasoning quality, or the held-out evaluator.",
+    "A future valid batch must reset every arm to the exact neutral projection and reuse the already-frozen prompts/oracle without changing their semantics.",
+    "Changing to another model/harness is allowed only as a new batch with all arms rerun under the same model/harness."
+  ]
+}
