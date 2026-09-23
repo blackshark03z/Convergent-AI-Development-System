@@ -1,0 +1,7 @@
+REPAIR: The candidate rejects some missing assets, but it cannot yet establish acceptance for the rendered product. F4’s original and stock segments are rendered sequentially rather than as an inset over a stock background; Web can report success for an existing master without rendering; and the manifest’s source classes and lineage are largely unverified claims.
+
+Complete the acceptance path so that:
+
+- Local product-path runs for F1–F5 verify the media actually rendered, including F4’s simultaneous original inset and stock background. Source class evidence must establish provenance beyond a file extension or schedule label.
+- CLI and Web accept an output only when its selected format, plan, timeline, compose decision, source assets, rendered content, and verification belong to the same current product state. Missing evidence, changed inputs, or a stale cached segment or master must yield a non-accepted result.
+- Disposable local tests demonstrate all five successful formats and rejection after a source-class substitution, missing required media, a compose/render format mismatch, and a lineage or output change. Resolve the failing F4 fixture test with valid media. Do not use external providers or the production runtime.

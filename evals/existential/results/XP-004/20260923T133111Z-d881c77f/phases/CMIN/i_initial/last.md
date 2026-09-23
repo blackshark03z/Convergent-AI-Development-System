@@ -1,0 +1,9 @@
+**I DONE — candidate implementation ready for R review.** I am not claiming Product Acceptance.
+
+The product path now records the selected format on the composed schedule, rejects unsupported or mismatched selections, and blocks rendering when required media or compose inputs are missing. Rendered segments are regenerated on each run to avoid stale normalized clips. F4 now composites the original video as an inset over the stock background. Run manifests bind the format policy, timeline, subtitles, audio, source asset bytes, candidate Python files, and final output; [acceptance.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-004/20260923T133111Z-d881c77f/arms/CMIN/videopipeline/acceptance.py) checks whether those bindings still match.
+
+**Product-path evidence:** I rendered F1–F5 locally using generated color media and silence, then decoded representative frames. The checks matched F1’s generated-video opening and generated-image body; F2’s generated-video opening, stock interval, and generated-video body; both generated-image colors in F3; F4’s original-video inset and stock-colored exposed background; and F5’s stock footage.
+
+**Checks run:** `py_compile` passed; the format grammar, timeline builder, and Web server suites passed (24 tests); `git diff --check` passed. No paid providers or production runtime were used.
+
+**Known limitation:** The persistent manifest verifier checks byte and state bindings, but does not independently compare rendered frames with source media. The frame comparisons above were a local smoke exercise, not a durable acceptance record. CLI/Web end-to-end parity beyond these targeted checks, and real project media, remain unverified.

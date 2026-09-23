@@ -1,0 +1,299 @@
+{
+  "schema": "cads-existential-runner-v1",
+  "case_id": "XP-004",
+  "run_id": "20260923T133111Z-d881c77f",
+  "status": "COMPLETE",
+  "models": {
+    "R": {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "seconds": 240
+    },
+    "I": {
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "seconds": 600
+    }
+  },
+  "arms": {
+    "N0": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** Acceptance for each canonical F1–F5 format proves that the selected format and actual source assets pass through the product’s plan, timeline, compose, and render path, and binds the accepted output to the product state that produced it.\n\n**Acceptance:**\n\n- Exercise each format through the real CLI and Web product paths with local media and no external providers. Verify the rendered result against the selected format’s source semantics: F1 generated video opening and generated image body; F2 generated opening plus stock and generated video after the opening; F3 generated images only; F4 original video inset with stock background; F5 stock footage only. Check media used by the render, not just segment labels or validator return values.\n- CLI and Web must resolve the same canonical format truth. An unknown format, missing required asset, unverifiable source class, or format mismatch between compose and render must produce an explicit non-accepted result. Neither path may silently select F2, invent a placeholder, or substitute another source class.\n- A successful acceptance record identifies the selected format, the source assets actually used, the verified product state, and the output’s content identity. Its lineage must connect the plan, timeline, compose decision, render, and verification for that same run. Changed inputs, product state, or a reused stale output cannot retain the prior acceptance.\n- Demonstrate rejection with negative cases that change a required source class, remove required media, or break lineage after verification. A record whose claims are internally consistent but disagree with the rendered media must fail.\n\n**Constraints:** Use disposable local fixtures and local rendering or equivalent product-path evidence. Do not call paid or external providers or the canonical production runtime. Judge observable behavior; the storage format and implementation structure are open.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 289,
+      "r_brief": {
+        "seconds": 100.03,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 293473,
+          "cached_input_tokens": 216704,
+          "output_tokens": 2603
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N0\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 260.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1036930,
+          "cached_input_tokens": 947968,
+          "output_tokens": 7371
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N0\\i_initial"
+      },
+      "r_review": {
+        "seconds": 80.14,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 167431,
+          "cached_input_tokens": 132096,
+          "output_tokens": 1892
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N0\\r_review"
+      },
+      "i_repair": {
+        "seconds": 200.14,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1049524,
+          "cached_input_tokens": 986624,
+          "output_tokens": 6872
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N0\\i_repair"
+      },
+      "r_final": {
+        "seconds": 100.09,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 305655,
+          "cached_input_tokens": 271232,
+          "output_tokens": 1222
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N0\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "5ad84c00d416794638c97edd3d0525b987efe164",
+      "candidate_state": "18ec095b808dfa1e18be1b832b3470920932da7cc2b86621e0a78cde1657cff5",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N0\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "N1": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** Make Product Acceptance prove that the selected canonical RC4 format—F1, F2, F3, F4, or F5—governed the actual plan, timeline, composition, and rendered master, and that the accepted master came from the exact verified source and product state.\n\n**Acceptance:**\n\n- An offline, predeclared fixture for each format enters through the normal product path and produces a master. Verification checks the rendered visuals against identifiable source assets, including F1’s generated-video opening and generated-image body; F2’s opening plus intentional post-opening online stock and generated video; F3’s generated images throughout; F4’s readable original-video inset over a visible online-stock background; and F5’s online-stock footage throughout. Labels, manually assembled schedules, and stream metadata alone cannot establish a pass.\n- CLI and Web resolve equivalent selections to the same format rules and output-affecting product state. The selected format, source classes, asset identities and ranges survive every plan, timeline, compose, render, and verification boundary.\n- Missing media, unverified source identity, illegal source classes, stale artifacts, and failed required-source acquisition prevent acceptance. They cannot become placeholders, a different source class, or a different format silently. An intentional format change has a new identity and requires fresh affected verification.\n- Acceptance evidence binds a clean, exact Git revision; effective configuration and input identities; format, creative plan, editorial timeline, and compose identities; selected asset/provider lineage; verification results; and the final file hash. Empty or mismatched identities, a dirty source tree, or a reused master whose identity cannot be proven are ineligible. The final file must pass required stream, duration, and full-decode checks.\n- The repository provides one documented offline verification command whose pass/fail result exercises these paths and rejects representative format, source, and lineage mutations.\n\n**Constraints:** Use RC4’s F1–F5 meanings where older format documentation conflicts. Keep verification isolated from paid providers and the canonical production runtime. Implementation shape is open.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 303,
+      "r_brief": {
+        "seconds": 120.08,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 518411,
+          "cached_input_tokens": 443008,
+          "output_tokens": 3779
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N1\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 300.12,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1279341,
+          "cached_input_tokens": 1200640,
+          "output_tokens": 8304
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N1\\i_initial"
+      },
+      "r_review": {
+        "seconds": 80.22,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 252579,
+          "cached_input_tokens": 201344,
+          "output_tokens": 2336
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N1\\r_review"
+      },
+      "i_repair": {
+        "seconds": 200.11,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 982313,
+          "cached_input_tokens": 921344,
+          "output_tokens": 6986
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N1\\i_repair"
+      },
+      "r_final": {
+        "seconds": 80.11,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 116271,
+          "cached_input_tokens": 86784,
+          "output_tokens": 1313
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N1\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "64607f7d51dd6ceeaa00c3b406a218b85ae83c6e",
+      "candidate_state": "430193654c6870d6cbd03940e8bcb8e5911d9aa5091f03121fddf8dd430f2ac2",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\N1\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CMIN": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** Acceptance of each canonical F1–F5 format must prove that the selected format’s legal sources pass through the real plan, timeline, compose, and render path into the resulting video. Acceptance must identify the exact source assets, product state, and output that were verified.\n\n**Acceptance:**\n\n- Exercise all five formats with local, controlled media through the product path. Verify the rendered result against the selected sources, not only against schedule labels or a self-reported manifest: F1 has a generated-video opening and generated-image body; F2 has a generated-video opening plus both stock and generated video after it; F3 uses generated images throughout; F4 shows the original video as a readable inset over stock background; F5 uses stock footage throughout.\n- Equivalent CLI and Web selections enforce the same format rules. Missing required media, unsupported selections, failed verification, and stale outputs cannot produce an accepted result or silently change format or source class.\n- Acceptance evidence binds the selected format, identities of the actual media bytes, relevant plan/timeline/compose state, exact candidate code and configuration state, and final output bytes. Changing any bound input, product state, or output invalidates that acceptance.\n- The evidence is reproducible for the exact candidate submitted to R. I DONE and R READY are handoff states, not Product Acceptance.\n\n**Constraints:** Use isolated local media and verification. Do not call paid or external providers or the canonical production runtime. Implementation shape is open.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 236,
+      "r_brief": {
+        "seconds": 100.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 349497,
+          "cached_input_tokens": 281216,
+          "output_tokens": 3260
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CMIN\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 480.06,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 2810440,
+          "cached_input_tokens": 2704384,
+          "output_tokens": 16502
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CMIN\\i_initial"
+      },
+      "r_review": {
+        "seconds": 120.11,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 287626,
+          "cached_input_tokens": 236288,
+          "output_tokens": 2887
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CMIN\\r_review"
+      },
+      "i_repair": {
+        "seconds": 500.12,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1677852,
+          "cached_input_tokens": 1607424,
+          "output_tokens": 12963
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CMIN\\i_repair"
+      },
+      "r_final": {
+        "seconds": 80.12,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 234935,
+          "cached_input_tokens": 187136,
+          "output_tokens": 2147
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CMIN\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "cec53112840a28fbe5c55716cec11ce5f99fbba8",
+      "candidate_state": "cffc6c93d4d9000f9acc966e2261783439e35b9f5ee15270f6554e937beaab8b",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CMIN\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CCURRENT": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** Acceptance of a rendered master proves the selected canonical F1–F5 format, the media actually used, and the exact product state that produced it. CLI and Web apply the same format semantics.\n\n**Acceptance:**\n\n- Exercise each format through the real plan → timeline → compose → render path with local representative media. Verify the resulting output and asset lineage: F1 generated-video opening plus generated-image body; F2 generated-video opening plus intentional post-opening online stock and generated video; F3 generated images throughout; F4 readable original-video inset over visible online-stock background; F5 online-stock footage throughout. Use the current RC4 F1–F5 meanings.\n- Acceptance independently checks the selected format against the actual timeline, source identities and classes, composed media, and rendered output. Metadata or a validator’s self-reported pass alone is insufficient.\n- The accepted result identifies the exact candidate source state, resolved format and product settings, selected asset contents, plan/timeline/compose state, and output contents. Changing any material input, reusing a stale render, or presenting evidence from another candidate invalidates acceptance.\n- CLI and Web selections produce the same canonical format decision and failure behavior. Missing, invalid, or unverifiable required media stops acceptance with a clear disposition; it never becomes a placeholder, black filler, another source class, or another format silently.\n\n**Constraints / evidence:** Use local fixtures and local rendering only; do not call paid or external providers or the canonical production runtime. Provide candidate-bound, reproducible product-level evidence for all five positive paths and representative missing-media, illegal-source, and stale-lineage failures.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 248,
+      "r_brief": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 584224,
+          "cached_input_tokens": 501504,
+          "output_tokens": 2801
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\r_brief",
+        "resumed_from_existing": true
+      },
+      "i_initial": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 4544490,
+          "cached_input_tokens": 4412160,
+          "output_tokens": 24931
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\i_initial",
+        "resumed_from_existing": true
+      },
+      "r_review": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 300002,
+          "cached_input_tokens": 233088,
+          "output_tokens": 2770
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\r_review",
+        "resumed_from_existing": true
+      },
+      "i_repair": {
+        "seconds": 280.25,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1146921,
+          "cached_input_tokens": 1078272,
+          "output_tokens": 7342
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\i_repair",
+        "resumed_after_auth": true,
+        "interrupted_attempt": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\i_repair_interrupted_1"
+      },
+      "r_final": {
+        "seconds": 60.66,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 255194,
+          "cached_input_tokens": 195840,
+          "output_tokens": 1660
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "84063114cd17f5ecb08b907a91b71cdf97aa361a",
+      "candidate_state": "616728d3ce79080142745a9b12ed55bed6891e4458fcd9afaf239625fb95805f",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-004\\20260923T133111Z-d881c77f\\phases\\CCURRENT\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    }
+  },
+  "source": "D:\\Video\\AutoVideoPipeline",
+  "pinned_base": "79ac228d14b1ac743ab760bc4c87f87adc433533",
+  "qualification": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\cases\\XP-004\\PRECHECK.json",
+  "codex_cli": "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+  "neutral_tree": "5b60e9938fdef5b60250805d3490f55bc4aefcef",
+  "evidence_package": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\results\\XP-004\\20260923T133111Z-d881c77f"
+}

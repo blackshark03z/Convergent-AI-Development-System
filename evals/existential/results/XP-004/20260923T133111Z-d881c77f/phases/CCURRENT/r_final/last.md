@@ -1,0 +1,1 @@
+NOT_READY — The local renders show F1–F5 frames, but the exercise bypasses the CLI and Web workflows. In the Web path, F1 sets its generated-video clip list to empty, so F1 composition fails even when those clips exist. The evidence therefore does not establish the required five-format product path or CLI/Web parity.

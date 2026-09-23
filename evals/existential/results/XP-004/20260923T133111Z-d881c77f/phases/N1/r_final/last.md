@@ -1,0 +1,1 @@
+NOT_READY — The offline command builds schedules directly and checks rendered pixels only for F4. It does not prove F1–F5 source semantics through the normal CLI/Web path or bind acceptance to the exact verified master and product state. Its self-test compares hashes without exercising rejection of stale or mismatched renders.

@@ -1,0 +1,6 @@
+REPAIR: Complete the Product Acceptance path. The candidate’s file hashes and schedule tests do not yet prove the rendered source semantics or the identity of an accepted master.
+
+- Provide one documented offline command using predeclared, identifiable media fixtures. For each F1–F5 selection, run the normal plan, timeline, compose, and render path; inspect the decoded master to prove the required sources appear. In particular, F4 must show the original video inset and online-stock background **at the same time**; the current renderer concatenates their segments.
+- Make equivalent CLI and Web selections resolve to the same output-affecting format state. Neither path may silently substitute a source class, format, placeholder, or unproven existing master.
+- Make acceptance require matching, nonempty identities for the clean Git revision, effective inputs and configuration, selected assets and ranges, format, creative plan, timeline, composition, verification result, and final file hash. Require stream, duration, and full-decode checks.
+- Show the offline command failing for representative wrong-format or wrong-source renders, missing or changed media, stale masters, mismatched lineage, and a dirty source tree. Keep it isolated from paid providers and the production runtime.

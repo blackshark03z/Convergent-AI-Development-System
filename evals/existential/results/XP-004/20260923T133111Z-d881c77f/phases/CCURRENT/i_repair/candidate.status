@@ -1,0 +1,10 @@
+A  tools/xp004_local_acceptance.py
+M  videopipeline/cli.py
+A  videopipeline/format_contract.py
+M  videopipeline/format_validator.py
+M  videopipeline/models.py
+M  videopipeline/stages/stage3_compose/motion_slideshow.py
+M  videopipeline/stages/stage3_compose/timeline_builder.py
+M  videopipeline/stages/stage4_render/nvenc_engine.py
+M  videopipeline/web/server.py
+A  xp004_local_acceptance_evidence.json

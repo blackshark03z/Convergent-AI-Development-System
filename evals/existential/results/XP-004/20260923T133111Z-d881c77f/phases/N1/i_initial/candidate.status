@@ -1,0 +1,5 @@
+M  videopipeline/cli.py
+M  videopipeline/models.py
+M  videopipeline/stages/stage3_compose/timeline_builder.py
+M  videopipeline/stages/stage4_render/nvenc_engine.py
+M  videopipeline/tests/test_timeline_builder.py

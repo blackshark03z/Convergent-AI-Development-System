@@ -1,0 +1,4 @@
+2026-09-23T15:18:35.130229Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-004\20260923T133111Z-d881c77f\arms\CCURRENT\videopipeline\models.py:
+from typing import Any, Dict, List, Optional, Union
+2026-09-23T15:19:15.648205Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-004\20260923T133111Z-d881c77f\arms\CCURRENT\videopipeline\web\server.py:
+                chap1_source=chap1_src if fmt_choice != "f4" and chap1_src.exists() else None,

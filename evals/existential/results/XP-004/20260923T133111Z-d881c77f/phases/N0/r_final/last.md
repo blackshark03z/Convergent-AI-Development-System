@@ -1,0 +1,1 @@
+NOT_READY — The Web pipeline reads `format_plan` before assigning it, so it cannot complete. Its F4 schedule also lacks the format ID needed to activate the stock-background inset render. The manifest marks output accepted without verifying the rendered media.
