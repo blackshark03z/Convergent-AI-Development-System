@@ -137,8 +137,17 @@ def preflight(case_id: str, cli_override: str | None = None) -> tuple[dict, Path
         runner = case / f"{case_id.lower().replace('-', '')}_oracle_runner.py"
         if not re.fullmatch(r"[0-9a-f]{64}", str(runner_hash)) or not runner.is_file() or digest(runner) != runner_hash:
             raise RunError("CASE_NOT_READY", "oracle runner digest differs from qualification")
+    auxiliary_hashes = qualification.get("auxiliary_sha256", {})
+    if not isinstance(auxiliary_hashes, dict):
+        raise RunError("CASE_NOT_READY", "invalid auxiliary qualification hashes")
+    for name, expected in auxiliary_hashes.items():
+        if not isinstance(name, str) or Path(name).name != name or not re.fullmatch(r"[0-9a-f]{64}", str(expected)):
+            raise RunError("CASE_NOT_READY", "invalid auxiliary qualification file")
+        path = case / name
+        if not path.is_file() or digest(path) != expected:
+            raise RunError("CASE_NOT_READY", f"auxiliary qualification digest differs: {name}")
     protocol = manifest.get("oracle_result")
-    expected_format = {"XP-001": "xp001-layout-v1", "XP-002": "xp002-json-v1", "XP-003": "xp003-browser-v1", "XP-004": "xp004-json-v1"}.get(case_id)
+    expected_format = {"XP-001": "xp001-layout-v1", "XP-002": "xp002-json-v1", "XP-003": "xp003-browser-v1", "XP-004": "xp004-json-v1"}.get(case_id, "json-v1")
     if not isinstance(protocol, dict) or protocol.get("format") != expected_format:
         raise RunError("CASE_NOT_READY", "missing oracle result protocol")
     for part in oracle:
@@ -600,7 +609,7 @@ def classify_oracle(protocol: dict, stdout: bytes, stderr: bytes, exit_code: int
         return "HARNESS_INVALID", "oracle stdout is not one UTF-8 JSON value"
     if not isinstance(payload, dict):
         return "HARNESS_INVALID", "oracle stdout is not a JSON object"
-    if protocol["format"] in {"xp002-json-v1", "xp003-browser-v1", "xp004-json-v1"}:
+    if protocol["format"] in {"xp002-json-v1", "xp003-browser-v1", "xp004-json-v1", "json-v1"}:
         status = payload.get(protocol["status_field"])
         if status == protocol["pass_status"] and exit_code == protocol["pass_exit"]:
             return "PASS", "status and exit match pass protocol"

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-005",
+  "status": "ORACLE_QUALIFIED",
+  "source_candidates": ["C:\\Multiple Automation"],
+  "environment": {
+    "codex_cli_candidates": ["D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe", "codex"]
+  },
+  "pinned_base": "7683e2617f2aacb962c905bfe1eb67a749252f6d",
+  "qualified_neutral_tree": "c6ac5eaa5a2909951b3302e04d25304eca070671",
+  "neutralization": {
+    "files": [
+      "docs/handoff/TASK.md",
+      "docs/handoff/AGENTS.project.md",
+      "docs/handoff/13_WORKER_EXECUTION_GOAL.md",
+      "docs/handoff/14_PARALLEL_FIRST_ADDENDUM.md",
+      "docs/handoff/20_CADS_ALIGNMENT_2026-09-08.md",
+      "docs/handoff/21_WORKER_READ_THIS_DELTA_FIRST.md",
+      "docs/handoff/22_CADS_ALIGNMENT_2026-09-13.md",
+      "docs/handoff/23_CADS_ALIGNMENT_2026-09-16.md"
+    ],
+    "directories": []
+  },
+  "qualification_file": "PRECHECK.json",
+  "qualification_status": "ORACLE_QUALIFIED",
+  "qualified_oracle_file": "xp005_oracle.py",
+  "oracle_command": ["{python}", "{case_dir}/xp005_oracle_runner.py", "{candidate_dir}"],
+  "oracle_result": {
+    "format": "json-v1",
+    "pass_exit": 0,
+    "fail_exit": 1,
+    "status_field": "status",
+    "pass_status": "PASS",
+    "fail_status": "FAIL"
+  },
+  "hidden_reference_revision": "36c954f100a10b6ff0583d0c01db0b20776009a3",
+  "hidden_observation_markers": [
+    "xp005_oracle.py", "xp005_oracle_runner.py", "xp005_cdp_fixture.js"
+  ]
+}

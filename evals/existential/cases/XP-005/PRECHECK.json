@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-005",
+  "status": "ORACLE_QUALIFIED",
+  "date": "2026-09-24",
+  "neutral_projection_commit": "955ea309e756d4674ad4dcfbcdd1f8520dc6dc0e",
+  "qualified_neutral_tree": "c6ac5eaa5a2909951b3302e04d25304eca070671",
+  "goal_sha256": "00c9f0451ab4a950f9607a29fd5881e1f8a15e988360a173a9b6398389220719",
+  "goal_provenance_sha256": "796ad4c9d88fdc1fa6cf1f557395c217059f66ad39512c2e3debcc10016e9c70",
+  "heldout_oracle_sha256": "308ff7d93da4aaead5e6e0980a2e485df78bd7bd0bfdc6f200f33ae4de321f61",
+  "oracle_runner_sha256": "90fa3ef15816d01a9a4e8df162ba3d9300b464776444cbfe776cd99d2790b196",
+  "auxiliary_sha256": {
+    "xp005_cdp_fixture.js": "9cdcb35427026baa289c2cbf980f863e19df592d0966d63ccf8087581ded4f40"
+  },
+  "oracle_hash_basis": "SHA-256 after CRLF-to-LF normalization, as used by the runner",
+  "prompt_leak_matches": 0,
+  "base_preflight": {
+    "source_revision": "7683e2617f2aacb962c905bfe1eb67a749252f6d",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "evidence": [
+      "First-step SMS wording was accepted as completed phone submission.",
+      "A pre-click local transport failure did not return a reconciliation state.",
+      "On retry after another workspace's newer task, unresolved first-step readback was treated as acceptance."
+    ]
+  },
+  "reference_preflight": {
+    "source_revision": "36c954f100a10b6ff0583d0c01db0b20776009a3",
+    "expected": "PASS",
+    "actual": "PASS",
+    "evidence": {
+      "first_step_remained_unresolved": true,
+      "positive_second_step_reconciled": true,
+      "before_and_during_click_loss_failed_closed": true,
+      "original_workspace_operation_effect_and_lease_preserved": true,
+      "newer_independent_workspace_task_did_not_steal_ownership": true,
+      "same_task_retry_did_not_redispatch": true,
+      "intentional_new_task_received_distinct_identity": true,
+      "phone_submit_counts": {"original_workspace": 1, "independent_workspace": 1}
+    }
+  },
+  "neutralization": {
+    "files": [
+      "docs/handoff/TASK.md",
+      "docs/handoff/AGENTS.project.md",
+      "docs/handoff/13_WORKER_EXECUTION_GOAL.md",
+      "docs/handoff/14_PARALLEL_FIRST_ADDENDUM.md",
+      "docs/handoff/20_CADS_ALIGNMENT_2026-09-08.md",
+      "docs/handoff/21_WORKER_READ_THIS_DELTA_FIRST.md",
+      "docs/handoff/22_CADS_ALIGNMENT_2026-09-13.md",
+      "docs/handoff/23_CADS_ALIGNMENT_2026-09-16.md"
+    ],
+    "directories": []
+  },
+  "qualification_note": "The same offline held-out product-path oracle evaluated disposable base and reference snapshots. R/I receive only the pinned neutral base and their arm prompts; reference and oracle bytes stay outside candidate workspaces."
+}
