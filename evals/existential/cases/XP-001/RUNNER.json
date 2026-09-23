@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-001",
+  "status": "ORACLE_QUALIFIED",
+  "source_candidates": ["D:\\Youtube\\Story Trans And Audio"],
+  "environment": {"codex_cli_candidates": ["D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe", "codex"]},
+  "pinned_base": "b6a9efb1de053edccbf9541deaaf21a830d71727",
+  "qualified_neutral_tree": "9c8e43485583b07fca435ac98f203afe4d125927",
+  "neutralization": {
+    "files": [".buildos-authority.json", ".buildos-policy.json", "AGENTS.md", "TASK.md", "NEXT_TASK.md"],
+    "directories": [".buildos-legacy", "skills", "templates"]
+  },
+  "qualification_file": "PRECHECK.json",
+  "qualification_status": "ORACLE_QUALIFIED",
+  "qualified_oracle_file": "xp001_layout_oracle.mjs",
+  "oracle_command": ["{python}", "{case_dir}/xp001_oracle_runner.py", "{candidate_dir}"]
+}

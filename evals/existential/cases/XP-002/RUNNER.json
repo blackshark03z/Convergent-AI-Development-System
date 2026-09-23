@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-002",
+  "status": "NOT_QUALIFIED",
+  "source_candidates": [],
+  "environment": {"codex_cli_candidates": ["codex"]},
+  "pinned_base": "eb0a6480962612865a4974c960e6c6547b7b2009",
+  "neutralization": {"files": [], "directories": []},
+  "qualification_file": null,
+  "qualification_status": "NOT_QUALIFIED",
+  "oracle_command": null
+}
