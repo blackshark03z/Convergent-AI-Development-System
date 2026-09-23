@@ -1,0 +1,2 @@
+2026-09-23T10:31:27.170611Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-003\20260923T094959Z-0e1a1c3f\arms\CMIN\ui\app.js:
+const result=review.lastApproval,approvalMatches=!!draft&&result?.command_type==='APPROVE_SPEAKER_DRAFT'&&Number(result.chapter_id)===Number(review.chapterId)&&Number(result.draft_id)===Number(draft.id)&&result.scope_key===productionWorkingContextKey();

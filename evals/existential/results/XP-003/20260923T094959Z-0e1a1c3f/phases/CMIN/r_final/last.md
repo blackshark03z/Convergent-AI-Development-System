@@ -1,0 +1,1 @@
+NOT_READY — The approval result and **Cấu hình giọng** button render with corrupted text (`?` characters), so the Owner does not get a clear status or next action. The repaired approval-to-voice handoff also remains unverified in a browser.

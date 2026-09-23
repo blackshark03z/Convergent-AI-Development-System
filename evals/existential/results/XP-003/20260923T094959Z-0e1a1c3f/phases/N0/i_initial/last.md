@@ -1,0 +1,7 @@
+Implemented the chapter-level handoff: speaker review approval is now reported separately from Final Voice Map creation, and the result includes a direct action to the matching voice setup or map review step. Saving/approval still does not start PREPARE or render.
+
+Changed [ui/app.js](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-003/20260923T094959Z-0e1a1c3f/arms/N0/ui/app.js:1196), [ui/index.html](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-003/20260923T094959Z-0e1a1c3f/arms/N0/ui/index.html:1124), and [test_speaker_review_ui.py](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-003/20260923T094959Z-0e1a1c3f/arms/N0/tests/test_speaker_review_ui.py:176).
+
+Checks: 61 focused tests passed; `node --check ui\app.js` and `git diff --check` passed. The fixture-backed browser run had 3 passes and 1 failure in an existing speaker correction result assertion (`correctionEvidence.result`); that assertion concerns a different handoff and was not changed here. The API test could not collect because FastAPI is not installed.
+
+Product evidence is from the existing journey code and fixture-backed browser checks; I did not perform a visual preview of this specific new result state. Product acceptance is not claimed.

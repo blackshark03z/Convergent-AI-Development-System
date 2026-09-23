@@ -1,5 +1,0 @@
-**Changed:** [ui/app.js](/D:/CADS-Benchmark/XP-003-AUTO-V2/arms/N1/ui/app.js) now shows a post-save status explaining that the final voice map still needs to be created and approved when the registry says creation is required. Otherwise, it directs the Owner to check production status for approval and the next action.
-
-**Checks:** `node --check ui/app.js` and `git diff --check` passed. Of 22 registry and voice-map tests run, all passed. The speaker-review API test could not run because FastAPI is unavailable.
-
-**Limits:** I did not run the connected browser journey: the available browser test creates temporary files outside this clone, which the brief forbids. So incomplete and completed review, blocker recovery, successful voice approval, and the absence of implicit PREPARE/render were not verified together in a browser. The post-save message also relies on the registry’s `requires_casting_plan_creation` flag; otherwise, it directs the Owner to production status rather than asserting approval is complete.

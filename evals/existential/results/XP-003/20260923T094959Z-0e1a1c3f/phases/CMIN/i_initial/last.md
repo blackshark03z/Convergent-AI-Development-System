@@ -1,0 +1,5 @@
+Implemented a scoped continuation in [ui/app.js](/C:/Users/ADMIN/AppData/Local/Temp/cads-existential/XP-003/20260923T094959Z-0e1a1c3f/arms/CMIN/ui/app.js:1196). After speaker draft approval, the result now confirms that review was approved and offers **Cấu hình giọng**, which opens voice configuration for the current scope. Creating a casting plan still has a separate, accurate result message.
+
+**Checks run:** `node --check ui/app.js` passed; `git diff --check` passed; the offline browser checks `tests.test_speaker_review_workspace_browser` and `tests.test_production_scope_browser` passed (3 tests). `tests.test_speaker_review_ui` passed within a combined run, but the speaker review API tests could not load because `fastapi` is not installed.
+
+**Evidence and limits:** The existing browser checks exercised speaker review workspace and production scope journeys. They did not specifically click the new continuation action, so that handoff remains unverified in a browser walkthrough. No paid provider or production runtime was called. This is an implementation candidate for review, not Owner product acceptance.

@@ -1,0 +1,10 @@
+2026-09-23T10:12:39.519468Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-003\20260923T094959Z-0e1a1c3f\arms\N1\ui\production_state.js:
+  function speakerBlocked(input){
+    if(planReviewComplete(input))return '';
+    const draft=latestSpeakerDraft(input);
+    if(!draft)return input?.speakerRequired===false?'':'ChÆ°a cÃ³ Speaker Draft Ä‘á»ƒ xÃ¡c nháº­n cÃ¡c dÃ²ng cáº§n review.';
+    if(draft.load_error)return 'Speaker Draft khÃ´ng táº£i Ä‘Æ°á»£c.';
+    if(draft.stale)return 'Speaker Draft Ä‘Ã£ cÅ© so vá»›i text/casting hiá»‡n táº¡i.';
+    if(lower(draft.status)!=='approved')return 'Speaker Draft chÆ°a Ä‘Æ°á»£c duyá»‡t.';
+2026-09-23T10:12:49.856126Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ADMIN\AppData\Local\Temp\cads-existential\XP-003\20260923T094959Z-0e1a1c3f\arms\N1\ui\production_state.js:
+    if(lower(draft.status)!=='approved')return 'Speaker Draft chÆ°a Ä‘Æ°á»£c duyá»‡t.';

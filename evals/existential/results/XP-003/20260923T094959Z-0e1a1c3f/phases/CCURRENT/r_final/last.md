@@ -1,0 +1,1 @@
+NOT_READY — The candidate has no local browser evidence for the repaired unassigned-voice blocker or failed save reconciliation states, both required by the repair brief. One UI contract test also remains failing.

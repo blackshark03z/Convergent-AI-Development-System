@@ -1,0 +1,1 @@
+{"status": "FAIL", "reason": "post-oracle state check failed: git state failed: fatal: not a git repository (or any of the parent directories): .git"}

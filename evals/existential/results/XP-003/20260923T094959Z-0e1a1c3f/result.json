@@ -1,0 +1,294 @@
+{
+  "schema": "cads-existential-runner-v1",
+  "case_id": "XP-003",
+  "run_id": "20260923T094959Z-0e1a1c3f",
+  "status": "COMPLETE",
+  "models": {
+    "R": {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "seconds": 240
+    },
+    "I": {
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "seconds": 600
+    }
+  },
+  "arms": {
+    "N0": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** The Owner can select a story, prepare and review its speakers, configure and save voices, and see the next production action as one continuous journey.\n\n**Acceptance:**\n\n- For the selected chapter or range, the visible speaker status reflects work still required on the current text. Pending review leads to the review action. Completed review, including when historical unresolved items remain, is shown as complete; stale approval does not clear a current blocker.\n- Completing speaker review or approval shows a clear result and a direct way into voice configuration for the same scope.\n- Voice configuration identifies the narrator and speaking roles in scope. Unsaved choices and remaining blockers are visible. Each blocker leads to the action that can clear it, including missing or unavailable voices and any required final voice map review or approval. The journey must not present a disabled or ineffective action as its only way forward.\n- After a successful voice save or approval, the refreshed status shows what was saved and the next available production action. An unsuccessful or uncertain result is not shown as complete. Saving or approving does not start PREPARE or render.\n- Existing Story Audio behavior outside this journey remains intact. Verification uses local fixtures only; it does not call external providers or the canonical production runtime.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 220,
+      "r_brief": {
+        "seconds": 160.28,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 687510,
+          "cached_input_tokens": 604928,
+          "output_tokens": 3253
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N0\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 420.86,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 3257130,
+          "cached_input_tokens": 3133184,
+          "output_tokens": 10488
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N0\\i_initial"
+      },
+      "r_review": {
+        "seconds": 181.38,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 681774,
+          "cached_input_tokens": 584320,
+          "output_tokens": 6267
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N0\\r_review"
+      },
+      "i_repair": {
+        "seconds": 300.59,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 702534,
+          "cached_input_tokens": 652288,
+          "output_tokens": 5684
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N0\\i_repair"
+      },
+      "r_final": {
+        "seconds": 120.41,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 476988,
+          "cached_input_tokens": 404736,
+          "output_tokens": 3961
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N0\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "22a79696585edfabc343765a31f7c1855bb2815e",
+      "candidate_state": "f51424515e93e0c0bf9888fb0f37630bbcd50629eae123400a39d450ba397f38",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N0\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "N1": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** The Owner can follow the selected story scope from speaker review through voice configuration and into the next production gate, with a truthful status and a clear next action at each transition.\n\n**Acceptance:**\n- After speaker review or approval, show the result and the number of decisions still requiring review. An approved current review with zero remaining decisions must allow continuation into voice configuration, even if historical unresolved items exist.\n- If speaker or voice work is blocked, identify the current blocker and provide a path to the action that clears it. Do not show a completed or ready state while a required blocker remains.\n- Voice configuration is reachable from completed speaker review and shows the effective speaking roles for the selected scope. After voice changes are saved or approved, show the saved result and a clear action to the next required gate: final voice-map review where required, then production preflight when ready.\n- Preserve the selected scope across these steps. Saving or approving must not implicitly PREPARE a Job, start render, call a provider, or change existing audio.\n\n**Verification:** Demonstrate the connected journey in an isolated browser fixture, including an approved review with a nonzero historical unresolved count, a remaining blocker, and a successful voice save. Confirm that the visible next action matches authoritative readiness and that no render command is issued.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 228,
+      "r_brief": {
+        "seconds": 80.47,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 437635,
+          "cached_input_tokens": 370304,
+          "output_tokens": 2296
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N1\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 180.67,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1972051,
+          "cached_input_tokens": 1865984,
+          "output_tokens": 5539
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N1\\i_initial"
+      },
+      "r_review": {
+        "seconds": 160.7,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 891183,
+          "cached_input_tokens": 803840,
+          "output_tokens": 5426
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N1\\r_review"
+      },
+      "i_repair": {
+        "seconds": 120.83,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 673130,
+          "cached_input_tokens": 600576,
+          "output_tokens": 3130
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N1\\i_repair"
+      },
+      "r_final": {
+        "seconds": 80.56,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 439185,
+          "cached_input_tokens": 372992,
+          "output_tokens": 2376
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N1\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "87b678d48cda363acf4ff0b766679f056d94ec25",
+      "candidate_state": "a0ebb4bd5276a2b7825fbcd5de0d6e159a8f9cce8f04e287caeccd075e1d4306",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\N1\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CMIN": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** The Owner can select a Story Audio scope, complete speaker review, configure and save voices, and see the next production action as one continuous journey.\n\n**Acceptance:**\n\n1. At each step, the visible status reflects the current scope’s actual blockers. If review, approval, or a usable voice is still required, the Owner can reach the action that clears it. A nonzero unresolved count alone must not present approved speaker review as unfinished.\n2. Completing speaker review shows a clear result and an actionable continuation into voice configuration for the same scope. The Owner can configure the narrator and speaking roles without a hidden gate or dead end.\n3. Saving or approving voice work shows its confirmed result and the next applicable production action. Remaining blockers stay visible and actionable. The journey does not silently PREPARE or start render.\n4. Existing scope, saved work, and unrelated Story Audio behavior are preserved.\n\n**Constraints and evidence:** Verify the blocked and successful journeys on the exact candidate with focused offline checks and an Owner-visible walkthrough. Do not call paid providers or the production runtime. Implementation completion and R readiness are not Owner product acceptance.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 193,
+      "r_brief": {
+        "seconds": 120.64,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 706109,
+          "cached_input_tokens": 629632,
+          "output_tokens": 3642
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CMIN\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 240.98,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1161562,
+          "cached_input_tokens": 1076480,
+          "output_tokens": 5476
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CMIN\\i_initial"
+      },
+      "r_review": {
+        "seconds": 180.48,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1130573,
+          "cached_input_tokens": 1031680,
+          "output_tokens": 6453
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CMIN\\r_review"
+      },
+      "i_repair": {
+        "seconds": 260.8,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1443930,
+          "cached_input_tokens": 1370112,
+          "output_tokens": 6512
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CMIN\\i_repair"
+      },
+      "r_final": {
+        "seconds": 60.66,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 197234,
+          "cached_input_tokens": 145408,
+          "output_tokens": 1129
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CMIN\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "44c3ec1caaba1df3536225e2c32ed97adcf83ed6",
+      "candidate_state": "d5e287310eeb2b4ab94744276d4b3437c8067017eed95cbb866aaba7771bfd7a",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CMIN\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CCURRENT": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** For the selected story and chapter scope, the Owner can move through speaker review, voice assignment, save and approval, and into the next production action as one clear journey.\n\n**Acceptance:**\n\n- After each speaker decision and final approval, the visible result reflects the current authoritative state. It shows what remains to be reviewed and does not present historical or stale unresolved counts as current blockers.\n- If a blocker remains, the Owner can reach the specific action that clears it. When current speaker review is complete, the journey clearly opens voice assignment and configuration, including when no speaker review was required.\n- Voice work shows the effective speaking roles in the selected scope and any missing or unavailable voices. After save or approval, the Owner sees the reconciled result and the next production action. A failed or stale save does not appear successful.\n- Continuing from voice work does not implicitly PREPARE or START_RENDER. Existing Story Audio behavior outside this journey is preserved.\n\n**Evidence for READY:** On the candidate, demonstrate the connected journey from scope selection through speaker approval, voice configuration and save, to the visible production handoff. Also demonstrate a remaining blocker with its remedy and a completed speaker review where a historical unresolved count remains nonzero. Use local, nonproduction evidence; bind the rendered journey and focused checks to the same candidate.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 227,
+      "r_brief": {
+        "seconds": 120.59,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 677168,
+          "cached_input_tokens": 600448,
+          "output_tokens": 3517
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CCURRENT\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 300.64,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 2392311,
+          "cached_input_tokens": 2293760,
+          "output_tokens": 7535
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CCURRENT\\i_initial"
+      },
+      "r_review": {
+        "seconds": 120.58,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 564372,
+          "cached_input_tokens": 508032,
+          "output_tokens": 3760
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CCURRENT\\r_review"
+      },
+      "i_repair": {
+        "seconds": 281.22,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 1110047,
+          "cached_input_tokens": 1054464,
+          "output_tokens": 6780
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CCURRENT\\i_repair"
+      },
+      "r_final": {
+        "seconds": 61.16,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 172824,
+          "cached_input_tokens": 108288,
+          "output_tokens": 1476
+        },
+        "output": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CCURRENT\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "9dabd269a74c9bfb61a56419d01fcb82e6b7e14c",
+      "candidate_state": "fe17a6e13581d7e67ef1ce35dcc72a3c9e6387b5fe27ab7627294231c10a8d6a",
+      "oracle": "FAIL",
+      "oracle_metadata": "C:\\Users\\ADMIN\\AppData\\Local\\Temp\\cads-existential\\XP-003\\20260923T094959Z-0e1a1c3f\\phases\\CCURRENT\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    }
+  },
+  "source": "D:\\Youtube\\Story Trans And Audio",
+  "pinned_base": "e07820fcc43f1dbfb1de84feb32fee6cfd4329f2",
+  "qualification": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\cases\\XP-003\\PRECHECK.json",
+  "codex_cli": "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+  "neutral_tree": "85a27fb5d98cd3382d8ead7b79a694eb2be8281e",
+  "evidence_package": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\results\\XP-003\\20260923T094959Z-0e1a1c3f"
+}

@@ -1,0 +1,1 @@
+NOT_READY — For an approved speaker draft with no Final Voice Map, “Review Casting Plan” opens the casting workspace, but the map creation button sits inside `flowStepAssignVoices`. The `voice_map` stage hides that parent panel, leaving the Owner without a visible action to create the map.

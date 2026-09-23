@@ -1,0 +1,31 @@
+diff --git a/tests/test_production_state_resolver.py b/tests/test_production_state_resolver.py
+index 5bcb021..2b45af2 100644
+--- a/tests/test_production_state_resolver.py
++++ b/tests/test_production_state_resolver.py
+@@ -159,6 +159,13 @@ class ProductionStateResolverTests(unittest.TestCase):
+         payload["speakerDraft"] = {"id": 15, "status": "draft", "stale": False}
+         self.assert_state(payload, "SPEAKER_EXCEPTIONS", "speakers")
+ 
++    def test_approved_current_speaker_review_ignores_historical_unresolved_count(self) -> None:
++        payload = base_state()
++        payload["casting"] = {"voice_profile": {"validation": {"valid": True}}}
++        payload["speakerDraft"].update({"status": "approved", "remaining_unreviewed_count": 0, "invalid_count": 3})
++        vm = self.assert_state(payload, "VOICE_BLOCKED", "voices")
++        self.assertEqual(vm["primaryActionKey"], "CREATE_VOICE_MAP_DRAFT")
++
+     def test_missing_effective_voice_blocks_voice_configuration(self) -> None:
+         payload = base_state()
+         payload["voice"] = {"missingEffectiveVoiceCount": 1}
+diff --git a/ui/production_state.js b/ui/production_state.js
+index 4ccc49c..d2b2335 100644
+--- a/ui/production_state.js
++++ b/ui/production_state.js
+@@ -206,6 +206,8 @@
+     if(draft.stale)return 'Speaker Draft đã cũ so với text/casting hiện tại.';
+     if(lower(draft.status)!=='approved')return 'Speaker Draft chưa được duyệt.';
+     if(n(draft.remaining_unreviewed_count)>0)return 'Speaker Draft vẫn còn dòng chưa review.';
++    // An approved current draft with no remaining decisions is complete even when historical unresolved totals remain.
++    if(lower(draft.status)==='approved'&&n(draft.remaining_unreviewed_count)===0)return '';
+     if(n(draft.invalid_count)>0)return 'Speaker Draft còn dòng invalid.';
+     return '';
+   }

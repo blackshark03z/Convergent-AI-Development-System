@@ -1,0 +1,3 @@
+REPAIR: On the exact candidate, make the new approval result and voice handoff reflect the current draft and scope. The result is stored in `lastApproval` without being tied to the displayed draft, so selecting another draft can show a false approval message. The continuation can also reuse a pre-approval voice registry, leaving voice configuration locked after approval.
+
+Verify offline in a browser on the repaired candidate: load the scope before approval, approve speaker review, click **Cấu hình giọng**, and confirm the narrator and speaking roles are configurable. Selecting an unapproved or stale draft must not show the approval result. After voice work is saved or approved, show the next production action and any real blocker; do not start PREPARE or render.

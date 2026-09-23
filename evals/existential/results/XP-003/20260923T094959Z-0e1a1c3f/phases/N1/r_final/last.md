@@ -1,0 +1,1 @@
+NOT_READY — The change and regression test cover the JavaScript resolver, but the Owner’s screen uses the backend task projection. The required connected browser journey, including voice save, the next gate, preserved scope, and no PREPARE or render command, remains unverified.

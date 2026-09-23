@@ -1,7 +1,0 @@
-**Changed:** [ui/app.js](/D:/CADS-Benchmark/XP-003-AUTO-V2/arms/N1/ui/app.js) now bases the post-save notice on the selected scope’s production task projection. It shows a voice blocker, pending voice-map approval, or—when the projection reports `READY_TO_PREPARE`—PREPARE as the next explicit action. The notice includes a button that opens production for the current scope. It does not invoke PREPARE or START_RENDER.
-
-**Checks run:** `node --check ui/app.js`, `git diff --check`, and `python -m unittest tests.test_casting_voice_map_ui tests.test_book_voice_registry -q` all passed; the test run reported 22 tests.
-
-**Verification limit:** I did not verify the full connected browser sequence requested in the repair brief. The available browser fixture covers a different journey, and I did not run or alter it. Thus incomplete and completed speaker review, blocker recovery, voice save and approval in one journey, and the absence of implicit PREPARE/START_RENDER remain unverified together.
-
-**Assumption:** The production task projection is authoritative for the selected scope’s next step, and its existing production UI provides the relevant blocker resolution or approval action. I did not claim Product Acceptance.
