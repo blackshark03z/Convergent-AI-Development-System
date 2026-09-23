@@ -104,6 +104,10 @@ Prefer three arms:
 - **N1 Existing/minimal assembled stack**
 - **C Thin CADS**
 
+A benchmark may add a current-system control arm when needed to distinguish a
+proposed shrunken residue from the current implementation. The 2026-09
+Existential Pilot therefore uses `C-min` and `C-current` separately.
+
 Keep Goal, acceptance meaning and authority equivalent. Record differences in
 model/harness/tool access explicitly.
 
@@ -121,6 +125,18 @@ At minimum record:
 
 A mechanism must earn its existence through measurable semantic or operational
 value, not through architectural completeness.
+
+## Benchmark integrity
+
+A No-CADS arm must not silently inherit the disputed CADS mechanism through the
+benchmark repository, task prompt, hidden evaluator setup or stronger oracle.
+
+When a historical CADS repository is already contaminated by the mechanism under
+test, its replay may validate benchmark instrumentation but must not by itself
+support an existential verdict.
+
+Prefer product-derived or otherwise neutral baselines for the decisive
+counterfactual.
 
 ## Decision output
 
@@ -152,10 +168,28 @@ changes.
 
 ## Current application
 
-The 2026-09 GPT-6 model-routing replay is evidence for an Existential Challenge,
-not justification for a GPT-specific CADS architecture. It asks whether stronger
-models reduce or eliminate implementation/review scaffolding while CADS semantic
-guarantees remain stable.
+The independent A-F round completed on 2026-09-23 and produced a provisional
+**SHRINK — benchmark-gated** synthesis. That is research evidence, not an
+architecture promotion.
 
-MAR-vs-DIRECT must remain a separate counterfactual dimension so runtime
-coordination overhead is not misattributed to CADS or model capability.
+Canonical research artifacts:
+
+- `docs/CADS_EXISTENTIAL_CHALLENGE_SYNTHESIS_2026-09-23.md`
+- `docs/CADS_EXISTENTIAL_PILOT_2026-09.md`
+- `evals/existential/cads_v1.json`
+
+The pilot distinguishes:
+
+- P0 historical CADS replay — instrumentation/oracle validation only;
+- P1 product-derived counterfactual — eligible for existential disposition after
+  fairness audit;
+- full-project confirmation — required when controlled P1 materially
+  differentiates the arms.
+
+The 2026-09 GPT-6 model-routing replay remains evidence for an Existential
+Challenge, not justification for GPT-specific CADS architecture. It asks whether
+stronger models reduce or eliminate implementation/review scaffolding while CADS
+semantic guarantees remain stable.
+
+MAR-vs-DIRECT remains a separate counterfactual dimension so runtime coordination
+overhead is not misattributed to CADS or model capability.

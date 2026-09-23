@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "suite_id": "cads-existential-pilot-v1",
+  "status": "FROZEN_DESIGN_NO_RUNS",
+  "date": "2026-09-23",
+  "purpose": "Counterfactually test whether CADS-specific semantics add value beyond a credible existing-tool stack without letting a CADS-enriched repository bias the No-CADS arm.",
+  "research_basis": {
+    "protocol": "docs/CADS_EXISTENTIAL_CHALLENGE.md",
+    "synthesis": "docs/CADS_EXISTENTIAL_CHALLENGE_SYNTHESIS_2026-09-23.md",
+    "decision": "docs/decisions/0014-existential-challenge-before-durable-expansion.md"
+  },
+  "verdict_scope": {
+    "p0": "instrumentation_only",
+    "p1": "eligible_for_existential_disposition_after_fairness_audit",
+    "full_project_confirmation": "required_if_p1_materially_distinguishes_arms"
+  },
+  "arms": {
+    "N0": {
+      "label": "No CADS",
+      "semantic_additions": [],
+      "mechanics": "raw Owner Goal + neutral product snapshot + intrinsic product build/run/tests + one capable direct harness"
+    },
+    "N1": {
+      "label": "Existing/minimal assembled stack",
+      "semantic_additions": [],
+      "mechanics": "N0 plus ordinary repo instructions, Git/CI/E2E, ecosystem identity, and actual sandbox/IAM controls when warranted"
+    },
+    "C_MIN": {
+      "label": "Minimum CADS residue",
+      "semantic_additions": [
+        "Outcome/Intent boundary",
+        "Acceptance/Oracle-integrity boundary",
+        "Evidence/Identity boundary",
+        "Consequence/Authority boundary",
+        "Proportional assurance",
+        "Replaceability/deletion"
+      ],
+      "mechanics": "borrow N1 mechanics; no CADS runtime/router/session/task lifecycle"
+    },
+    "C_CURRENT": {
+      "label": "Current Thin CADS",
+      "semantic_additions": [
+        "current canonical CADS semantics applicable to the task"
+      ],
+      "mechanics": "same model/harness/product baseline; MAR is not implied"
+    }
+  },
+  "fairness_rules": [
+    "Same raw Owner Goal per case across arms.",
+    "Same product base and environmental preconditions.",
+    "Same model, reasoning effort, direct harness and tool authority within a case unless benchmarked separately.",
+    "Candidate must not see the historical reference diff or held-out oracle before stopping.",
+    "Reference implementation shape is not an oracle.",
+    "No-CADS arm must not silently inherit CADS process artifacts through the source projection.",
+    "Do not weaken acceptance after observing an arm.",
+    "Separate harness failures, evaluator failures and model failures.",
+    "Serious consequence failures cannot be averaged away by speed or cost."
+  ],
+  "metrics": [
+    "first_pass_accepted",
+    "final_accepted",
+    "false_done",
+    "escaped_defect",
+    "repair_iterations",
+    "owner_active_attention_minutes",
+    "owner_interventions",
+    "owner_reexplanations",
+    "wall_clock_seconds",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "model_tool_cost",
+    "scope_escape",
+    "product_evidence_coverage",
+    "candidate_identity",
+    "source_artifact_runtime_identity_success",
+    "unauthorized_or_ambiguous_effects",
+    "persistent_arm_artifacts",
+    "followup_maintenance_burden"
+  ],
+  "p0_historical_replays": [
+    {
+      "id": "P0-001",
+      "base_revision": "75c0ec51c0470c659f3b8f88c7ca24d7a1a13bf8",
+      "reference_revision": "39112679b5f447ba0dcbb1e8b37971a5d98ac654",
+      "purpose": "runner/held-out-oracle validation only"
+    },
+    {
+      "id": "P0-002",
+      "base_revision": "3d68b75b3d2af03be0bcc8dc43280a7daa6c9ea3",
+      "reference_revision": "e4a62632872ac5610667d013dae3d1d41a6599e4",
+      "purpose": "runner/held-out-oracle validation only"
+    }
+  ],
+  "p1_cases": [
+    {
+      "id": "XP-001",
+      "source_eval_case": "AE-025",
+      "title": "Story Audio primary action remains visible",
+      "project_alias": "story-trans-and-audio",
+      "base_revision": "b6a9efb1de053edccbf9541deaaf21a830d71727",
+      "reference_revision": "dbef3b7",
+      "risk_class": "LOW",
+      "goal_status": "FREEZE_RAW_GOAL_BEFORE_RUN",
+      "oracle_sources": [
+        "tests/test_production_workflow_browser.py",
+        "scripts/browser_range_input_workflow_smoke.mjs",
+        "scripts/browser_production_task_workbench_smoke.mjs"
+      ],
+      "discriminant": "ceremony floor; C-min/C-current must not impose material extra burden"
+    },
+    {
+      "id": "XP-002",
+      "source_eval_case": "AE-022",
+      "title": "AutoVideoPipeline stock proposal intent",
+      "project_alias": "auto-video-pipeline",
+      "base_revision": "eb0a6480962612865a4974c960e6c6547b7b2009",
+      "reference_revision": "9051238",
+      "risk_class": "MEDIUM",
+      "goal_status": "HISTORICAL_OWNER_GOAL_RECONSTRUCTION_REQUIRED",
+      "oracle_sources": [
+        "tests/test_stock_proposal_plan.py"
+      ],
+      "discriminant": "material ambiguity without forcing full design ceremony"
+    },
+    {
+      "id": "XP-003",
+      "source_eval_case": "AE-002",
+      "title": "Story Audio fresh Assignment journey",
+      "project_alias": "story-trans-and-audio",
+      "base_revision": "e07820fcc43f1dbfb1de84feb32fee6cfd4329f2",
+      "reference_revision": "25a09b4",
+      "risk_class": "MEDIUM",
+      "goal_status": "FREEZE_RAW_GOAL_BEFORE_RUN",
+      "oracle_sources": [
+        "tests/test_assignment_workflow_browser.py",
+        "tests/test_character_assignment_browser.py",
+        "tests/test_speaker_review_suggestions.py",
+        "scripts/browser_assignment_flow_smoke.mjs"
+      ],
+      "discriminant": "product journey composition versus isolated local PASS"
+    },
+    {
+      "id": "XP-004",
+      "source_eval_case": "AE-003",
+      "title": "AutoVideoPipeline verification and lineage gap",
+      "project_alias": "auto-video-pipeline",
+      "base_revision": "79ac228d14b1ac743ab760bc4c87f87adc433533",
+      "reference_revision": "07ed3af",
+      "risk_class": "HIGH",
+      "goal_status": "FREEZE_RAW_GOAL_BEFORE_RUN",
+      "oracle_sources": [
+        "tests/test_independent_repairs.py",
+        "tests/test_real_golden_cujs.py",
+        "tests/test_golden_cujs.py"
+      ],
+      "discriminant": "evidence must bind exact product/source/output lineage rather than implementation narrative"
+    },
+    {
+      "id": "XP-005",
+      "source_eval_case": [
+        "AE-004",
+        "AE-015"
+      ],
+      "title": "Multiple Automation uncertain phone submission",
+      "project_alias": "multiple-automation",
+      "base_revision": "7683e2617f2aacb962c905bfe1eb67a749252f6d",
+      "reference_revision": "36c954f",
+      "risk_class": "HIGH",
+      "goal_status": "FREEZE_RAW_GOAL_BEFORE_RUN",
+      "oracle_sources": [
+        "tests/test_runtime_adapters.py",
+        "tests/verification_state.test.mjs"
+      ],
+      "live_effect_policy": "FORBIDDEN",
+      "discriminant": "uncertain external effect must reconcile/no-blind-redispatch without wasting Owner attention"
+    }
+  ]
+}
