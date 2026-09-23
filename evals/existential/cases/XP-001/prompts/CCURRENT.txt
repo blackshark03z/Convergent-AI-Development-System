@@ -1,0 +1,45 @@
+# XP-001 Execution Prompt
+
+You are working inside a disposable neutral Story Audio repository snapshot.
+
+## Frozen Owner Goal
+
+On the Production surface, keep the current primary action visible and reachable
+without requiring the Owner to scroll just to find that action on the supported
+desktop layout, including a constrained-height desktop viewport.
+
+Preserve the existing production workflow and behavior. Make the smallest
+coherent product change needed and verify the affected browser behavior.
+
+## Fixed constraints
+
+- Do not redesign unrelated Story Audio flows.
+- Do not call paid/external providers or the canonical production runtime.
+- Preserve existing user-facing behavior outside the affected layout.
+- The implementation method is not prescribed.
+- Work only inside the assigned repository.
+- Do not search for, fetch, or reconstruct historical/reference versions of this
+  repository or any hidden benchmark solution.
+- Do not inspect sibling benchmark workspaces.
+- Do not ask the Owner unless completion genuinely requires a missing product
+  preference or unavailable authority.
+- Finish the task in the working tree and report the change plus checks you ran.
+
+## Arm instruction — C-current / Current Thin CADS
+
+Follow current Thin-CADS semantics for this bounded Goal:
+
+- reconstruct relevant product reality before editing;
+- keep the active Goal and affected user journey authoritative;
+- resolve only material design uncertainty before implementation;
+- prefer REUSE -> WIRE -> FIX -> REPLACE_AND_DELETE -> ADD;
+- execute directly unless a governed-runtime property is actually required;
+- treat focused checks as evidence rather than Product Acceptance;
+- verify the representative affected product journey/surface before DONE;
+- bind evidence to the actual candidate;
+- do not infer external-effect authority from implementation authority;
+- preserve canonical repository truth and do not add a new lifecycle, router,
+  agent runtime, session manager, or orchestration layer.
+
+Because this task is small and reversible, use the fast path and do not create
+untriggered design/review ceremony. MAR is not used for this task.
