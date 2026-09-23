@@ -63,17 +63,54 @@ For each product base:
 If neutral projection cannot be created without changing product behavior, mark
 the case INCONCLUSIVE.
 
+## Fixed R→I topology
+
+P1 evaluates a two-role operating model:
+
+```text
+Owner Raw Goal
+  -> R: strong reasoning model
+  -> Implementation Brief
+  -> I: cost-efficient implementation model
+  -> candidate + evidence
+  -> same R: READY or one REPAIR
+  -> frozen candidate
+  -> held-out evaluator
+```
+
+R and I are roles, not provider/model names. One comparison batch fixes the same
+R model/profile and I model/profile across every arm.
+
+R does not edit product code. I does not see the held-out oracle. R READY and I
+DONE are not Product Acceptance.
+
+The detailed contract is frozen in
+`docs/CADS_RI_BENCHMARK_PROTOCOL_2026-09.md`.
+
+### Spec Sufficiency
+
+The benchmark uses:
+
+> **SPEC UNTIL TESTABLE, NOT SPEC UNTIL COMPLETE.**
+
+R should stop specifying when:
+1. multiple implementations could validly satisfy the contract;
+2. PASS/FAIL can be judged from observable outcome without a reference patch; and
+3. I no longer needs to invent a material product preference or consequence
+   boundary.
+
+This rule applies to all arms. The treatment difference is whether and which
+semantics R is explicitly required to preserve.
+
 ## Arms
 
 ### N0 — No CADS
-Raw Owner Goal + neutral product snapshot + intrinsic build/run/tests + one
-capable direct harness. No CADS semantic pack, no added reviewer, no spec
-workflow and no governed runtime by default.
+Raw Owner Goal + neutral product snapshot. R uses its normal reasoning with no
+CADS semantic pack or prescribed spec method.
 
 ### N1 — existing/minimal assembled stack
-N0 plus ordinary repo instructions, Git/CI/E2E, ecosystem identity, and actual
-sandbox/IAM controls when warranted. No CADS runtime/lifecycle/router/memory or
-provenance service.
+N0 plus ordinary repository documentation, tests, browser tooling and normal
+engineering conventions. No CADS-specific process.
 
 ### C-min — minimum CADS residue
 N1 plus only:
@@ -84,26 +121,23 @@ N1 plus only:
 - proportional assurance;
 - deletion/replaceability.
 
-C-min must not prescribe planner topology, model topology, spec provider,
-reviewer topology, worktree manager or runtime.
-
 ### C-current — current Thin CADS
-Expose the current canonical CADS semantics normally applicable to the task while
-keeping model/harness and product baseline equivalent. MAR is not implied.
+R receives the current Thin-CADS semantics relevant to the task, still bounded by
+the same Spec Sufficiency stop condition.
 
 ## Controls
 
 Within one case:
 - same raw Owner Goal;
-- same model profile and reasoning effort;
-- same direct harness;
+- same R model/profile and reasoning effort;
+- same I model/profile and reasoning effort;
 - same product base and environmental preconditions;
-- same tool/network/effect authority except for the semantic/instruction
-  difference defining the arm;
-- same held-out oracle;
-- same retry/intervention policy.
+- same tool/network/effect authority;
+- same maximum one R-requested repair cycle;
+- same hidden held-out oracle;
+- same Owner-intervention policy.
 
-Model-routing and MAR-vs-DIRECT are separate benchmark dimensions.
+Changing R or I model/substrate creates a different comparison batch.
 
 ## Metrics
 
