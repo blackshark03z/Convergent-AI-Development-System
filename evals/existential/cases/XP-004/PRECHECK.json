@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-004",
+  "status": "ORACLE_QUALIFIED",
+  "date": "2026-09-23",
+  "neutral_projection_commit": "734054913dc039f8e7aa3e8c5774dc4c1419d35d",
+  "qualified_neutral_tree": "5b60e9938fdef5b60250805d3490f55bc4aefcef",
+  "heldout_oracle_sha256": "c1287413bbc98a651789b87681428522732c78954f8ba30547835bcf46f543e2",
+  "oracle_runner_sha256": "b846d3c0c05b807bf0685a3946a955d7f3f276205cf7d16f330b35bd3600ac2a",
+  "oracle_hash_basis": "SHA-256 after CRLF-to-LF normalization, as used by the runner",
+  "prompt_leak_matches": 0,
+  "base_preflight": {
+    "source_revision": "79ac228d14b1ac743ab760bc4c87f87adc433533",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "evidence": "AttributeError: 'TimelineSchedule' object has no attribute 'format_id'"
+  },
+  "reference_preflight": {
+    "source_revision": "07ed3af53df0ee406cb3b9b24f53182ef0857fa8",
+    "expected": "PASS",
+    "actual": "PASS",
+    "evidence": {
+      "F1": {
+        "segments": 2,
+        "source_classes": [
+          "GENERATED_IMAGE",
+          "GENERATED_VIDEO"
+        ],
+        "lineage_bound": true,
+        "web_readback_bound": true,
+        "render_inputs_bound": true,
+        "output_hash_bound": true
+      },
+      "F2": {
+        "segments": 4,
+        "source_classes": [
+          "GENERATED_VIDEO",
+          "STOCK_ONLINE"
+        ],
+        "lineage_bound": true,
+        "web_readback_bound": true,
+        "render_inputs_bound": true,
+        "output_hash_bound": true
+      },
+      "F3": {
+        "segments": 2,
+        "source_classes": [
+          "GENERATED_IMAGE"
+        ],
+        "lineage_bound": true,
+        "web_readback_bound": true,
+        "render_inputs_bound": true,
+        "output_hash_bound": true,
+        "lineage_sensitive": true
+      },
+      "F4": {
+        "segments": 2,
+        "source_classes": [
+          "ORIGINAL_REUP_VIDEO",
+          "STOCK_ONLINE"
+        ],
+        "lineage_bound": true,
+        "web_readback_bound": true,
+        "render_inputs_bound": true,
+        "output_hash_bound": true
+      },
+      "F5": {
+        "segments": 3,
+        "source_classes": [
+          "STOCK_ONLINE"
+        ],
+        "lineage_bound": true,
+        "web_readback_bound": true,
+        "render_inputs_bound": true,
+        "output_hash_bound": true,
+        "tamper_blocked": true
+      }
+    }
+  },
+  "negative_control": {
+    "mutation": "final manifest format_id forced to F2 for every format in disposable reference snapshot",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "evidence": "OracleFailure: F1: final manifest selected format changed"
+  },
+  "neutralization": {
+    "files": [
+      "AGENTS.md",
+      "TASK.md"
+    ],
+    "directories": [
+      ".agents"
+    ]
+  },
+  "qualification_note": "Both preflights used the same local held-out product-path oracle. R/I receive only the pinned neutral base and arm prompts; the historical reference and oracle remain outside their workspaces."
+}

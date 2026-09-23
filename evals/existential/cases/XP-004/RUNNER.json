@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-004",
+  "status": "ORACLE_QUALIFIED",
+  "source_candidates": [
+    "D:\\Video\\AutoVideoPipeline"
+  ],
+  "environment": {
+    "codex_cli_candidates": [
+      "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+      "codex"
+    ]
+  },
+  "pinned_base": "79ac228d14b1ac743ab760bc4c87f87adc433533",
+  "qualified_neutral_tree": "5b60e9938fdef5b60250805d3490f55bc4aefcef",
+  "neutralization": {
+    "files": [
+      "AGENTS.md",
+      "TASK.md"
+    ],
+    "directories": [
+      ".agents"
+    ]
+  },
+  "qualification_file": "PRECHECK.json",
+  "qualification_status": "ORACLE_QUALIFIED",
+  "qualified_oracle_file": "xp004_oracle.py",
+  "oracle_command": [
+    "{python}",
+    "{case_dir}/xp004_oracle_runner.py",
+    "{candidate_dir}"
+  ],
+  "oracle_result": {
+    "format": "xp004-json-v1",
+    "pass_exit": 0,
+    "fail_exit": 1,
+    "status_field": "status",
+    "pass_status": "PASS",
+    "fail_status": "FAIL"
+  },
+  "hidden_reference_revision": "07ed3af53df0ee406cb3b9b24f53182ef0857fa8",
+  "hidden_observation_markers": [
+    "xp004_oracle.py",
+    "xp004_oracle_runner.py"
+  ]
+}
