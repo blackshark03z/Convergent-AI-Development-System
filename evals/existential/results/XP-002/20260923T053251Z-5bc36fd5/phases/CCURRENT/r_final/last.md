@@ -1,0 +1,1 @@
+NOT_READY — The table uses cached opening shots and body scenes, but F5’s production plan uses different 30-second stock segments, so its rows and narration intervals do not reliably represent every planned F5 shot. The submitted UI evidence also checks template text without exercising the rendered review journey.

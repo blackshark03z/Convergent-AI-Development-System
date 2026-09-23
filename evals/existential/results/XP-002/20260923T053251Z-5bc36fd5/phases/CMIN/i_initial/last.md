@@ -1,0 +1,7 @@
+Implemented a read-only, shot-by-shot stock proposal operation. Each row includes the shot ID, script and visual intent, search query, and either up to two candidates or a `NO_MATCH` disposition. Candidates include provider identity, preview reference, and a fit reason. The filter excludes footage that fails hard eligibility checks or has very low semantic fit.
+
+**Files changed:** [online_stock.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/CMIN/videopipeline/stages/stage2_assets/online_stock.py), [server.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/CMIN/videopipeline/web/server.py), and [test_stock_shot_proposals.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/CMIN/tests/test_stock_shot_proposals.py). The API is `POST /api/stock/shot_proposals` and accepts planned shots in its request body.
+
+**Checks run:** 10 targeted tests passed; Python compilation passed; `git diff --check` passed. The tests use a fixture provider and show that distinct shot intents produce distinct queries and candidates, while contradictory and too-short footage is excluded. No external provider was called.
+
+The operation returns `PROPOSAL_ONLY`; it does not download media, mark clips used, or change the timeline. The current API requires the caller to supply planned-shot data; automatic loading from an F5 story plan and a Studio table view are not wired in. No Product Acceptance is claimed.

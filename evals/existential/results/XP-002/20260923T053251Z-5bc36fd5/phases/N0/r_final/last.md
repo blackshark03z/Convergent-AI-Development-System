@@ -1,0 +1,1 @@
+NOT_READY — The endpoint assigns `body_scenes` to F5’s 30-second rows by list position, but those scenes start at 60 seconds and have variable durations. This can propose a scene’s footage for the wrong shot, so the table is not reliably grounded in each shot’s visual intent.

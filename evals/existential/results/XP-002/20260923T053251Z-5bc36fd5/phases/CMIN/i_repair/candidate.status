@@ -1,0 +1,3 @@
+A  tests/test_stock_shot_proposals.py
+M  videopipeline/stages/stage2_assets/online_stock.py
+M  videopipeline/web/server.py

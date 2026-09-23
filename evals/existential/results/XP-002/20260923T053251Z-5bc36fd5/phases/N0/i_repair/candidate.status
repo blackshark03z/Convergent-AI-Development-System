@@ -1,0 +1,5 @@
+A  tests/test_stock_proposals.py
+A  videopipeline/stages/stage2_assets/stock_proposals.py
+M  videopipeline/web/server.py
+M  videopipeline/web/static/index.html
+M  videopipeline/web/static/js/app.js

@@ -1,0 +1,3 @@
+REPAIR: In the exact candidate, query compilation takes the first five terms from the script before reaching the shot’s visual requirements. Shots with the same long script but different visual directions can therefore receive the same search. The filter also checks forbidden visuals only in a candidate’s title, and the fit reason gives a score without naming what matches.
+
+Repair acceptance: Offline mocked-provider evidence shows that distinct visual requirements affect each shot’s proposals, candidates whose available metadata explicitly contains a forbidden visual are excluded, and each proposed candidate has a concrete shot-specific fit reason. Keep the result bounded and proposal-only.

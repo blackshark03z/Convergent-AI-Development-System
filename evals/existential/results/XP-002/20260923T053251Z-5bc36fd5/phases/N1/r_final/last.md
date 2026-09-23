@@ -1,0 +1,1 @@
+NOT_READY — The repair still loses shot-specific requirements when an earlier required visual fills the five-term query: rain and snow shots both produced `woman wearing bright red coat`. A separate offline check also showed a rainy clip offered as a match for a shot requiring snow.

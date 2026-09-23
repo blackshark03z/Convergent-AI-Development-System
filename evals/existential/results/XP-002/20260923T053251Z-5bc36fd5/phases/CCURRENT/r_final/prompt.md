@@ -1,0 +1,520 @@
+You are R. Inspect only the assigned disposable repository. Do not edit, stage, delete, or create any file. Do not cause external or production effects. Do not inspect the hidden oracle, historical reference, sibling arms, or their results.
+
+You are a fresh non-editing R reviewer. Reconstruct continuity from this record. Do not edit files, inspect hidden evaluation, other arms, or historical references.
+
+# XP-002 Reasoning Lead Prompt — C-current / Current Thin CADS
+
+You are R, the Reasoning Lead. You do not edit product code.
+
+## Frozen Raw Owner Goal
+
+For F5, analyze the story/script and propose relevant stock video for each shot in
+a reviewable table. The Owner must be able to inspect the proposals before they
+become final production choices.
+
+The proposal step is not itself approval. Keep the proposal bounded and
+reviewable rather than silently committing arbitrary stock choices.
+
+## Fixed intent
+
+- F5 is the full custom-video format using online stock/custom cinematic footage.
+- The system should reason from the script/shot intent rather than choose stock
+  only from generic/global keywords.
+- Proposals must stay reviewable before final production use.
+- This case tests the bounded proposal compilation step only. The later
+  approve/replace/confirm/cancel lifecycle is outside XP-002 unless already
+  required by the pinned base behavior.
+- Do not prescribe the implementation method.
+
+## Fixed constraints
+
+- Do not call paid/external providers or the canonical production runtime.
+- Keep the historical/reference implementation and held-out evaluator hidden.
+- Do not inspect sibling benchmark workspaces or results.
+- You may inspect the assigned neutral repository, but must not edit product code.
+
+## Common R→I rule
+
+Produce the smallest Implementation Brief that makes the outcome testable.
+SPEC UNTIL TESTABLE, NOT SPEC UNTIL COMPLETE.
+Stop specifying once multiple implementations could satisfy the brief, PASS/FAIL
+can be judged from observable outcome, and I need not invent a material product
+preference or consequence boundary.
+
+Your brief may use Outcome, Acceptance, Constraints / Non-goals, Effects /
+Authority, and material assumptions/open questions only if needed. Do not add
+design/architecture/task artifacts unless they solve a concrete ambiguity or risk.
+
+## Arm treatment
+
+Apply current Thin-CADS semantics relevant to this bounded Goal: reconstruct
+relevant product reality; keep Goal/journey authoritative; resolve only material
+design uncertainty; prefer reuse/fix over new machinery; require representative
+product-level evidence before READY; bind evidence to candidate; preserve
+consequence boundaries and canonical product truth. Use the fast path.
+
+## Output for phase 1
+
+Return only `IMPLEMENTATION_BRIEF`, `OWNER_INPUT_REQUIRED: yes|no`, and, if yes,
+the minimum material question blocking a safe/testable handoff. After I returns
+a candidate, you will receive its diff/evidence and may respond READY or one
+REPAIR brief.
+
+
+IMPLEMENTATION_BRIEF
+IMPLEMENTATION_BRIEF
+
+**Outcome:** For an F5 story, the product presents a bounded stock-video proposal table for every planned shot, derived from that shot’s script and visual intent. The Owner can inspect the proposals before any footage becomes a final production choice.
+
+**Acceptance:**
+- Each shot has a row showing its scene/shot and narration interval, visual purpose, a small ranked shortlist with identifiable source and preview, a brief fit reason, and any uncertainty or conflict. Shots without a suitable candidate remain visible as `NO_MATCH` or needing review.
+- Representative shots with different actions or settings produce meaningfully different proposals even when they share broad story keywords. Ineligible or story-contradicting clips cannot become the proposed lead choice.
+- The table clearly labels choices as proposals. Compiling or viewing it does not approve footage, download final assets, or silently change the F5 format or production timeline.
+- Candidate evidence demonstrates the F5 review journey using an offline provider fixture, including a suitable match, a conflicting or ineligible result, and a no-match shot. Tie that evidence to the implementation candidate submitted for review.
+
+**Constraints / non-goals:** Reuse the existing F5 shot plan and stock retrieval behavior where suitable. This slice covers proposal compilation and inspection only; approval, replacement, rough-cut production, and final acquisition are outside scope. No paid or external provider calls or canonical production runtime.
+
+OWNER_INPUT_REQUIRED: no
+R repair brief:
+REPAIR:
+
+**Outcome:** Make the F5 proposal table cover every planned stock shot across the full story, with proposals tied to each shot’s script and visual intent.
+
+**Acceptance:**
+- An offline F5 story produces one row per planned shot, including the opening, with correct shot identity and narration interval. The current endpoint reads only cached `body_scenes`, while the F5 timeline covers the full story.
+- Shots with different actions or settings yield meaningfully different proposals even when they share broad visual terms. Ineligible or contradictory clips cannot lead; unmatched shots remain visible.
+- The review table displays each proposal’s fit reason as well as conflicts or uncertainty. The current UI receives `fit_reason` but does not show it.
+- Candidate-bound offline evidence exercises the F5 request and rendered review journey, beyond the compiler-only fixture, without external provider or production calls.
+
+I completion report:
+Implemented the F5 proposal review slice.
+
+- Added a proposal compiler that creates a ranked shortlist for every cached body scene. It uses shot-specific visuals and action before narration, filters ineligible candidates, flags weak or contradictory matches, and preserves `NO_MATCH` rows.
+- Added an F5-only review table with scene/shot IDs, narration intervals, visual purpose, source IDs, preview links, fit notes, and conflicts. It is explicitly labeled as proposals requiring Owner review.
+- Added a read-only API that uses the cached shot plan and overlapping SRT cues. It does not approve or download clips or modify the production schedule.
+- Added an offline fixture and evidence record at [f5-stock-proposal-offline-review.json](/D:/CADS-Benchmark/XP-002-AUTO/arms/CCURRENT/docs/evidence/f5-stock-proposal-offline-review.json).
+
+The fixture shows distinct leads for the cycling and courtroom shots, exposes a conflicting celebration clip and a rights-unknown clip, and leaves the archive shot as `NO_MATCH`.
+
+Checks run: focused pytest checks passed (4 tests); Python compilation, JavaScript syntax validation, and `git diff --check` passed. No external provider or production runtime was called.
+
+Limitations: preview links and product rendering were not exercised against a live provider or browser. Candidate quality depends on the cached shot plan and available provider metadata. This is an implementation candidate for review; Product Acceptance is not claimed.
+Repair report:
+Implemented the F5 proposal repair in the disposable clone.
+
+- The proposal endpoint now combines cached `chapter1_shots` and `body_scenes`, preserves their shot identities, derives opening intervals from `time_range`, sorts rows by start time, and attaches overlapping SRT narration without modifying the cached plan.
+- The review table now displays each proposal’s fit reason.
+- Extended the offline fixture and candidate evidence to cover an endpoint request with an opening shot, a suitable proposal, conflicting and ineligible candidates, a `NO_MATCH` shot, and the fit-reason display path.
+
+**Checks:** `python -m pytest tests/test_stock_proposals.py -q` passed (2 tests); Python compilation, `node --check`, and `git diff --check` passed. Git reported line-ending conversion warnings; `git diff --check` found no whitespace errors.
+
+The tests observed a 0–6 second opening row with matching narration, distinct proposals and conflicts in the response, and the archive shot remaining `NO_MATCH`. The UI check verifies that the row template displays `fit_reason`; it does not run a browser. No external provider, downloads, approvals, schedule changes, or production runtime were used. Live provider behavior and browser rendering remain untested.
+
+Candidate tree: 3ff5e339295e1c55da36d8e51dece38ce1cc82f8
+Candidate status:
+A  docs/evidence/f5-stock-proposal-offline-review.json
+A  tests/fixtures/f5_stock_proposals.json
+A  tests/test_stock_proposals.py
+A  videopipeline/stages/stage2_assets/stock_proposals.py
+M  videopipeline/tests/test_web_server.py
+M  videopipeline/web/server.py
+M  videopipeline/web/static/index.html
+M  videopipeline/web/static/js/app.js
+Candidate diff:
+diff --git a/docs/evidence/f5-stock-proposal-offline-review.json b/docs/evidence/f5-stock-proposal-offline-review.json
+new file mode 100644
+index 0000000..0938cc1
+--- /dev/null
++++ b/docs/evidence/f5-stock-proposal-offline-review.json
+@@ -0,0 +1,19 @@
++{
++  "evidence_type": "offline_candidate_review",
++  "candidate_files": [
++    "videopipeline/stages/stage2_assets/stock_proposals.py",
++    "videopipeline/web/server.py",
++    "videopipeline/web/static/index.html",
++    "videopipeline/web/static/js/app.js"
++  ],
++  "fixture": "tests/fixtures/f5_stock_proposals.json",
++  "check": "python -m pytest tests/test_stock_proposals.py -q",
++  "journey": "Offline aiohttp GET /api/stock/proposals against a temporary F5 storyboard with chapter1_shots and body_scenes; verified rendered review row template consumes fit_reason.",
++  "observed": {
++    "opening_shot_01": {"interval": [0, 6], "narration": "A cyclist rides through the forest.", "lead": "fixture_ride_01"},
++    "scene_road": {"status": "PROPOSALS", "lead": "fixture_ride_01"},
++    "scene_hearing": {"status": "PROPOSALS", "lead": "fixture_court_01", "conflicts": ["fixture_conflict_01", "fixture_rights_01"]},
++    "scene_archive": {"status": "NO_MATCH", "lead": null}
++  },
++  "effect_boundary": "Fixture-only provider; no downloads, approvals, schedule edits, paid calls, or production runtime."
++}
+diff --git a/tests/fixtures/f5_stock_proposals.json b/tests/fixtures/f5_stock_proposals.json
+new file mode 100644
+index 0000000..605c591
+--- /dev/null
++++ b/tests/fixtures/f5_stock_proposals.json
+@@ -0,0 +1,52 @@
++{
++  "provider": "offline_fixture",
++  "chapter1_shots": [
++    {"shot_index": 1, "time_range": "0:00 - 0:06", "dramatic_beat": "A cyclist enters the forest road", "shot_type": "Tracking shot", "camera_movement": "Lateral tracking", "veo_prompt": "cyclist forest road", "visual_purpose": "cyclist riding through forest", "visual_intent": "cyclist forest road", "required_visuals": ["cyclist", "forest"]}
++  ],
++  "scenes": [
++    {
++      "scene_id": "scene_road",
++      "shot_id": "shot_ride",
++      "start_sec": 120,
++      "end_sec": 126,
++      "narration": "She rides along a forest road.",
++      "visual_purpose": "cyclist riding through a forest",
++      "visual_intent": "cyclist forest road",
++      "required_visuals": ["cyclist", "forest"],
++      "forbidden_visuals": []
++    },
++    {
++      "scene_id": "scene_hearing",
++      "shot_id": "shot_cross_exam",
++      "start_sec": 126,
++      "end_sec": 132,
++      "narration": "The judge questions the witness in court.",
++      "visual_purpose": "judge cross-examines a witness in a courtroom",
++      "visual_intent": "judge witness courtroom cross-examination",
++      "required_visuals": ["judge", "witness", "courtroom"],
++      "forbidden_visuals": ["celebration"]
++    },
++    {
++      "scene_id": "scene_archive",
++      "shot_id": "shot_empty",
++      "start_sec": 132,
++      "end_sec": 138,
++      "narration": "The sealed record remains untouched.",
++      "visual_purpose": "sealed archive drawer in a secure records room",
++      "visual_intent": "sealed archive secure records drawer",
++      "required_visuals": ["sealed archive"],
++      "forbidden_visuals": []
++    }
++  ],
++  "results": {
++    "cyclist": [
++      {"id":"ride-01","online_id":"fixture_ride_01","source":"offline_fixture","title":"Cyclist Riding Through Forest","duration":12,"width":1920,"height":1080,"thumbnail":"https://fixture.invalid/ride.jpg","preview_url":"https://fixture.invalid/ride.mp4","rights_status":"ELIGIBLE","tags":["cyclist","forest","road"]}
++    ],
++    "judge": [
++      {"id":"court-01","online_id":"fixture_court_01","source":"offline_fixture","title":"Judge Questions Witness In Courtroom","duration":15,"width":1920,"height":1080,"thumbnail":"https://fixture.invalid/court.jpg","preview_url":"https://fixture.invalid/court.mp4","rights_status":"ELIGIBLE","tags":["judge","witness","courtroom"]},
++      {"id":"conflict-01","online_id":"fixture_conflict_01","source":"offline_fixture","title":"Courtroom Celebration Party","duration":15,"width":1920,"height":1080,"thumbnail":"https://fixture.invalid/conflict.jpg","preview_url":"https://fixture.invalid/conflict.mp4","rights_status":"ELIGIBLE","tags":["courtroom","celebration"]},
++      {"id":"rights-01","online_id":"fixture_rights_01","source":"offline_fixture","title":"Judge And Witness","duration":15,"width":1920,"height":1080,"rights_status":"UNKNOWN","tags":["judge","witness","courtroom"]}
++    ],
++    "archive": []
++  }
++}
+diff --git a/tests/test_stock_proposals.py b/tests/test_stock_proposals.py
+new file mode 100644
+index 0000000..62b5bd5
+--- /dev/null
++++ b/tests/test_stock_proposals.py
+@@ -0,0 +1,68 @@
++import json
++import asyncio
++from pathlib import Path
++
++from videopipeline.stages.stage2_assets.stock_proposals import compile_stock_proposals
++from aiohttp.test_utils import TestClient, TestServer
++from videopipeline.web import server as web_server
++
++
++class OfflineFixtureProvider:
++    def __init__(self, fixture):
++        self.fixture = fixture
++
++    def search_videos(self, query, per_page=12):
++        words = query.lower().split()
++        bucket = "cyclist" if "cyclist" in words else "judge" if "judge" in words else "archive" if "archive" in words else "archive"
++        return {"status": "ok", "videos": self.fixture["results"][bucket]}
++
++
++def test_f5_proposals_keep_shots_distinct_and_expose_conflicts_and_no_match():
++    fixture_path = Path(__file__).parent / "fixtures" / "f5_stock_proposals.json"
++    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
++    result = compile_stock_proposals(fixture["scenes"], OfflineFixtureProvider(fixture))
++
++    assert result["label"] == "PROPOSALS — not approved"
++    ride, hearing, archive = result["rows"]
++    assert ride["proposals"][0]["online_id"] == "fixture_ride_01"
++    assert "cyclist" in ride["query"]
++    assert "judge" in hearing["query"] and "cyclist" not in hearing["query"]
++    assert hearing["proposals"][0]["online_id"] == "fixture_court_01"
++    assert {c["online_id"] for c in hearing["conflicts"]} == {"fixture_conflict_01", "fixture_rights_01"}
++    assert archive["status"] == "NO_MATCH" and not archive["proposals"]
++
++
++def test_f5_request_includes_opening_and_review_markup_shows_fit_reason(tmp_path, monkeypatch):
++    fixture_path = Path(__file__).parent / "fixtures" / "f5_stock_proposals.json"
++    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
++    story_dir = tmp_path / "offline-story"
++    story_dir.mkdir()
++    storyboard = {"chapter1_shots": fixture["chapter1_shots"], "body_scenes": fixture["scenes"]}
++    (story_dir / "gemini_storyboard.json").write_text(json.dumps(storyboard), encoding="utf-8")
++    (story_dir / "story.srt").write_text(
++        "1\n00:00:00,000 --> 00:00:06,000\nA cyclist rides through the forest.\n", encoding="utf-8"
++    )
++    monkeypatch.setattr(web_server, "PexelsClient", lambda: OfflineFixtureProvider(fixture))
++    async def exercise_request():
++        client = TestClient(TestServer(web_server.create_app()))
++        await client.start_server()
++        try:
++            response = await client.get("/api/stock/proposals", params={"story_dir": str(story_dir)})
++            assert response.status == 200
++            payload = await response.json()
++            opening = next(row for row in payload["rows"] if row["shot_id"] == "shot_01")
++            assert (opening["start_sec"], opening["end_sec"]) == (0, 6)
++            assert opening["narration"] == "A cyclist rides through the forest."
++            assert len(payload["rows"]) == len(fixture["chapter1_shots"]) + len(fixture["scenes"])
++            assert opening["proposals"][0]["online_id"] == "fixture_ride_01"
++            assert opening["proposals"][0]["fit_reason"]
++            hearing = next(row for row in payload["rows"] if row["scene_id"] == "scene_hearing")
++            assert hearing["proposals"][0]["online_id"] == "fixture_court_01"
++            assert {candidate["online_id"] for candidate in hearing["conflicts"]} == {"fixture_conflict_01", "fixture_rights_01"}
++            archive = next(row for row in payload["rows"] if row["scene_id"] == "scene_archive")
++            assert archive["status"] == "NO_MATCH" and not archive["proposals"]
++        finally:
++            await client.close()
++    asyncio.run(exercise_request())
++    app_js = (web_server.STATIC_DIR / "js" / "app.js").read_text(encoding="utf-8")
++    assert "c.fit_reason || \"Fit reason unavailable\"" in app_js
+diff --git a/videopipeline/stages/stage2_assets/stock_proposals.py b/videopipeline/stages/stage2_assets/stock_proposals.py
+new file mode 100644
+index 0000000..1c1f70d
+--- /dev/null
++++ b/videopipeline/stages/stage2_assets/stock_proposals.py
+@@ -0,0 +1,61 @@
++"""Proposal-only stock shortlist compilation for planned F5 shots."""
++from typing import Any, Dict, List
++
++from .online_stock import StockConstraintChecker, StoryStockRetriever
++
++
++def _value(scene: Dict[str, Any], *keys: str, default: Any = "") -> Any:
++    for key in keys:
++        value = scene.get(key)
++        if value not in (None, ""):
++            return value
++    return default
++
++
++def compile_stock_proposals(scenes: List[Dict[str, Any]], provider: Any, limit: int = 3) -> Dict[str, Any]:
++    """Compile review rows without acquiring media or mutating a production schedule."""
++    retriever = StoryStockRetriever(provider)
++    rows = []
++    for index, scene in enumerate(scenes, 1):
++        sid = str(_value(scene, "scene_id", "id", default=f"scene_{index:02d}"))
++        shot_id = str(_value(scene, "shot_id", default=f"shot_{index:02d}"))
++        start = float(_value(scene, "start_sec", "start", default=0) or 0)
++        end = float(_value(scene, "end_sec", "end", default=start + float(_value(scene, "duration", "duration_sec", default=0) or 0)) or start)
++        narration = str(_value(scene, "narration", "script", "story_context", "key_event", "dramatic_beat"))
++        purpose = str(_value(scene, "visual_purpose", "dramatic_purpose", "primary_action", "dramatic_beat", default="Visual coverage"))
++        visual = str(_value(scene, "stock_search_intent", "visual_intent", "visual_description", default=""))
++        required = _value(scene, "required_visuals", default=[])
++        forbidden = _value(scene, "forbidden_visuals", default=[])
++        # Lead the query with shot-specific visible details and action; narration
++        # provides context after those differentiating concepts.
++        intent = " ".join([" ".join(map(str, required)), purpose, visual, narration]).strip()
++        query = retriever.compile_search_query(intent, narration)
++        result = provider.search_videos(query, per_page=12)
++        candidates, rejected = [], []
++        if result.get("status") == "ok":
++            for candidate in result.get("videos", []):
++                ok, reason = StockConstraintChecker.evaluate(candidate, min_duration=4.0, forbidden_terms=list(map(str, forbidden)))
++                score = retriever.compute_semantic_similarity(candidate, intent)
++                item = dict(candidate)
++                item["semantic_score"] = score
++                if not ok:
++                    item["conflict"] = reason
++                    rejected.append(item)
++                elif score < 0.20:
++                    item["conflict"] = "Weak or contradictory visual fit"
++                    rejected.append(item)
++                else:
++                    item["fit_reason"] = f"Visual intent overlap ({score:.2f}); duration and rights checks passed."
++                    candidates.append(item)
++        candidates = retriever.rank_candidates(candidates, intent, max(1, end-start))[:limit]
++        for candidate in candidates:
++            candidate.setdefault("fit_reason", f"Visual intent overlap ({candidate.get('semantic_score', 0):.2f}); duration and rights checks passed.")
++        status = "PROPOSALS" if candidates else ("NEEDS_REVIEW" if rejected or result.get("status") != "ok" else "NO_MATCH")
++        rows.append({
++            "scene_id": sid, "shot_id": shot_id, "start_sec": start, "end_sec": end,
++            "narration": narration, "visual_purpose": purpose, "query": query,
++            "status": status, "proposals": candidates,
++            "conflicts": rejected,
++            "uncertainty": "Review required: no eligible matching candidate." if status != "PROPOSALS" else "Shortlist only; Owner approval required.",
++        })
++    return {"status": "ok", "label": "PROPOSALS — not approved", "rows": rows}
+diff --git a/videopipeline/tests/test_web_server.py b/videopipeline/tests/test_web_server.py
+index e60c460..0944402 100644
+--- a/videopipeline/tests/test_web_server.py
++++ b/videopipeline/tests/test_web_server.py
+@@ -21,6 +21,7 @@ def test_app_routes_registered():
+     assert "/api/editorial_qc/report" in routes
+     assert "/api/editorial_qc/adjudicate" in routes
+     assert "/api/stock_exceptions" in routes
++    assert "/api/stock/proposals" in routes
+ 
+ def test_discover_stories():
+     stories = discover_stories(BASE_DIR)
+diff --git a/videopipeline/web/server.py b/videopipeline/web/server.py
+index 56ccf83..1e5d245 100644
+--- a/videopipeline/web/server.py
++++ b/videopipeline/web/server.py
+@@ -28,6 +28,7 @@ from ..stages.stage2_assets.stock_manager import StockManager
+ from ..stages.stage2_assets.veo_client import GoogleFlowVeoClient
+ from ..stages.stage2_assets.flow_generator import check_cookie_expiry
+ from ..stages.stage2_assets.online_stock import PexelsClient
++from ..stages.stage2_assets.stock_proposals import compile_stock_proposals
+ from ..stages.stage3_compose.timeline_builder import TimelineBuilder
+ from ..stages.stage3_compose.ass_karaoke import generate_karaoke_ass
+ from ..stages.stage4_render.nvenc_engine import NvencRenderEngine
+@@ -1210,6 +1211,47 @@ async def handle_online_stock_search(request):
+     except Exception as e:
+         return web.json_response({"status": "error", "message": f"Lỗi tìm kiếm online stock: {e}"}, status=500)
+ 
++async def handle_stock_proposals(request):
++    """Compiles a proposal-only shortlist from the cached director shot plan."""
++    story_dir = Path(request.query.get("story_dir", ""))
++    cache_file = story_dir / "gemini_storyboard.json"
++    if not story_dir.is_dir() or not cache_file.is_file():
++        return web.json_response({"status": "error", "message": "F5 shot plan is not available; analyze the story first."}, status=404)
++    try:
++        data = json.loads(cache_file.read_text(encoding="utf-8"))
++        # F5 covers the whole story. The director cache keeps its opening shots
++        # separately from body scenes, so combine both without changing the cache.
++        scenes = []
++        for shot in data.get("chapter1_shots", []) or []:
++            shot = dict(shot)
++            shot_index = shot.get("shot_index", len(scenes) + 1)
++            shot["shot_id"] = str(shot.get("shot_id") or f"shot_{int(shot_index):02d}")
++            shot["scene_id"] = str(shot.get("scene_id") or f"opening_{int(shot_index):02d}")
++            interval = shot.get("time_range", "")
++            match = re.search(r"(\d+):(\d+)\s*[-–—]\s*(\d+):(\d+)", str(interval))
++            if match:
++                h1, m1, h2, m2 = map(int, match.groups())
++                shot["start_sec"] = h1 * 60 + m1
++                shot["end_sec"] = h2 * 60 + m2
++            shot["visual_purpose"] = " ".join(str(shot.get(k, "")) for k in ("dramatic_beat", "shot_type", "camera_movement") if shot.get(k))
++            shot["visual_intent"] = " ".join(str(shot.get(k, "")) for k in ("veo_prompt", "lighting_setup", "optics") if shot.get(k))
++            shot["narration"] = shot.get("dramatic_beat", "")
++            scenes.append(shot)
++        scenes.extend(dict(scene) for scene in (data.get("body_scenes", []) or []))
++        if not scenes:
++            return web.json_response({"status": "error", "message": "Cached shot plan has no planned shots."}, status=404)
++        scenes.sort(key=lambda scene: float(scene.get("start_sec", scene.get("start", 0)) or 0))
++        srts = sorted(story_dir.glob("*.srt"))
++        if srts:
++            cues = parse_srt_file(srts[0])
++            for scene in scenes:
++                start = float(scene.get("start_sec", 0) or 0)
++                end = float(scene.get("end_sec", start) or start)
++                scene["narration"] = " ".join(c.text for c in cues if c.start_sec < end and c.end_sec > start)
++        result = await asyncio.get_event_loop().run_in_executor(None, lambda: compile_stock_proposals(scenes, PexelsClient()))
++        return web.json_response(result)
++    except Exception as exc:
++        return web.json_response({"status": "error", "message": str(exc)}, status=500)
+ async def handle_online_stock_download_and_swap(request):
+     """Downloads an online stock video and assigns it to a target segment (ADR-009)."""
+     try:
+@@ -1513,6 +1555,7 @@ def create_app() -> web.Application:
+     app.router.add_get("/api/assets/available_clips", handle_get_available_clips)
+     app.router.add_post("/api/schedule/swap_segment", handle_action_swap_segment)
+     app.router.add_get("/api/stock/online/search", handle_online_stock_search)
++    app.router.add_get("/api/stock/proposals", handle_stock_proposals)
+     app.router.add_post("/api/stock/online/download_and_swap", handle_online_stock_download_and_swap)
+     app.router.add_get("/api/stock_exceptions", handle_get_stock_exceptions)
+     app.router.add_get("/api/editorial_qc/report", handle_get_editorial_qc_report)
+diff --git a/videopipeline/web/static/index.html b/videopipeline/web/static/index.html
+index f31657f..4937fb2 100644
+--- a/videopipeline/web/static/index.html
++++ b/videopipeline/web/static/index.html
+@@ -491,6 +491,15 @@
+           </div>
+         </div>
+ 
++        <section class="glass-card" id="f5ProposalCard" style="display:none; margin-top:20px;">
++          <div class="card-header-clean">
++            <div><h3>F5 Stock Proposals</h3><span class="sub-badge">Proposal shortlist · nothing is approved or added to the timeline</span></div>
++            <button id="btnCompileF5Proposals" class="btn btn-primary btn-sm">Compile shot proposals</button>
++          </div>
++          <p id="f5ProposalStatus" role="status" style="color:var(--text-muted);">Uses the cached shot plan. Compilation only searches and displays previews.</p>
++          <div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; min-width:900px;"><thead><tr><th>Scene / shot · narration</th><th>Visual purpose</th><th>Ranked proposal / preview</th><th>Fit / conflict</th></tr></thead><tbody id="f5ProposalRows"></tbody></table></div>
++        </section>
++
+         <!-- ============================================================ -->
+         <!-- FORMAT-SPECIFIC INSPECTOR CARDS                              -->
+         <!-- ============================================================ -->
+diff --git a/videopipeline/web/static/js/app.js b/videopipeline/web/static/js/app.js
+index d6ea459..0c91c4a 100644
+--- a/videopipeline/web/static/js/app.js
++++ b/videopipeline/web/static/js/app.js
+@@ -86,6 +86,10 @@ const el = {
+   onlineSearchLoading: document.getElementById("onlineSearchLoading"),
+   onlineClipsList: document.getElementById("onlineClipsList"),
+   onlineQuickChips: document.querySelectorAll(".online-quick-chip"),
++  f5ProposalCard: document.getElementById("f5ProposalCard"),
++  btnCompileF5Proposals: document.getElementById("btnCompileF5Proposals"),
++  f5ProposalStatus: document.getElementById("f5ProposalStatus"),
++  f5ProposalRows: document.getElementById("f5ProposalRows"),
+ 
+   // Step 3
+   chkKaraoke: document.getElementById("chkKaraoke"),
+@@ -844,6 +848,7 @@ if (el.btnForceRefreshDirector) {
+ function selectFormat(formatKey) {
+   if (!formatKey) return;
+   state.selectedFormat = formatKey;
++  if (el.f5ProposalCard) el.f5ProposalCard.style.display = formatKey === "f5" ? "block" : "none";
+   try {
+     localStorage.setItem("videopipeline_selected_format", formatKey);
+   } catch (e) {}
+@@ -876,6 +881,38 @@ function selectFormat(formatKey) {
+   updateFormatInspectorView(formatKey);
+ }
+ 
++if (el.btnCompileF5Proposals) {
++  el.btnCompileF5Proposals.addEventListener("click", async () => {
++    if (!state.selectedStoryDir) return;
++    el.btnCompileF5Proposals.disabled = true;
++    el.f5ProposalStatus.textContent = "Searching cached shot intent for proposal candidates…";
++    el.f5ProposalRows.innerHTML = "";
++    try {
++      const res = await fetch(`/api/stock/proposals?story_dir=${encodeURIComponent(state.selectedStoryDir)}`);
++      const data = await res.json();
++      if (!res.ok || data.status !== "ok") throw new Error(data.message || "Proposal compilation failed");
++      el.f5ProposalStatus.textContent = `${data.label} · ${data.rows.length} planned shots · schedule unchanged.`;
++      data.rows.forEach((row) => {
++        const proposals = row.proposals || [];
++        const media = proposals.length ? proposals.map((c, index) => `
++          <div style="display:flex;gap:10px;align-items:flex-start;margin:8px 0;">
++            ${c.thumbnail ? `<img src="${escapeHtml(c.thumbnail)}" alt="Preview thumbnail for ${escapeHtml(c.title || c.id)}" style="width:120px;max-height:70px;object-fit:cover;border-radius:5px;">` : ""}
++            <div><strong>#${index + 1} ${escapeHtml(c.title || c.id)}</strong> · ${escapeHtml(c.source || "stock")} ${escapeHtml(c.online_id || c.id)}<br>
++            ${c.preview_url ? `<a href="${escapeHtml(c.preview_url)}" target="_blank" rel="noopener">Open preview</a>` : "Preview unavailable"}<br><small>${escapeHtml(c.fit_reason || "Fit reason unavailable")}</small></div>
++          </div>`).join("") : `<strong>${escapeHtml(row.status)}</strong>`;
++        const conflict = (row.conflicts || []).map(c => `${escapeHtml(c.title || c.id)}: ${escapeHtml(c.conflict || "Needs review")}`).join("<br>");
++        const tr = document.createElement("tr");
++        tr.innerHTML = `<td style="vertical-align:top;padding:10px;">${escapeHtml(row.scene_id)} / ${escapeHtml(row.shot_id)}<br>${Number(row.start_sec).toFixed(1)}–${Number(row.end_sec).toFixed(1)}s<br><small>${escapeHtml(row.narration || "Narration not supplied")}</small></td><td style="vertical-align:top;padding:10px;">${escapeHtml(row.visual_purpose)}</td><td style="vertical-align:top;padding:10px;">${media}</td><td style="vertical-align:top;padding:10px;">${conflict || escapeHtml(row.uncertainty)}</td>`;
++        el.f5ProposalRows.appendChild(tr);
++      });
++    } catch (error) {
++      el.f5ProposalStatus.textContent = `${error.message}. Check that the story has a cached director shot plan, then retry.`;
++    } finally {
++      el.btnCompileF5Proposals.disabled = false;
++    }
++  });
++}
++
+ el.formatCards.forEach((card) => {
+   card.addEventListener("click", () => {
+     const fmt = card.getAttribute("data-format");
+@@ -1978,7 +2015,7 @@ function formatSec(sec) {
+ }
+ 
+ function escapeHtml(str) {
+-  return str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
++  return str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;") : "";
+ }
+ 
+ async function loadDiscoveredStories() {
+
+Return exactly READY or NOT_READY with a brief reason. No more repair is allowed.

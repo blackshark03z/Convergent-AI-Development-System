@@ -1,0 +1,278 @@
+diff --git a/tests/test_stock_proposals.py b/tests/test_stock_proposals.py
+new file mode 100644
+index 0000000..f3df479
+--- /dev/null
++++ b/tests/test_stock_proposals.py
+@@ -0,0 +1,65 @@
++from videopipeline.stages.stage2_assets.stock_proposals import compile_stock_proposal_table
++
++
++class FakeStockProvider:
++    def __init__(self):
++        self.queries = []
++
++    def search_videos(self, query, per_page=12):
++        self.queries.append(query)
++        if "rain" in query.lower():
++            videos = [
++                {"id": "rain-1", "online_id": "pexels_rain-1", "title": "Woman walking through rain at night", "duration": 9, "width": 1920, "height": 1080, "preview_url": "https://preview/rain", "thumbnail": "https://thumb/rain", "rights_status": "ELIGIBLE"},
++                {"id": "short", "title": "Rain", "duration": 2, "width": 1920, "height": 1080, "rights_status": "ELIGIBLE"},
++                {"id": "portrait", "title": "Rain street", "duration": 9, "width": 1080, "height": 1920, "rights_status": "ELIGIBLE"},
++            ]
++        elif "archive" in query.lower():
++            videos = [{"id": "wrong", "title": "Puppies playing", "duration": 8, "width": 1920, "height": 1080, "rights_status": "ELIGIBLE"}]
++        else:
++            videos = []
++        return {"status": "ok", "videos": videos}
++
++
++def test_stock_proposals_cover_shots_use_intent_bound_results_and_remain_provisional():
++    provider = FakeStockProvider()
++    shots = [
++        {"shot_index": 1, "time_range": "0:00 - 0:10", "dramatic_beat": "Woman crosses rainy street", "shot_type": "Tracking shot", "visual_description": "woman walking through rain at night"},
++        {"shot_index": 2, "time_range": "0:10 - 0:20", "dramatic_beat": "Archive reveals hidden record", "shot_type": "Extreme close up", "visual_description": "old archive document"},
++        {"shot_index": 3, "time_range": "0:20 - 0:30", "dramatic_beat": "Empty hallway", "shot_type": "Wide shot", "visual_description": "empty courthouse hallway"},
++    ]
++    result = compile_stock_proposal_table(shots, provider, max_candidates=1)
++    assert len(result["rows"]) == 3
++    assert len(provider.queries) == 3
++    assert provider.queries[0] != provider.queries[1]
++    assert [row["status"] for row in result["rows"]] == ["PROVISIONAL", "UNRESOLVED", "UNRESOLVED"]
++    candidate = result["rows"][0]["candidates"][0]
++    assert candidate["id"] == "rain-1"
++    assert candidate["preview_url"] and candidate["thumbnail"] and candidate["reason"]
++    assert candidate["provisional"] is True
++    assert result["rows"][0]["timeline_assignment"] is None
++    assert result["provisional"] is True
++    assert result["rows"][1]["candidates"] == []
++
++
++def test_representative_f5_visual_plan_drives_distinct_searches_without_changing_assignments():
++    provider = FakeStockProvider()
++    planned_shots = [
++        {"shot_index": 1, "time_range": "0:00 - 0:30", "dramatic_beat": "A witness arrives", "visual_description": "woman walking through rain at night", "shot_type": "tracking shot"},
++        {"shot_index": 2, "time_range": "0:30 - 1:00", "dramatic_beat": "Evidence surfaces", "visual_description": "old archive document under desk lamp", "shot_type": "extreme close up"},
++    ]
++    production_assignments = ["existing_clip_a.mp4", "existing_clip_b.mp4"]
++    before = list(production_assignments)
++
++    result = compile_stock_proposal_table(
++        planned_shots, provider,
++        narration_by_range={"0:00 - 0:30": "The witness said nothing.", "0:30 - 1:00": "The record was found."},
++    )
++
++    assert len(result["rows"]) == len(planned_shots)
++    assert provider.queries[0] != provider.queries[1]
++    assert all(term in provider.queries[0] for term in ("woman", "walking", "rain"))
++    assert all(term in provider.queries[1] for term in ("archive", "document"))
++    assert [row["status"] for row in result["rows"]] == ["PROVISIONAL", "UNRESOLVED"]
++    assert [row["narration"] for row in result["rows"]] == ["The witness said nothing.", "The record was found."]
++    assert all(row["timeline_assignment"] is None for row in result["rows"])
++    assert production_assignments == before
+diff --git a/videopipeline/stages/stage2_assets/stock_proposals.py b/videopipeline/stages/stage2_assets/stock_proposals.py
+new file mode 100644
+index 0000000..da30f38
+--- /dev/null
++++ b/videopipeline/stages/stage2_assets/stock_proposals.py
+@@ -0,0 +1,59 @@
++"""Compile provisional, shot-specific online stock proposals."""
++from typing import Any, Dict, List, Optional
++
++from .online_stock import StockConstraintChecker, StoryStockRetriever
++
++
++def _shot_intent(shot: Dict[str, Any]) -> str:
++    # Keep the query anchored in this shot's concrete beat and visual direction.
++    fields = ("visual_description", "dramatic_beat", "shot_type", "location", "characters_present")
++    parts = []
++    for field in fields:
++        value = shot.get(field, "")
++        if isinstance(value, list):
++            value = " ".join(map(str, value))
++        if value and str(value).strip():
++            parts.append(str(value).strip())
++    return " ".join(parts)
++
++
++def compile_stock_proposal_table(
++    shots: List[Dict[str, Any]], provider: Any, narration_by_range: Optional[Dict[str, str]] = None,
++    max_candidates: int = 3, min_duration: float = 4.0,
++) -> Dict[str, Any]:
++    """Search once per planned shot; results remain proposals and never select timeline media."""
++    retriever = StoryStockRetriever(provider_client=provider)
++    rows = []
++    for shot in shots:
++        shot_id = shot.get("shot_index", shot.get("shot_id", "unknown"))
++        time_range = str(shot.get("time_range", ""))
++        beat = str(shot.get("dramatic_beat", ""))
++        visual = _shot_intent(shot)
++        query = retriever.compile_search_query(visual)
++        result = provider.search_videos(query, per_page=12) if visual else {"status": "ok", "videos": []}
++        candidates = []
++        if result.get("status") == "ok":
++            for candidate in result.get("videos", []):
++                if not candidate.get("id") or not candidate.get("preview_url"):
++                    continue
++                eligible, _ = StockConstraintChecker.evaluate(candidate, min_duration=min_duration)
++                if not eligible:
++                    continue
++                score = retriever.compute_semantic_similarity(candidate, visual)
++                # A proposal needs actual evidence of fit; reject generic or mismatched footage.
++                if score < 0.2:
++                    continue
++                candidate = dict(candidate)
++                candidate["reason"] = f"Matches this shot's {beat or visual[:90]} intent (fit {score:.2f})."
++                candidate["provisional"] = True
++                candidates.append((score, candidate))
++            candidates.sort(key=lambda item: item[0], reverse=True)
++        narration = (narration_by_range or {}).get(time_range, "")
++        rows.append({
++            "shot_id": shot_id, "time_range": time_range, "narration": narration,
++            "visual_intent": visual, "query": query,
++            "status": "PROVISIONAL" if candidates else "UNRESOLVED",
++            "candidates": [candidate for _, candidate in candidates[:max(0, min(5, max_candidates))]],
++            "timeline_assignment": None,
++        })
++    return {"status": "ok", "provisional": True, "rows": rows}
+diff --git a/videopipeline/web/server.py b/videopipeline/web/server.py
+index 56ccf83..a3531a3 100644
+--- a/videopipeline/web/server.py
++++ b/videopipeline/web/server.py
+@@ -1353,6 +1353,55 @@ async def handle_director_get_storyboard(request):
+     except Exception as e:
+         return web.json_response({"status": "error", "message": str(e)}, status=500)
+ 
++async def handle_stock_proposals(request):
++    """Builds proposals from the pre-assignment F5 visual plan and script timing."""
++    try:
++        data = await request.json()
++        story_dir = Path(data.get("story_dir", ""))
++        if not story_dir.is_dir():
++            return web.json_response({"status": "error", "message": "Story directory not found."}, status=404)
++        srt_files = list(story_dir.glob("*.srt"))
++        if not srt_files:
++            return web.json_response({"status": "error", "message": "An SRT script is required to plan F5 shot timing."}, status=404)
++        cues = parse_srt_file(srt_files[0])
++        total_duration = cues[-1].end_sec if cues else 0.0
++        storyboard_file = story_dir / "gemini_storyboard.json"
++        storyboard = json.loads(storyboard_file.read_text(encoding="utf-8")) if storyboard_file.is_file() else {}
++        planned_visuals = storyboard.get("body_scenes", []) if isinstance(storyboard, dict) else []
++        if not isinstance(planned_visuals, list):
++            planned_visuals = []
++
++        # F5 plans one stock shot per 30 second interval. Use the matching planned
++        # storyboard visual when available; narration supplies context only.
++        shots = []
++        from ..stages.stage2_assets.stock_proposals import compile_stock_proposal_table
++        narration_by_range = {}
++        def stamp(seconds):
++            total = max(0, int(seconds))
++            return f"{total // 60}:{total % 60:02d}"
++        for index, start_sec in enumerate(range(0, int(total_duration), 30)):
++            end_sec = min(start_sec + 30, total_duration)
++            time_range = f"{stamp(start_sec)} - {stamp(end_sec)}"
++            narration_by_range[time_range] = " ".join(
++                cue.text for cue in cues if cue.start_sec < end_sec and cue.end_sec > start_sec
++            )
++            planned = planned_visuals[index] if index < len(planned_visuals) and isinstance(planned_visuals[index], dict) else {}
++            visual = planned.get("visual_description") or planned.get("visual_intent") or planned.get("description") or planned.get("prompt") or ""
++            shots.append({
++                "shot_index": index + 1, "time_range": time_range,
++                "dramatic_beat": planned.get("dramatic_beat", planned.get("title", "")),
++                "visual_description": visual,
++                "shot_type": planned.get("shot_type", ""),
++                "location": planned.get("location", ""),
++                "characters_present": planned.get("characters_present", []),
++            })
++        client = PexelsClient()
++        loop = asyncio.get_event_loop()
++        table = await loop.run_in_executor(None, lambda: compile_stock_proposal_table(shots, client, narration_by_range))
++        return web.json_response(table)
++    except Exception as e:
++        return web.json_response({"status": "error", "message": str(e)}, status=500)
++
+ async def handle_get_system_health(request):
+     """Executes the System Doctor diagnostics and returns JSON health report."""
+     try:
+@@ -1528,6 +1577,7 @@ def create_app() -> web.Application:
+     # Gemini Showrunner Director Routes
+     app.router.add_get("/api/director/storyboard", handle_director_get_storyboard)
+     app.router.add_post("/api/director/analyze_story", handle_director_analyze_story)
++    app.router.add_post("/api/stock/proposals", handle_stock_proposals)
+ 
+     # Actions & Pipeline Execution
+     app.router.add_get("/api/system/health", handle_get_system_health)
+diff --git a/videopipeline/web/static/index.html b/videopipeline/web/static/index.html
+index f31657f..87eb10c 100644
+--- a/videopipeline/web/static/index.html
++++ b/videopipeline/web/static/index.html
+@@ -319,6 +319,20 @@
+ 
+         </div>
+ 
++        <section style="margin: 18px 0; padding: 16px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px;">
++          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
++            <h3 style="margin:0">F5 online stock proposals</h3>
++            <button id="btnCompileStockProposals" class="btn btn-secondary btn-sm">Find provisional stock</button>
++          </div>
++              <div id="stockProposalStatus" style="margin: 10px 0; color: var(--text-muted);"></div>
++              <div class="storyboard-table-wrapper" style="max-height: 420px; overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; margin-top: 12px;">
++                <table class="styled-table" style="width: 100%; border-collapse: collapse;">
++                  <thead><tr><th>Shot / time</th><th>Script beat and visual intent</th><th>Online candidates (provisional)</th></tr></thead>
++                  <tbody id="stockProposalRows"></tbody>
++                </table>
++              </div>
++        </section>
++
+         <!-- Navigation Footer -->
+         <div class="wizard-footer-actions">
+           <div></div>
+diff --git a/videopipeline/web/static/js/app.js b/videopipeline/web/static/js/app.js
+index d6ea459..49cbab1 100644
+--- a/videopipeline/web/static/js/app.js
++++ b/videopipeline/web/static/js/app.js
+@@ -62,6 +62,9 @@ const el = {
+   locationAnchorsGrid: document.getElementById("locationAnchorsGrid"),
+   storyboardShotsBody: document.getElementById("storyboardShotsBody"),
+   btnCopyAllPrompts: document.getElementById("btnCopyAllPrompts"),
++  btnCompileStockProposals: document.getElementById("btnCompileStockProposals"),
++  stockProposalRows: document.getElementById("stockProposalRows"),
++  stockProposalStatus: document.getElementById("stockProposalStatus"),
+ 
+   // Step 2 & Segment Inspector (ADR-005)
+   formatCards: document.querySelectorAll(".format-card"),
+@@ -838,6 +841,34 @@ if (el.btnForceRefreshDirector) {
+   el.btnForceRefreshDirector.addEventListener("click", () => triggerAnalyzeDirector(true));
+ }
+ 
++if (el.btnCompileStockProposals) {
++  el.btnCompileStockProposals.addEventListener("click", async () => {
++    if (!state.selectedStoryDir) return;
++    el.btnCompileStockProposals.disabled = true;
++    el.stockProposalStatus.textContent = "Searching each planned F5 shot using its narration context and visual intent…";
++    try {
++      const response = await fetch("/api/stock/proposals", {
++        method: "POST", headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ story_dir: state.selectedStoryDir })
++      });
++      const table = await response.json();
++      if (!response.ok) throw new Error(table.message || "Stock search failed");
++      el.stockProposalRows.innerHTML = "";
++      table.rows.forEach(row => {
++        const tr = document.createElement("tr");
++        const proposals = row.candidates.map(c => `<article style="margin-bottom:10px"><a href="${escapeHtml(c.preview_url || "#")}" target="_blank" rel="noopener">${escapeHtml(c.title || `Clip ${c.id}`)}</a> · ${escapeHtml(c.duration)}s · ${escapeHtml(c.width)}×${escapeHtml(c.height)}<br><a href="${escapeHtml(c.thumbnail || "#")}" target="_blank" rel="noopener">Preview image</a><br><small>${escapeHtml(c.reason)}</small><br><small>PROVISIONAL · ${escapeHtml(c.online_id || c.id)}</small></article>`).join("");
++        tr.innerHTML = `<td>${escapeHtml(row.shot_id)}<br>${escapeHtml(row.time_range)}<br>${escapeHtml(row.status)}</td><td>${escapeHtml(row.narration || row.visual_intent)}<br><small>Visual intent: ${escapeHtml(row.visual_intent)}</small></td><td>${proposals || "Unresolved: no eligible, fitting candidate."}</td>`;
++        el.stockProposalRows.appendChild(tr);
++      });
++      el.stockProposalStatus.textContent = `${table.rows.length} planned shots · all candidates are provisional; none assigned to the timeline.`;
++    } catch (error) {
++      el.stockProposalStatus.textContent = error.message;
++    } finally {
++      el.btnCompileStockProposals.disabled = false;
++    }
++  });
++}
++
+ // ============================================================
+ // STEP 2: FORMAT SELECTION & TIMELINE BREAKDOWN
+ // ============================================================

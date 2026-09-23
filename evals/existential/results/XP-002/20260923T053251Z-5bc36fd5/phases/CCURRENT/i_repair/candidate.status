@@ -1,0 +1,8 @@
+A  docs/evidence/f5-stock-proposal-offline-review.json
+A  tests/fixtures/f5_stock_proposals.json
+A  tests/test_stock_proposals.py
+A  videopipeline/stages/stage2_assets/stock_proposals.py
+M  videopipeline/tests/test_web_server.py
+M  videopipeline/web/server.py
+M  videopipeline/web/static/index.html
+M  videopipeline/web/static/js/app.js

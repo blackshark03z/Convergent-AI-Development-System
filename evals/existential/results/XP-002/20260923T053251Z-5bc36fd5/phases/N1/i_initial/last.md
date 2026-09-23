@@ -1,0 +1,7 @@
+Implemented F5 stock proposal compilation in [online_stock.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/N1/videopipeline/stages/stage2_assets/online_stock.py) and added offline fake-provider coverage in [test_stock_proposals.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/N1/tests/test_stock_proposals.py).
+
+The compiler returns one review-only row per supplied shot, builds its search intent from shot meaning and visual requirements, and includes candidate identity, preview reference, fit score, and explicit no-match or search-failure status. Shortlists are capped at five; candidates with negligible semantic fit are filtered out. It does not download or assign footage.
+
+Checks run: `python -m pytest tests/test_stock_proposals.py tests/test_stock_constraints.py -q` — **7 passed**. Fake-provider tests observed distinct shot searches, filtering of unsuitable candidates, bounded results, preview references, and explicit provider failure without external services.
+
+Limitation: the compiler returns a structured table, but this change does not add a Studio UI or endpoint to display it. Candidate ranking uses the retriever’s existing metadata-based semantic scoring. No material Owner preference or authority decision was needed.

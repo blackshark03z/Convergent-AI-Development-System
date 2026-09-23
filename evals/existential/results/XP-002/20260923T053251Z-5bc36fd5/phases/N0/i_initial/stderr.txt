@@ -1,0 +1,2 @@
+2026-09-23T05:35:56.406599Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in D:\CADS-Benchmark\XP-002-AUTO\arms\N0\videopipeline\web\static\index.html:
+                <button id="btnCopyAllPrompts" class="btn btn-secondary btn-sm">ðŸ“‹ Sao ChÃ©p ToÃ n Bá»™ 16 Prompt</button>

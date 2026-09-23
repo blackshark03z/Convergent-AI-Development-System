@@ -1,0 +1,1 @@
+NOT_READY — In the exact candidate, two shots with different required visuals (“rainy weather” and “sunny weather”) produced the same truncated query and proposed the same clip. Distinct shot requirements therefore do not reliably affect the proposals.

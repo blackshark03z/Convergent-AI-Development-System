@@ -1,0 +1,321 @@
+{
+  "schema": "cads-existential-runner-v1",
+  "case_id": "XP-002",
+  "run_id": "20260923T053251Z-5bc36fd5",
+  "status": "COMPLETE",
+  "models": {
+    "R": {
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "seconds": 240
+    },
+    "I": {
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "seconds": 600
+    }
+  },
+  "arms": {
+    "N0": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** For F5, compile a bounded, owner-reviewable table of online stock proposals for every planned shot, grounded in that shot’s script and visual intent.\n\n**Acceptance:**\n\n- Every planned F5 shot has a row identifying the shot, its timing or narration context, its visual intent, and a small bounded set of stock candidates.\n- Each candidate has enough identity and preview information for the Owner to inspect it, plus a concise reason it fits the shot. Distinct shot intents produce appropriately distinct searches or proposals; generic story-wide keywords alone do not satisfy this.\n- Ineligible or clearly mismatched footage is excluded. A shot with no suitable candidate is marked unresolved, without arbitrary filler.\n- Compiling or viewing the table leaves every candidate provisional. It does not approve a clip, assign a final production choice, or silently substitute one into the production timeline.\n- Offline tests with a fake stock provider demonstrate shot coverage, intent-based proposals, bounded results, unresolved shots, and the provisional boundary.\n\n**Constraints / non-goals:** Keep F5 footage within its online stock source policy. The later approve, replace, confirm, and cancel lifecycle is outside this brief. Verification must not call external providers or the canonical production runtime.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 200,
+      "r_brief": {
+        "seconds": 100.47,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 330749,
+          "cached_input_tokens": 289280,
+          "output_tokens": 2375
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N0\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 320.44,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 2007699,
+          "cached_input_tokens": 1906944,
+          "output_tokens": 12573
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N0\\i_initial"
+      },
+      "r_review": {
+        "seconds": 100.49,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 209296,
+          "cached_input_tokens": 166528,
+          "output_tokens": 2654
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N0\\r_review"
+      },
+      "i_repair": {
+        "seconds": 140.61,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 604363,
+          "cached_input_tokens": 562176,
+          "output_tokens": 4535
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N0\\i_repair"
+      },
+      "r_final": {
+        "seconds": 60.45,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 192169,
+          "cached_input_tokens": 146688,
+          "output_tokens": 1564
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N0\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "b7bde82e55651b2c4cd341ef18efadcd1d16cec0",
+      "candidate_state": "0b2b73c83d893ef774be4ee49ddff27ad85f604fb2d41d34a4175595d8af4e2c",
+      "oracle": "FAIL",
+      "oracle_metadata": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N0\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "N1": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** For an F5 story, produce an Owner reviewable table with a proposal row for every planned shot. Derive each shot’s stock search intent from its script and shot meaning, then present a bounded set of relevant online stock candidates. A proposal is never a final production choice.\n\n**Acceptance:**\n- Every planned F5 shot has a row, including shots with no suitable match. Each row identifies the shot and its story or visual intent, and shows candidate identity, a preview reference when available, and enough fit or exception information for the Owner to judge it.\n- Distinct shot intents yield distinct searches and relevant rankings. Generic storywide keywords alone cannot drive every row. Ineligible, clearly conflicting, or unsuitable candidates are not presented as usable matches.\n- Candidate lists have a small, enforced upper bound. Search failure or no match remains explicit; it does not trigger an arbitrary substitute.\n- Producing the table does not approve, download, assign, or commit footage to the final timeline. Offline tests with a fake stock provider demonstrate these outcomes without calling external services or the production runtime.\n\n**Scope:** This covers proposal compilation and reviewability only. The later approve, replace, confirm, and cancel lifecycle is outside this brief.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 205,
+      "r_brief": {
+        "seconds": 120.45,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 229460,
+          "cached_input_tokens": 174464,
+          "output_tokens": 2721
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N1\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 120.47,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 309579,
+          "cached_input_tokens": 272896,
+          "output_tokens": 4142
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N1\\i_initial"
+      },
+      "r_review": {
+        "seconds": 80.61,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 118617,
+          "cached_input_tokens": 92288,
+          "output_tokens": 2396
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N1\\r_review"
+      },
+      "i_repair": {
+        "seconds": 80.59,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 151163,
+          "cached_input_tokens": 138496,
+          "output_tokens": 2287
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N1\\i_repair"
+      },
+      "r_final": {
+        "seconds": 100.52,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 205867,
+          "cached_input_tokens": 183040,
+          "output_tokens": 2527
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N1\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "b7cfc07062c8b4fa6500a5c2b27c5fe81b1b0291",
+      "candidate_state": "d9383614eabde58435d7e597dd94b4e09bd47f99dfa5d4a5db6db434014a48e1",
+      "oracle": "FAIL",
+      "oracle_metadata": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\N1\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CMIN": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** For an F5 story, produce a bounded, reviewable stock-video proposal table for every planned shot, using that shot’s script and visual intent.\n\n**Acceptance:**\n- Each planned shot has a row identifying the shot, its relevant story/visual intent, and either a proposed online stock candidate or an explicit no-match disposition.\n- Proposed candidates have a stable provider identity, a reviewable preview reference, and a brief reason they fit the shot. Alternatives, if shown, are bounded.\n- Evidence with distinct shot intents shows proposals respond to those differences rather than applying one generic story-wide keyword choice. Material visual conflicts and ineligible footage are not presented as viable choices.\n- Producing the table does not approve clips, commit them to the final timeline, acquire production media, or mark them used.\n\n**Constraints / evidence:** Preserve F5’s online-stock-only source policy. Verify the exact candidate with offline fixtures or mocked providers; do not call external providers or the canonical production runtime. The later approve/replace/confirm/cancel lifecycle is outside this brief. I DONE and R READY do not constitute Product Acceptance.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 177,
+      "r_brief": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 266413,
+          "cached_input_tokens": 207360,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2472,
+          "reasoning_output_tokens": 796
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CMIN\\r_brief",
+        "recovered": true
+      },
+      "i_initial": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 546413,
+          "cached_input_tokens": 509952,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 4657,
+          "reasoning_output_tokens": 458
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CMIN\\i_initial",
+        "recovered": true
+      },
+      "r_review": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 196941,
+          "cached_input_tokens": 162304,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3641,
+          "reasoning_output_tokens": 1895
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CMIN\\r_review",
+        "recovered": true
+      },
+      "i_repair": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 156461,
+          "cached_input_tokens": 139520,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2276,
+          "reasoning_output_tokens": 0
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CMIN\\i_repair",
+        "recovered": true
+      },
+      "r_final": {
+        "seconds": null,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 163664,
+          "cached_input_tokens": 140800,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 4182,
+          "reasoning_output_tokens": 2301
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CMIN\\r_final",
+        "recovered": true
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "55e1049a93b1c3a72a304438d6a0f1cfdeab85bc",
+      "candidate_state": "0321df90a049898f91ededef00cc34731c9bd411820afa135637e5932af56f68",
+      "recovered_after_wrapper_watchdog": true,
+      "oracle": "FAIL",
+      "oracle_metadata": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CMIN\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    },
+    "CCURRENT": {
+      "brief": "IMPLEMENTATION_BRIEF\n\n**Outcome:** For an F5 story, the product presents a bounded stock-video proposal table for every planned shot, derived from that shot’s script and visual intent. The Owner can inspect the proposals before any footage becomes a final production choice.\n\n**Acceptance:**\n- Each shot has a row showing its scene/shot and narration interval, visual purpose, a small ranked shortlist with identifiable source and preview, a brief fit reason, and any uncertainty or conflict. Shots without a suitable candidate remain visible as `NO_MATCH` or needing review.\n- Representative shots with different actions or settings produce meaningfully different proposals even when they share broad story keywords. Ineligible or story-contradicting clips cannot become the proposed lead choice.\n- The table clearly labels choices as proposals. Compiling or viewing it does not approve footage, download final assets, or silently change the F5 format or production timeline.\n- Candidate evidence demonstrates the F5 review journey using an offline provider fixture, including a suitable match, a conflicting or ineligible result, and a no-match shot. Tie that evidence to the implementation candidate submitted for review.\n\n**Constraints / non-goals:** Reuse the existing F5 shot plan and stock retrieval behavior where suitable. This slice covers proposal compilation and inspection only; approval, replacement, rough-cut production, and final acquisition are outside scope. No paid or external provider calls or canonical production runtime.\n\nOWNER_INPUT_REQUIRED: no",
+      "brief_words": 223,
+      "r_brief": {
+        "seconds": 100.78,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 301830,
+          "cached_input_tokens": 227200,
+          "output_tokens": 3609
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CCURRENT\\r_brief"
+      },
+      "i_initial": {
+        "seconds": 320.69,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 2024307,
+          "cached_input_tokens": 1938688,
+          "output_tokens": 11954
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CCURRENT\\i_initial"
+      },
+      "r_review": {
+        "seconds": 100.59,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 274269,
+          "cached_input_tokens": 229632,
+          "output_tokens": 2901
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CCURRENT\\r_review"
+      },
+      "i_repair": {
+        "seconds": 160.69,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 674879,
+          "cached_input_tokens": 632320,
+          "output_tokens": 5581
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CCURRENT\\i_repair"
+      },
+      "r_final": {
+        "seconds": 100.84,
+        "timed_out": false,
+        "exit_code": 0,
+        "usage": {
+          "input_tokens": 463515,
+          "cached_input_tokens": 367488,
+          "output_tokens": 3304
+        },
+        "output": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CCURRENT\\r_final"
+      },
+      "repair_count": 1,
+      "verdict": "NOT_READY",
+      "candidate_tree": "3ff5e339295e1c55da36d8e51dece38ce1cc82f8",
+      "candidate_state": "b94ef1b92c6f7ace6dc07fa93f883aadb782fb84167547224c75689466fb427c",
+      "oracle": "FAIL",
+      "oracle_metadata": "D:\\CADS-Benchmark\\XP-002-AUTO\\phases\\CCURRENT\\oracle\\metadata.json",
+      "false_done": false,
+      "classification": "correct_rejection"
+    }
+  },
+  "source": "D:\\Video\\AutoVideoPipeline",
+  "pinned_base": "eb0a6480962612865a4974c960e6c6547b7b2009",
+  "qualification": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\cases\\XP-002\\PRECHECK.json",
+  "codex_cli": "D:\\CADS-Benchmark\\tools\\codex-cli\\codex.exe",
+  "neutral_tree": "57f32d1190646df8c35cba75a1190c5a07b15000",
+  "evidence_package": "D:\\Convergent-AI-Development-System\\Senior-AI-Build-OS-v1.22\\evals\\existential\\results\\XP-002\\20260923T053251Z-5bc36fd5",
+  "recovery": {
+    "schema": "cads-run-recovery-v1",
+    "preserved_arms": [
+      "N0",
+      "N1",
+      "CMIN"
+    ],
+    "model_rerun_for_preserved_arms": false,
+    "pending_arm": null,
+    "oracle_after_resume": true
+  }
+}

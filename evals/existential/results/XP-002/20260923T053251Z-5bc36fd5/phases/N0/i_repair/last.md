@@ -1,0 +1,7 @@
+Updated F5 proposal compilation to use the pre-assignment storyboard visuals and SRT timing, rather than requiring a composed schedule or treating narration as visual intent. It creates one row per 30-second F5 interval; intervals without a planned visual remain unresolved. Proposal compilation does not read or modify production assignments.
+
+**Files changed:** [server.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/N0/videopipeline/web/server.py), [stock_proposals.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/N0/videopipeline/stages/stage2_assets/stock_proposals.py), and [test_stock_proposals.py](/D:/CADS-Benchmark/XP-002-AUTO/arms/N0/tests/test_stock_proposals.py). The test covers distinct visual searches, narration context, an unresolved shot, and unchanged assignments.
+
+**Checks:** `python -m pytest tests/test_stock_proposals.py -q` passed (2 tests); Python compilation and `git diff --check` passed. No external provider or production runtime was called.
+
+**Limit:** I did not exercise the endpoint or UI against a real storyboard. Shot timing assumes F5’s 30-second intervals, and the endpoint uses the first SRT and storyboard cache it finds. If no visual plan exists, rows are unresolved. No Product Acceptance is claimed.
