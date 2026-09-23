@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "case_id": "XP-002",
+  "status": "ORACLE_QUALIFIED",
+  "date": "2026-09-23",
+  "neutral_projection_commit": "48bcc66a0bc364d5edd85476cea52f025bd739c5",
+  "qualified_neutral_tree": "57f32d1190646df8c35cba75a1190c5a07b15000",
+  "heldout_oracle_sha256": "b582ea5d7b9329be37cdaeedc450eb628e5ecbdad8685e48256f3add3f2d0d24",
+  "oracle_runner_sha256": "3441d433eecb5541c2dcbfbb570373c241f2932decc19b20ec1f975307a20eed",
+  "oracle_hash_basis": "working-tree file bytes at qualification",
+  "prompt_leak_matches": 0,
+  "base_preflight": {
+    "source_revision": "eb0a6480962612865a4974c960e6c6547b7b2009",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "evidence": "No proposal-oriented public capability produced a proposal collection."
+  },
+  "reference_preflight": {
+    "source_revision": "9051238c9f6f297233afb62c090f87f684cdae42",
+    "expected": "PASS",
+    "actual": "PASS",
+    "evidence": {
+      "stock_shot_only": true,
+      "shot_id": "shot_stock",
+      "scene_id": "scene_01",
+      "start_sec": 10,
+      "end_sec": 16,
+      "target_duration": 6,
+      "query": "woman courthouse exterior",
+      "alternatives_bounded": true,
+      "eligible_candidate_preview": true,
+      "f5_no_match": "NEEDS_OWNER",
+      "forbidden_candidate_excluded": true
+    }
+  },
+  "neutralization": {
+    "files": [
+      "AGENTS.md",
+      "TASK.md"
+    ],
+    "directories": [
+      ".agents"
+    ]
+  },
+  "qualification_note": "Historical reference was used only to qualify oracle discrimination. It remains hidden from R/I. Oracle discovery is behavior-oriented and does not require the reference class/method names."
+}

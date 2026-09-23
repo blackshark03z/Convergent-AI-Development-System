@@ -28,8 +28,7 @@ quota. It does not test whether a model can read the repository. `--codex-cli` s
 a different executable. `--record-sot` writes only `result.json` and `result.md`
 under `evals/existential/results/<case>/<run-id>/`; it never commits or pushes.
 Full prompts, model events, stderr, diffs, and oracle logs stay in the disposable
-run directory. XP-002 deliberately returns `CASE_NOT_READY` until its neutral
-projection and held-out oracle are qualified.
+run directory. XP-002 is qualified only after its pinned neutral projection and held-out oracle pass the recorded discrimination checks.
 
 Each qualified case has `RUNNER.json` with source candidates, pinned base,
 neutralization paths, qualification file/status, qualified neutral tree, and an
@@ -62,3 +61,17 @@ Exit code is zero only for a complete batch or successful preflight/probe.
 An oracle `FAIL` is a scored product outcome, not a harness failure. `READY`
 is R's judgment; only the frozen held-out oracle supplies independent outcome
 evidence.
+
+
+## Full-access contamination guard
+
+On this Windows Codex CLI build, the nominal read-only sandbox rejects even repository read commands. R and I therefore execute only inside disposable benchmark clones using Codex automation mode. This is **not** treated as filesystem isolation.
+
+The runner compensates with fail-closed guards:
+
+- every R invocation must leave the Git worktree/index byte-for-byte unchanged;
+- prompts forbid external/production effects and hidden/sibling inspection;
+- phase traces are scanned for case-specific hidden-reference/oracle markers, the canonical CADS/source paths, and sibling-arm workspace paths;
+- any detected contamination is `HARNESS_INVALID`, never a scored arm result.
+
+This trace guard is defense-in-depth, not a claim of perfect OS-level sandboxing.

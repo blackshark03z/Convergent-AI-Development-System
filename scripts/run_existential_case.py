@@ -26,7 +26,6 @@ AUTH_PATTERN = re.compile(r"(quota exceeded|rate.limit|usage.limit|insufficient.
 OWNER_PATTERN = re.compile(r"OWNER_INPUT_REQUIRED\s*:\s*yes|NEEDS_OWNER|MATERIAL_OWNER_AMBIGUITY", re.I)
 MARKER = ".cads-existential-run"
 
-
 class RunError(Exception):
     def __init__(self, status: str, detail: str):
         super().__init__(detail)
@@ -133,6 +132,15 @@ def preflight(case_id: str, cli_override: str | None = None) -> tuple[dict, Path
     oracle_path = case / oracle_name
     if not oracle_path.is_file() or digest(oracle_path) != qualification.get("heldout_oracle_sha256"):
         raise RunError("CASE_NOT_READY", "held-out oracle digest differs from qualification")
+    runner_hash = qualification.get("oracle_runner_sha256")
+    if runner_hash is not None:
+        runner = case / f"{case_id.lower().replace('-', '')}_oracle_runner.py"
+        if not re.fullmatch(r"[0-9a-f]{64}", str(runner_hash)) or not runner.is_file() or digest(runner) != runner_hash:
+            raise RunError("CASE_NOT_READY", "oracle runner digest differs from qualification")
+    protocol = manifest.get("oracle_result")
+    expected_format = {"XP-001": "xp001-layout-v1", "XP-002": "xp002-json-v1"}.get(case_id)
+    if not isinstance(protocol, dict) or protocol.get("format") != expected_format:
+        raise RunError("CASE_NOT_READY", "missing oracle result protocol")
     for part in oracle:
         if part.startswith("{case_dir}/") and not (case / part.split("/", 1)[1]).is_file():
             raise RunError("CASE_NOT_READY", f"missing oracle runner: {part}")
@@ -186,6 +194,9 @@ def project(manifest: dict, source: Path, out: Path) -> str:
     tree = git(["rev-parse", "HEAD^{tree}"], neutral)
     if tree != manifest.get("qualified_neutral_tree"):
         raise RunError("CASE_NOT_READY", f"neutral projection differs from qualified tree: {tree}")
+    paths = git(["ls-files"], neutral).splitlines()
+    if any(Path(path).name == "AGENTS.md" or path.endswith(".rules") or path.startswith((".codex/", ".agents/plugins/")) for path in paths):
+        raise RunError("HARNESS_INVALID", "neutral projection contains inherited project rules/config/plugins")
     for arm in ARMS:
         target = out / "arms" / arm
         target.parent.mkdir(exist_ok=True)
@@ -195,27 +206,43 @@ def project(manifest: dict, source: Path, out: Path) -> str:
     return tree
 
 
-def codex(cli: str, workspace: Path, prompt: str, model: str, effort: str, seconds: int, output: Path) -> dict:
+def codex(cli: str, workspace: Path, prompt: str, model: str, effort: str, seconds: int, output: Path,
+          forbidden_markers: tuple[str, ...] = (), read_only: bool = False) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     (output / "prompt.md").write_text(prompt, encoding="utf-8")
-    args = [cli, "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--json", "-m", model,
-            "-c", f'model_reasoning_effort="{effort}"', "-C", str(workspace), "-o", str(output / "last.md")]
-    args.append("--dangerously-bypass-approvals-and-sandbox")
+    # Native Windows sandbox/profile execution is unavailable on this host
+    # (CryptUnprotectData failure). Model calls are confined by benchmark
+    # topology to disposable clones; R is additionally mutation-checked.
+    args = [cli, "exec", "--ignore-user-config", "--ignore-rules", "--strict-config",
+            "--ephemeral", "--json", "-m", model,
+            "-c", f'model_reasoning_effort="{effort}"',
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-C", str(workspace), "-o", str(output / "last.md")]
     args.append("-")
     started = time.monotonic()
     with (output / "events.jsonl").open("w", encoding="utf-8") as stdout, (output / "stderr.txt").open("w", encoding="utf-8") as stderr:
         process = subprocess.Popen(args, cwd=workspace, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, text=True, encoding="utf-8", errors="replace")
-        try:
-            process.communicate(prompt, timeout=seconds)
-        except subprocess.TimeoutExpired:
-            if os.name == "nt":
-                command(["taskkill", "/PID", str(process.pid), "/T", "/F"], timeout=20)
-            else:
-                process.kill()
-            process.communicate()
-            timed_out = True
-        else:
-            timed_out = False
+        assert process.stdin is not None
+        process.stdin.write(prompt)
+        process.stdin.close()
+        deadline = time.monotonic() + seconds
+        timed_out = False
+        while process.poll() is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                if os.name == "nt":
+                    command(["taskkill", "/PID", str(process.pid), "/T", "/F"], timeout=20)
+                else:
+                    process.kill()
+                process.wait(timeout=20)
+                break
+            print(json.dumps({
+                "runner_phase": output.name,
+                "status": "MODEL_RUNNING",
+                "elapsed_seconds": round(time.monotonic() - started, 1),
+            }), flush=True)
+            time.sleep(min(20.0, remaining))
     last = (output / "last.md").read_text(encoding="utf-8", errors="replace") if (output / "last.md").exists() else ""
     stderr_text = (output / "stderr.txt").read_text(encoding="utf-8", errors="replace")
     event_text = (output / "events.jsonl").read_text(encoding="utf-8", errors="replace")
@@ -229,8 +256,21 @@ def codex(cli: str, workspace: Path, prompt: str, model: str, effort: str, secon
             observed = event["usage"]
             for key in usage:
                 usage[key] += int(observed.get(key) or 0)
-    if AUTH_PATTERN.search(last + stderr_text + event_text):
+    trace_text = last + "\n" + stderr_text + "\n" + event_text
+    if AUTH_PATTERN.search(trace_text):
         raise RunError("NEEDS_AUTH", f"Codex auth/quota failure; see {output}")
+    normalized_trace = trace_text.lower().replace("/", "\\")
+    leaked = []
+    for raw_marker in forbidden_markers:
+        marker = str(raw_marker or "").strip()
+        if not marker:
+            continue
+        variants = {marker.lower(), marker.lower().replace("/", "\\")}
+        if any(v and v in normalized_trace for v in variants):
+            leaked.append(marker)
+    if leaked:
+        (output / "contamination.txt").write_text("\n".join(leaked) + "\n", encoding="utf-8")
+        raise RunError("HARNESS_INVALID", f"hidden/sibling/source contamination detected; see {output / 'contamination.txt'}")
     if process.returncode not in (0, None) and not timed_out:
         raise RunError("HARNESS_INVALID", f"Codex exit {process.returncode}; see {output}")
     if not last.strip() and not timed_out:
@@ -240,26 +280,34 @@ def codex(cli: str, workspace: Path, prompt: str, model: str, effort: str, secon
             "last": last, "output": str(output)}
 
 
-def run_r(cli: str, workspace: Path, prompt: str, model: str, effort: str, seconds: int, output: Path) -> dict:
+def run_r(cli: str, workspace: Path, prompt: str, model: str, effort: str, seconds: int, output: Path,
+          forbidden_markers: tuple[str, ...] = ()) -> dict:
     prompt = ("You are R. Inspect only the assigned disposable repository. Do not edit, stage, "
               "delete, or create any file. Do not cause external or production effects. "
               "Do not inspect the hidden oracle, historical reference, sibling arms, or their results.\n\n" + prompt)
     before = git_state(workspace)
     try:
-        return codex(cli, workspace, prompt, model, effort, seconds, output)
+        return codex(cli, workspace, prompt, model, effort, seconds, output, forbidden_markers, read_only=True)
     finally:
         if git_state(workspace) != before:
             raise RunError("HARNESS_INVALID", f"R changed Git worktree/index: {workspace}; see {output}")
 
 
 def candidate(workspace: Path, output: Path) -> dict:
+    roots = git(["rev-list", "--max-parents=0", "HEAD"], workspace).splitlines()
+    if len(roots) != 1:
+        raise RunError("HARNESS_INVALID", f"expected one arm root commit, found {len(roots)}: {workspace}")
+    baseline_commit = roots[0]
     git(["add", "-A"], workspace, 120)
-    diff = git(["diff", "--cached", "--binary", "HEAD"], workspace, 120)
+    tree = git(["write-tree"], workspace, 120)
+    diff = git(["diff", "--binary", baseline_commit, tree], workspace, 120)
     status = git(["status", "--short"], workspace)
     (output / "candidate.diff").write_text(diff + "\n", encoding="utf-8")
     (output / "candidate.status").write_text(status + "\n", encoding="utf-8")
-    tree = git(["write-tree"], workspace, 120)
-    return {"tree": tree, "diff": diff, "status": status, "state": state_digest(git_state(workspace))}
+    (output / "candidate.tree").write_text(tree + "\n", encoding="utf-8")
+    (output / "candidate.baseline").write_text(baseline_commit + "\n", encoding="utf-8")
+    return {"baseline_commit": baseline_commit, "tree": tree, "diff": diff, "status": status,
+            "state": state_digest(git_state(workspace))}
 
 
 def review_prompt(goal: str, brief: str, implementation: str, snapshot: dict, repair: bool) -> str:
@@ -277,8 +325,11 @@ def judgment(text: str, repair_allowed: bool) -> str:
 def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -> dict:
     workspace = out / "arms" / arm
     phases = out / "phases" / arm
+    forbidden_markers = tuple(ns.forbidden_common) + tuple(
+        str(out / "arms" / sibling) for sibling in ARMS if sibling != arm
+    )
     r_prompt = (case / "prompts" / f"{arm}.txt").read_text(encoding="utf-8")
-    first = run_r(cli, workspace, r_prompt, ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_brief")
+    first = run_r(cli, workspace, r_prompt, ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_brief", forbidden_markers)
     if first["timed_out"]:
         raise RunError("HARNESS_INVALID", f"R brief timed out: {arm}")
     if OWNER_PATTERN.search(first["last"]):
@@ -288,11 +339,11 @@ def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -
         raise RunError("HARNESS_INVALID", f"R omitted IMPLEMENTATION_BRIEF: {arm}")
     common = (case / "prompts" / "I_COMMON.txt").read_text(encoding="utf-8")
     i_prompt = f"{common}\n\nIMPLEMENTATION_BRIEF\n{brief}\n\nWork only inside this disposable clone. Do not call external or production services, paid providers, or mutate any path outside this clone. Do not inspect benchmark harness, oracle, reference, or sibling arms. Report NEEDS_OWNER if material Owner intent or authority is missing.\n"
-    initial = codex(cli, workspace, i_prompt, ns.i_model, ns.i_effort, ns.i_seconds, phases / "i_initial")
+    initial = codex(cli, workspace, i_prompt, ns.i_model, ns.i_effort, ns.i_seconds, phases / "i_initial", forbidden_markers)
     if OWNER_PATTERN.search(initial["last"]):
         raise RunError("NEEDS_OWNER", f"I found material Owner ambiguity in {arm}; see {initial['output']}")
     snapshot = candidate(workspace, phases / "i_initial")
-    review = run_r(cli, workspace, review_prompt(r_prompt, brief, initial["last"], snapshot, False), ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_review")
+    review = run_r(cli, workspace, review_prompt(r_prompt, brief, initial["last"], snapshot, False), ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_review", forbidden_markers)
     if review["timed_out"]:
         raise RunError("HARNESS_INVALID", f"R review timed out: {arm}")
     if OWNER_PATTERN.search(review["last"]):
@@ -302,11 +353,11 @@ def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -
     final_review = None
     if verdict == "REPAIR":
         repair_prompt = f"{common}\n\nOriginal IMPLEMENTATION_BRIEF:\n{brief}\n\nYour previous completion report:\n{initial['last']}\n\nCurrent candidate tree: {snapshot['tree']}\nCurrent diff:\n{snapshot['diff']}\n\nR repair brief:\n{review['last']}\n\nThis is the sole repair. Work only in this disposable clone. No external or production effects. Do not inspect benchmark harness, oracle, reference, or sibling arms. Report checks actually run and remaining limits.\n"
-        repair = codex(cli, workspace, repair_prompt, ns.i_model, ns.i_effort, ns.i_seconds, phases / "i_repair")
+        repair = codex(cli, workspace, repair_prompt, ns.i_model, ns.i_effort, ns.i_seconds, phases / "i_repair", forbidden_markers)
         if OWNER_PATTERN.search(repair["last"]):
             raise RunError("NEEDS_OWNER", f"I repair found material Owner ambiguity in {arm}")
         snapshot = candidate(workspace, phases / "i_repair")
-        final_review = run_r(cli, workspace, review_prompt(r_prompt, brief + "\nR repair brief:\n" + review["last"], initial["last"] + "\nRepair report:\n" + repair["last"], snapshot, True), ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_final")
+        final_review = run_r(cli, workspace, review_prompt(r_prompt, brief + "\nR repair brief:\n" + review["last"], initial["last"] + "\nRepair report:\n" + repair["last"], snapshot, True), ns.r_model, ns.r_effort, ns.r_seconds, phases / "r_final", forbidden_markers)
         if final_review["timed_out"]:
             raise RunError("HARNESS_INVALID", f"final R review timed out: {arm}")
         if OWNER_PATTERN.search(final_review["last"]):
@@ -317,6 +368,32 @@ def run_arm(arm: str, case: Path, out: Path, cli: str, ns: argparse.Namespace) -
             "i_repair": {k: v for k, v in repair.items() if k != "last"} if repair else None,
             "r_final": {k: v for k, v in final_review.items() if k != "last"} if final_review else None,
             "repair_count": int(repair is not None), "verdict": verdict, "candidate_tree": snapshot["tree"], "candidate_state": snapshot["state"]}
+
+
+def classify_oracle(protocol: dict, stdout: bytes, stderr: bytes, exit_code: int | None) -> tuple[str, str]:
+    try:
+        payload = json.loads(stdout.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return "HARNESS_INVALID", "oracle stdout is not one UTF-8 JSON value"
+    if not isinstance(payload, dict):
+        return "HARNESS_INVALID", "oracle stdout is not a JSON object"
+    if protocol["format"] == "xp002-json-v1":
+        status = payload.get(protocol["status_field"])
+        if status == protocol["pass_status"] and exit_code == protocol["pass_exit"]:
+            return "PASS", "status and exit match pass protocol"
+        if status == protocol["fail_status"] and exit_code == protocol["fail_exit"]:
+            return "FAIL", "status and exit match fail protocol"
+        return "HARNESS_INVALID", "oracle status and exit mismatch"
+    if protocol["format"] == "xp001-layout-v1":
+        missing = [key for key in protocol["required_stdout_keys"] if key not in payload]
+        if missing:
+            return "HARNESS_INVALID", f"oracle stdout missing keys: {missing}"
+        if exit_code == protocol["pass_exit"]:
+            return "PASS", "exit matches pass protocol"
+        if exit_code == protocol["fail_exit"] and protocol["semantic_fail_stderr_marker"].encode("utf-8") in stderr:
+            return "FAIL", "exit and stderr marker match fail protocol"
+        return "HARNESS_INVALID", "oracle exit or semantic failure marker mismatch"
+    return "HARNESS_INVALID", "unknown oracle result protocol"
 
 
 def evaluate(manifest: dict, case: Path, out: Path, results: dict) -> None:
@@ -333,14 +410,41 @@ def evaluate(manifest: dict, case: Path, out: Path, results: dict) -> None:
         shutil.copytree(frozen, evaluation, ignore=shutil.ignore_patterns(".git"))
         replacements = {"{python}": sys.executable, "{case_dir}": str(case), "{candidate_dir}": str(evaluation)}
         args = [next((part.replace(key, value) for key, value in replacements.items() if key in part), part) for part in manifest["oracle_command"]]
-        p = command(args, cwd=evaluation, timeout=180)
-        log = out / "phases" / arm / "oracle.txt"
-        log.write_text(f"exit={p.returncode}\n{p.stdout}\n{p.stderr}", encoding="utf-8")
-        results[arm]["oracle"] = "PASS" if p.returncode == 0 else "FAIL" if p.returncode == 1 else "HARNESS_INVALID"
-        results[arm]["oracle_log"] = str(log)
-        if p.returncode not in (0, 1):
-            raise RunError("HARNESS_INVALID", f"oracle failed to run for {arm}: exit {p.returncode}")
-        results[arm]["false_done"] = results[arm]["verdict"] == "READY" and p.returncode != 0
+        oracle_dir = out / "phases" / arm / "oracle"
+        oracle_dir.mkdir(parents=True, exist_ok=True)
+        stdout = stderr = b""
+        exit_code = None
+        runtime_error = None
+        try:
+            p = subprocess.run(args, cwd=evaluation, capture_output=True, timeout=180, check=False)
+            stdout, stderr, exit_code = p.stdout, p.stderr, p.returncode
+        except subprocess.TimeoutExpired as exc:
+            stdout, stderr = exc.stdout or b"", exc.stderr or b""
+            runtime_error = "oracle timed out"
+        except OSError as exc:
+            runtime_error = f"oracle runtime error: {exc}"
+        if runtime_error:
+            semantic, reason = "HARNESS_INVALID", runtime_error
+        else:
+            semantic, reason = classify_oracle(manifest["oracle_result"], stdout, stderr, exit_code)
+        (oracle_dir / "stdout.txt").write_bytes(stdout)
+        (oracle_dir / "stderr.txt").write_bytes(stderr)
+        metadata = {"exit_code": exit_code, "classification": semantic, "reason": reason,
+                    "timed_out": isinstance(runtime_error, str) and runtime_error == "oracle timed out"}
+        (oracle_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        results[arm]["oracle"] = semantic
+        results[arm]["oracle_metadata"] = str(oracle_dir / "metadata.json")
+        if semantic == "HARNESS_INVALID":
+            raise RunError("HARNESS_INVALID", f"oracle invalid for {arm}: {reason}; see {oracle_dir}")
+        results[arm]["false_done"] = results[arm]["verdict"] == "READY" and semantic == "FAIL"
+        if results[arm]["verdict"] == "READY" and semantic == "PASS":
+            results[arm]["classification"] = "correct_acceptance"
+        elif results[arm]["verdict"] == "READY":
+            results[arm]["classification"] = "false_done"
+        elif semantic == "PASS":
+            results[arm]["classification"] = "overconservative_rejection"
+        else:
+            results[arm]["classification"] = "correct_rejection"
         if state_digest(git_state(frozen)) != results[arm]["candidate_state"]:
             raise RunError("HARNESS_INVALID", f"oracle mutated frozen candidate: {arm}")
 
@@ -348,11 +452,21 @@ def evaluate(manifest: dict, case: Path, out: Path, results: dict) -> None:
 def save_result(out: Path, result: dict, record_sot: bool) -> None:
     destinations = [out / "result"]
     if record_sot:
-        destinations.append(ROOT / "evals" / "existential" / "results" / result["case_id"] / result["run_id"])
+        evidence = ROOT / "evals" / "existential" / "results" / result["case_id"] / result["run_id"]
+        evidence.mkdir(parents=True, exist_ok=True)
+        if (out / "phases").is_dir():
+            shutil.copytree(out / "phases", evidence / "phases", dirs_exist_ok=True)
+        if (out / "isolation_probe").is_dir():
+            probe = evidence / "isolation_probe"
+            probe.mkdir(exist_ok=True)
+            for path in (out / "isolation_probe").glob("*.txt"):
+                shutil.copy2(path, probe / path.name)
+        destinations.append(evidence)
+    result["evidence_package"] = str(evidence if record_sot else out)
     for destination in destinations:
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        lines = [f"# {result['case_id']} existential run", "", f"Status: {result['status']}", f"Run ID: {result['run_id']}", f"Artifacts: {out}", "",
+        lines = [f"# {result['case_id']} existential run", "", f"Status: {result['status']}", f"Run ID: {result['run_id']}", f"Evidence package: {result['evidence_package']}", "",
                  "| Arm | R verdict | Candidate tree | Oracle | False DONE |", "| --- | --- | --- | --- | --- |"]
         for arm, data in result.get("arms", {}).items():
             lines.append(f"| {arm} | {data['verdict']} | `{data['candidate_tree']}` | {data.get('oracle', 'NOT_RUN')} | {data.get('false_done', 'N/A')} |")
@@ -362,13 +476,13 @@ def save_result(out: Path, result: dict, record_sot: bool) -> None:
 
 
 def probe(cli: str, ns: argparse.Namespace) -> None:
-    with tempfile.TemporaryDirectory(prefix="cads-model-probe-") as directory:
-        workspace = Path(directory)
-        git(["init", "--quiet"], workspace)
-        for role, model, effort, seconds in (("R", ns.r_model, ns.r_effort, ns.r_seconds), ("I", ns.i_model, ns.i_effort, ns.i_seconds)):
-            response = codex(cli, workspace, "Reply only MODEL_PROBE_OK. Do not use tools or edit files.", model, effort, min(seconds, 45), workspace / role)
-            if response["timed_out"] or "MODEL_PROBE_OK" not in response["last"]:
-                raise RunError("HARNESS_INVALID", f"{role} model probe failed; see {response['output']}")
+    # Keep artifacts for diagnosis instead of deleting the failing probe.
+    workspace = Path(tempfile.mkdtemp(prefix="cads-model-probe-"))
+    git(["init", "--quiet"], workspace)
+    for role, model, effort, seconds in (("R", ns.r_model, ns.r_effort, ns.r_seconds), ("I", ns.i_model, ns.i_effort, ns.i_seconds)):
+        response = codex(cli, workspace, "Reply only MODEL_PROBE_OK. Do not use tools or edit files.", model, effort, min(seconds, 45), workspace / role)
+        if response["timed_out"] or "MODEL_PROBE_OK" not in response["last"]:
+            raise RunError("HARNESS_INVALID", f"{role} model probe failed; see {response['output']}")
 
 
 def main() -> int:
@@ -387,6 +501,8 @@ def main() -> int:
     parser.add_argument("--codex-cli")
     parser.add_argument("--out", type=Path)
     ns = parser.parse_args()
+    if ns.preflight and ns.probe_models:
+        parser.error("--preflight and --probe-models are separate checks; run one at a time")
     if ns.r_seconds < 1 or ns.i_seconds < 1:
         parser.error("timeouts must be positive")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
@@ -409,6 +525,12 @@ def main() -> int:
         prepare_run(out, ns.force)
         prepared = True
         result["neutral_tree"] = project(manifest, source, out)
+        ns.forbidden_common = [
+            str(ROOT),
+            str(source),
+            str(manifest.get("hidden_reference_revision") or ""),
+            *[str(x) for x in manifest.get("hidden_observation_markers", [])],
+        ]
         for arm in ARMS:
             result["arms"][arm] = run_arm(arm, case, out, cli, ns)
             save_result(out, result, False)

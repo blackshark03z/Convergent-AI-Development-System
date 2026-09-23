@@ -13,5 +13,12 @@
   "qualification_file": "PRECHECK.json",
   "qualification_status": "ORACLE_QUALIFIED",
   "qualified_oracle_file": "xp001_layout_oracle.mjs",
-  "oracle_command": ["{python}", "{case_dir}/xp001_oracle_runner.py", "{candidate_dir}"]
+  "oracle_command": ["{python}", "{case_dir}/xp001_oracle_runner.py", "{candidate_dir}"],
+  "oracle_result": {
+    "format": "xp001-layout-v1",
+    "pass_exit": 0,
+    "fail_exit": 1,
+    "semantic_fail_stderr_marker": "XP-001 layout oracle failed:",
+    "required_stdout_keys": ["deepState", "layout1366", "layout1920"]
+  }
 }
