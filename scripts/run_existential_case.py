@@ -381,7 +381,20 @@ def codex(cli: str, workspace: Path, prompt: str, model: str, effort: str, secon
             for key in usage:
                 usage[key] += int(observed.get(key) or 0)
     trace_text = last + "\n" + stderr_text + "\n" + event_text
-    if AUTH_PATTERN.search(trace_text):
+    auth_parts = [stderr_text]
+    for line in event_text.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or event.get("type") not in {"error", "turn.failed"}:
+            continue
+        error = event.get("error")
+        if isinstance(error, dict):
+            auth_parts.append(str(error.get("message") or error))
+        else:
+            auth_parts.append(str(event.get("message") or error or ""))
+    if AUTH_PATTERN.search("\n".join(auth_parts)):
         raise RunError("NEEDS_AUTH", f"Codex auth/quota failure; see {output}")
     intent_parts = [last, stderr_text]
     for line in event_text.splitlines():
